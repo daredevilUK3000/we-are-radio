@@ -69,12 +69,12 @@ function StudioApp() {
   return (
     <StudioLayout>
       <Routes>
-        <Route path="/studio" element={<Dashboard />} />
-        <Route path="/studio/tracks" element={<Tracks />} />
-        <Route path="/studio/tracks/upload" element={<UploadTrack />} />
-        <Route path="/studio/channels" element={<Channels />} />
-        <Route path="/studio/programmes" element={<ProgrammesList />} />
-        <Route path="/studio/programmes/:id" element={<ProgrammeBuilder />} />
+        <Route path="/" element={<Dashboard />} />
+        <Route path="tracks" element={<Tracks />} />
+        <Route path="tracks/upload" element={<UploadTrack />} />
+        <Route path="channels" element={<Channels />} />
+        <Route path="programmes" element={<ProgrammesList />} />
+        <Route path="programmes/:id" element={<ProgrammeBuilder />} />
       </Routes>
     </StudioLayout>
   );
@@ -97,12 +97,12 @@ export default function App() {
           <ListenerLayout>
             <Routes>
               <Route path="/" element={<Home />} />
-              <Route path="/listen" element={<Listen />} />
-              <Route path="/albums" element={<Albums />} />
-              <Route path="/albums/:id" element={<AlbumDetail />} />
-              <Route path="/programmes" element={<Programmes />} />
-              <Route path="/programmes/:id" element={<ProgrammeDetail />} />
-              <Route path="/search" element={<Search />} />
+              <Route path="listen" element={<Listen />} />
+              <Route path="albums" element={<Albums />} />
+              <Route path="albums/:id" element={<AlbumDetail />} />
+              <Route path="programmes" element={<Programmes />} />
+              <Route path="programmes/:id" element={<ProgrammeDetail />} />
+              <Route path="search" element={<Search />} />
             </Routes>
           </ListenerLayout>
         }
