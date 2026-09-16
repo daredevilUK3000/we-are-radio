@@ -2,6 +2,7 @@ export type Env = {
   DB: D1Database;
   MEDIA: R2Bucket;
   CONFIG: KVNamespace;
+  ASSETS: Fetcher;
 
   STUDIO_PASSWORD: string;
   SESSION_SECRET: string;

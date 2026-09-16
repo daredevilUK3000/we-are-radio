@@ -56,30 +56,32 @@ everything else.
 
 ## Deploying
 
-**Live deployment:**
-- API (Worker): https://kizzi-radio-api.kizzi.workers.dev
-- App (Pages): https://kizzi-radio-app.pages.dev
+**Live deployment:** https://kizzi-radio-api.kizzi.workers.dev (one Worker serves both
+the app and the API - see "Single-app deployment" below).
 
 ```
+cd app && npx vite build && cd ..
 npm run deploy:worker
-
-# The app needs to know the deployed worker's URL at build time, since
-# Pages and the Worker are on different domains (no dev proxy in prod):
-cd app && VITE_API_ORIGIN='https://kizzi-radio-api.kizzi.workers.dev' npx vite build && cd ..
-npx wrangler pages deploy app/dist --project-name kizzi-radio-app
 ```
 
-Because the app and API are on different domains, the Studio session cookie is set
-with `SameSite=None; Secure` (see `worker/src/lib/auth.ts`) so it survives cross-site
-fetch calls - this only works over HTTPS, which both `workers.dev` and `pages.dev`
-provide by default.
+That's it - one command deploys everything. Secrets are set on the Worker with
+`wrangler secret put <NAME>` (not committed, not in `.dev.vars`); all of
+`STUDIO_PASSWORD`, `SESSION_SECRET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
+`ANTHROPIC_API_KEY` are already set on the live deployment.
 
-Secrets are set on the deployed Worker with `wrangler secret put <NAME>` (not
-committed, not in `.dev.vars`). `STUDIO_PASSWORD` and `SESSION_SECRET` are already set.
-Still to do for full functionality in production:
-- `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` - an R2 API token
-  (dashboard -> R2 -> Manage API Tokens), needed for direct-to-R2 uploads to work
-- `ANTHROPIC_API_KEY` - powers the AI producer endpoint; everything else works without it
+### Single-app deployment
+
+The app and API are served from one Worker, not a separate Pages project. This uses
+Cloudflare's Workers static assets feature: `wrangler.toml`'s `[assets]` block points
+at `app/dist`, and `worker/src/index.ts` has a catch-all route (`app.get("*", ...)`)
+that hands off to the `ASSETS` binding for anything that isn't `/api/*` or
+`/studio/api/*`, so client-side routes like `/studio/tracks` or `/albums/:id` still
+resolve to `index.html` (the single-page-app fallback) instead of 404ing.
+
+Because it's all one origin, the Studio session cookie only needs `SameSite=Lax`
+(not `None`) and the frontend can use relative `/api` and `/studio/api` paths in
+production, not just in local dev - `VITE_API_ORIGIN` (in `app/src/api/client.ts`) is
+only needed if you ever split the app and API back onto different domains.
 
 ## What's built vs. deferred
 

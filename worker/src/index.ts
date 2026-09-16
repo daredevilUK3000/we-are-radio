@@ -40,4 +40,18 @@ studio.route("/upload", uploadRoutes);
 studio.route("/ai", aiRoutes);
 app.route("/studio/api", studio);
 
+// Everything else is the SPA (listener app + Studio shell). Exact static
+// files (JS/CSS/etc) are served automatically before the Worker even runs;
+// this catch-all only fires for client-side routes like /studio/tracks or
+// /albums/:id. wrangler.toml's not_found_handling only applies to that
+// automatic front-door routing, not to a binding-level fetch() called from
+// here, so index.html is requested explicitly to get the SPA fallback.
+app.get("*", (c) => {
+  // Fetching "/index.html" directly gets 307-redirected by the asset
+  // handler's URL canonicalization; "/" serves the same file as a 200.
+  const url = new URL(c.req.url);
+  url.pathname = "/";
+  return c.env.ASSETS.fetch(new Request(url, c.req.raw));
+});
+
 export default app;
