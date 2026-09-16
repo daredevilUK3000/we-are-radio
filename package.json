@@ -1,0 +1,17 @@
+{
+  "name": "kizzi-radio",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "worker",
+    "app"
+  ],
+  "scripts": {
+    "dev:worker": "npm run dev --workspace worker",
+    "dev:app": "npm run dev --workspace app",
+    "build:app": "npm run build --workspace app",
+    "deploy:worker": "npm run deploy --workspace worker",
+    "db:migrate:local": "npm run db:migrate:local --workspace worker",
+    "db:migrate:remote": "npm run db:migrate:remote --workspace worker"
+  }
+}
