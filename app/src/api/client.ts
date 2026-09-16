@@ -1,5 +1,10 @@
-const API_BASE = "/api";
-const STUDIO_BASE = "/studio/api";
+// In local dev this stays empty and Vite's proxy (vite.config.ts) forwards
+// /api and /studio/api to the worker on :8787. In production there is no
+// proxy - the app and the worker are on different domains - so the build
+// needs VITE_API_ORIGIN pointing at the deployed worker.
+const API_ORIGIN = import.meta.env.VITE_API_ORIGIN ?? "";
+const API_BASE = `${API_ORIGIN}/api`;
+const STUDIO_BASE = `${API_ORIGIN}/studio/api`;
 
 class ApiError extends Error {
   status: number;

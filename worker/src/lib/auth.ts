@@ -24,11 +24,13 @@ export async function createSessionCookie(secret: string): Promise<string> {
   const payload = `studio.${expires}`;
   const sig = await hmac(secret, payload);
   const token = `${payload}.${sig}`;
-  return `${SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_SECONDS}`;
+  // SameSite=None: the Studio (Pages) and API (Workers) are on different
+  // domains, so the cookie must be sendable on cross-site fetch calls.
+  return `${SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${SESSION_TTL_SECONDS}`;
 }
 
 export function clearSessionCookie(): string {
-  return `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
+  return `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0`;
 }
 
 async function isValidSession(cookieHeader: string | undefined, secret: string): Promise<boolean> {

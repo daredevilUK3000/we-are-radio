@@ -56,10 +56,30 @@ everything else.
 
 ## Deploying
 
+**Live deployment:**
+- API (Worker): https://kizzi-radio-api.kizzi.workers.dev
+- App (Pages): https://kizzi-radio-app.pages.dev
+
 ```
 npm run deploy:worker
-npm run build:app     # then deploy app/dist via Cloudflare Pages (or wrangler pages deploy)
+
+# The app needs to know the deployed worker's URL at build time, since
+# Pages and the Worker are on different domains (no dev proxy in prod):
+cd app && VITE_API_ORIGIN='https://kizzi-radio-api.kizzi.workers.dev' npx vite build && cd ..
+npx wrangler pages deploy app/dist --project-name kizzi-radio-app
 ```
+
+Because the app and API are on different domains, the Studio session cookie is set
+with `SameSite=None; Secure` (see `worker/src/lib/auth.ts`) so it survives cross-site
+fetch calls - this only works over HTTPS, which both `workers.dev` and `pages.dev`
+provide by default.
+
+Secrets are set on the deployed Worker with `wrangler secret put <NAME>` (not
+committed, not in `.dev.vars`). `STUDIO_PASSWORD` and `SESSION_SECRET` are already set.
+Still to do for full functionality in production:
+- `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ACCOUNT_ID` - an R2 API token
+  (dashboard -> R2 -> Manage API Tokens), needed for direct-to-R2 uploads to work
+- `ANTHROPIC_API_KEY` - powers the AI producer endpoint; everything else works without it
 
 ## What's built vs. deferred
 
