@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { studioApi } from "../../api/client";
 
 export function Dashboard() {
@@ -18,6 +19,27 @@ export function Dashboard() {
   return (
     <div>
       <h1>Dashboard</h1>
+
+      <div
+        className="card"
+        style={{
+          marginBottom: 20,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <strong>New to the Studio?</strong>
+          <div style={{ color: "var(--text-dim)", fontSize: "0.85rem" }}>
+            A step-by-step walkthrough of uploading, building programmes, and publishing.
+          </div>
+        </div>
+        <Link to="/studio/guide" className="btn primary">
+          Read the guide
+        </Link>
+      </div>
+
       <div className="grid">
         <div className="card">
           <div style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>LIVE CHANNELS</div>

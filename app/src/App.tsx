@@ -16,6 +16,9 @@ import { UploadTrack } from "./studio/pages/UploadTrack";
 import { Channels } from "./studio/pages/Channels";
 import { ProgrammesList } from "./studio/pages/ProgrammesList";
 import { ProgrammeBuilder } from "./studio/pages/ProgrammeBuilder";
+import { AudioAssets } from "./studio/pages/AudioAssets";
+import { UploadAudioAsset } from "./studio/pages/UploadAudioAsset";
+import { Guide } from "./studio/pages/Guide";
 
 function ListenerLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -48,8 +51,10 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
             Dashboard
           </NavLink>
           <NavLink to="/studio/tracks">Music</NavLink>
+          <NavLink to="/studio/audio">Audio</NavLink>
           <NavLink to="/studio/channels">Channels</NavLink>
           <NavLink to="/studio/programmes">Programmes</NavLink>
+          <NavLink to="/studio/guide">Guide</NavLink>
         </nav>
         <button className="btn" style={{ marginLeft: "auto" }} onClick={() => logout()}>
           Sign out
@@ -72,9 +77,12 @@ function StudioApp() {
         <Route path="/" element={<Dashboard />} />
         <Route path="tracks" element={<Tracks />} />
         <Route path="tracks/upload" element={<UploadTrack />} />
+        <Route path="audio" element={<AudioAssets />} />
+        <Route path="audio/upload" element={<UploadAudioAsset />} />
         <Route path="channels" element={<Channels />} />
         <Route path="programmes" element={<ProgrammesList />} />
         <Route path="programmes/:id" element={<ProgrammeBuilder />} />
+        <Route path="guide" element={<Guide />} />
       </Routes>
     </StudioLayout>
   );

@@ -97,6 +97,8 @@ export const studioApi = {
   audioAssets: () => request<{ audio_assets: any[] }>(`${STUDIO_BASE}/audio-assets`),
   createAudioAsset: (data: Record<string, unknown>) =>
     request<{ id: string }>(`${STUDIO_BASE}/audio-assets`, { method: "POST", body: JSON.stringify(data) }),
+  updateAudioAsset: (id: string, data: Record<string, unknown>) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   tags: () => request<{ tags: any[] }>(`${STUDIO_BASE}/tags`),
 
