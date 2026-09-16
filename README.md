@@ -44,6 +44,15 @@ wrangler.toml   Cloudflare bindings (D1 / R2 / KV)
 
    In production, set these with `wrangler secret put <NAME>` instead of committing them.
 
+5. Apply the R2 bucket's CORS policy (`r2-cors.json`), so browsers are allowed to PUT
+   directly to the presigned upload URLs - without this, uploads fail with a generic
+   "Failed to fetch" (the browser silently blocks the cross-origin PUT):
+   ```
+   npx wrangler r2 bucket cors set kizzi-radio-media --file r2-cors.json
+   ```
+   Update the `origins` list in `r2-cors.json` first if your app isn't served from
+   `kizzi-radio-api.kizzi.workers.dev`.
+
 ## Running locally
 
 ```
