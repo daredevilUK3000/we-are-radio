@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { studioApi } from "../../api/client";
+import { studioApi, mediaUrl } from "../../api/client";
 
 export function AudioAssets() {
   const [assets, setAssets] = useState<any[]>([]);
+  const [playingId, setPlayingId] = useState<string | null>(null);
 
   const load = () => studioApi.audioAssets().then((r) => setAssets(r.audio_assets));
   useEffect(() => {
@@ -38,22 +39,37 @@ export function AudioAssets() {
         </thead>
         <tbody>
           {assets.map((a) => (
-            <tr key={a.id}>
-              <td>{a.title}</td>
-              <td>
-                <span className="badge">{a.type}</span>
-              </td>
-              <td>
-                <span className="badge">{a.status}</span>
-              </td>
-              <td>
-                {a.status !== "published" && (
-                  <button className="btn" onClick={() => setStatus(a.id, "published")}>
-                    Publish
+            <Fragment key={a.id}>
+              <tr>
+                <td>{a.title}</td>
+                <td>
+                  <span className="badge">{a.type}</span>
+                </td>
+                <td>
+                  <span className="badge">{a.status}</span>
+                </td>
+                <td style={{ display: "flex", gap: 8 }}>
+                  <button
+                    className="btn"
+                    onClick={() => setPlayingId(playingId === a.id ? null : a.id)}
+                  >
+                    {playingId === a.id ? "Hide player" : "Play"}
                   </button>
-                )}
-              </td>
-            </tr>
+                  {a.status !== "published" && (
+                    <button className="btn" onClick={() => setStatus(a.id, "published")}>
+                      Publish
+                    </button>
+                  )}
+                </td>
+              </tr>
+              {playingId === a.id && (
+                <tr>
+                  <td colSpan={4} style={{ paddingTop: 0 }}>
+                    <audio controls autoPlay src={mediaUrl(a.audio_url)} style={{ width: "100%" }} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
           {assets.length === 0 && (
             <tr>

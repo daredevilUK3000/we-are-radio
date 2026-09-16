@@ -6,6 +6,13 @@ const API_ORIGIN = import.meta.env.VITE_API_ORIGIN ?? "";
 const API_BASE = `${API_ORIGIN}/api`;
 const STUDIO_BASE = `${API_ORIGIN}/studio/api`;
 
+// tracks.audio_url / audio_assets.audio_url store the R2 object key
+// (e.g. "audio/upl_xxx-song.mp3"), not a playable URL - this turns one into
+// the other via the Worker's /media/* streaming route.
+export function mediaUrl(key: string): string {
+  return `${API_ORIGIN}/media/${key}`;
+}
+
 class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {

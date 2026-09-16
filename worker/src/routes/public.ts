@@ -100,8 +100,8 @@ publicRoutes.get("/programmes/:id", async (c) => {
   if (!programme) return c.json({ error: "not found" }, 404);
 
   const { results: items } = await c.env.DB.prepare(
-    `SELECT pi.*, t.title as track_title, t.duration_seconds as track_duration_seconds,
-            aa.title as audio_asset_title, aa.duration_seconds as audio_asset_duration_seconds
+    `SELECT pi.*, t.title as track_title, t.duration_seconds as track_duration_seconds, t.audio_url as track_audio_url,
+            aa.title as audio_asset_title, aa.duration_seconds as audio_asset_duration_seconds, aa.audio_url as audio_asset_audio_url
      FROM programme_items pi
      LEFT JOIN tracks t ON t.id = pi.track_id
      LEFT JOIN audio_assets aa ON aa.id = pi.audio_asset_id
@@ -123,8 +123,10 @@ interface ItemRow {
   label: string | null;
   track_title: string | null;
   track_duration_seconds: number | null;
+  track_audio_url: string | null;
   audio_asset_title: string | null;
   audio_asset_duration_seconds: number | null;
+  audio_asset_audio_url: string | null;
 }
 
 /**
@@ -157,8 +159,8 @@ publicRoutes.get("/now-playing", async (c) => {
   }
 
   const { results: items } = await c.env.DB.prepare(
-    `SELECT pi.*, t.title as track_title, t.duration_seconds as track_duration_seconds,
-            aa.title as audio_asset_title, aa.duration_seconds as audio_asset_duration_seconds
+    `SELECT pi.*, t.title as track_title, t.duration_seconds as track_duration_seconds, t.audio_url as track_audio_url,
+            aa.title as audio_asset_title, aa.duration_seconds as audio_asset_duration_seconds, aa.audio_url as audio_asset_audio_url
      FROM programme_items pi
      LEFT JOIN tracks t ON t.id = pi.track_id
      LEFT JOIN audio_assets aa ON aa.id = pi.audio_asset_id
@@ -194,6 +196,7 @@ publicRoutes.get("/now-playing", async (c) => {
     track_id: row.track_id,
     audio_asset_id: row.audio_asset_id,
     duration_seconds: row.track_duration_seconds ?? row.audio_asset_duration_seconds ?? 0,
+    audio_url: row.track_audio_url ?? row.audio_asset_audio_url,
   });
 
   return c.json({

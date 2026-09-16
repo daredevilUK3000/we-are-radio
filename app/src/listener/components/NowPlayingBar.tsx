@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { publicApi } from "../../api/client";
+import { publicApi, mediaUrl } from "../../api/client";
 
 export function NowPlayingBar() {
   const [data, setData] = useState<any>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const currentItemId = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,7 +23,35 @@ export function NowPlayingBar() {
     };
   }, []);
 
+  // Only touch the <audio> element when the on-air item actually changes -
+  // a poll landing mid-song shouldn't restart playback.
+  useEffect(() => {
+    const item = data?.now_playing;
+    const audio = audioRef.current;
+    if (!item || !audio) return;
+    if (currentItemId.current === item.id) return;
+    currentItemId.current = item.id;
+
+    if (!item.audio_url) return;
+    audio.src = mediaUrl(item.audio_url);
+    audio.currentTime = data.position_seconds ?? 0;
+    if (playing) audio.play().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
   if (!data || !data.on_air) return null;
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+    } else {
+      audio.play().catch(() => {});
+      setPlaying(true);
+    }
+  };
 
   return (
     <div className="now-playing-bar">
@@ -37,22 +66,13 @@ export function NowPlayingBar() {
           {data.up_next ? `Up next: ${data.up_next.label}` : data.programme?.title}
         </div>
       </div>
-      <button
-        className="btn primary"
-        onClick={() => {
-          if (!audioRef.current) return;
-          if (playing) {
-            audioRef.current.pause();
-          } else {
-            audioRef.current.play().catch(() => {});
-          }
-          setPlaying(!playing);
-        }}
-      >
+      <button className="btn primary" onClick={togglePlay}>
         {playing ? "Pause" : "Play"}
       </button>
-      {/* audio_url resolution against R2/media is wired up once tracks carry real playable URLs */}
-      <audio ref={audioRef} />
+      <audio
+        ref={audioRef}
+        onEnded={() => publicApi.nowPlaying().then(setData).catch(() => {})}
+      />
     </div>
   );
 }

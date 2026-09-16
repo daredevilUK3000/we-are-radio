@@ -13,6 +13,7 @@ import { tagRoutes } from "./routes/tags";
 import { uploadRoutes } from "./routes/upload";
 import { aiRoutes } from "./routes/ai";
 import { publicRoutes } from "./routes/public";
+import { mediaRoutes } from "./routes/media";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -39,6 +40,12 @@ studio.route("/tags", tagRoutes);
 studio.route("/upload", uploadRoutes);
 studio.route("/ai", aiRoutes);
 app.route("/studio/api", studio);
+
+// Streams audio straight out of R2 - not gated on Studio auth, since
+// published tracks/assets need to be playable by ordinary listeners. Draft
+// content isn't linked anywhere in the listener app, but the R2 key itself
+// isn't a secret either way.
+app.route("/media", mediaRoutes);
 
 // Everything else is the SPA (listener app + Studio shell). Exact static
 // files (JS/CSS/etc) are served automatically before the Worker even runs;
