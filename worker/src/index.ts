@@ -49,9 +49,17 @@ app.route("/studio/api", studio);
 app.get("*", (c) => {
   // Fetching "/index.html" directly gets 307-redirected by the asset
   // handler's URL canonicalization; "/" serves the same file as a 200.
+  //
+  // Deliberately a brand new Request with none of the original headers -
+  // forwarding the incoming Accept-Encoding here caused Cloudflare's edge
+  // cache for this fetch to serve whatever encoding (e.g. zstd) got cached
+  // first to every subsequent visitor regardless of what their own browser
+  // could decode (the cached response's Vary header never included
+  // Accept-Encoding), which broke navigation for real users with ERR_FAILED
+  // even though curl - which doesn't negotiate the same way - looked fine.
   const url = new URL(c.req.url);
   url.pathname = "/";
-  return c.env.ASSETS.fetch(new Request(url, c.req.raw));
+  return c.env.ASSETS.fetch(new Request(url, { method: "GET" }));
 });
 
 export default app;
