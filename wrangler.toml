@@ -17,6 +17,10 @@ bucket_name = "kizzi-radio-media"
 binding = "CONFIG"
 id = "67d82b0eabf94c2392ee3fafbca5c163"
 
+[vars]
+R2_ACCOUNT_ID = "ec98850a6c0d0922d6a4738c75f6833c"
+R2_BUCKET_NAME = "kizzi-radio-media"
+
 # Secrets (set with `wrangler secret put <NAME>`, never committed):
 #   STUDIO_PASSWORD   - password for the single Studio admin account
 #   SESSION_SECRET    - random string used to sign Studio session cookies

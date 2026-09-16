@@ -19,7 +19,10 @@ export async function createPresignedUploadUrl(
     region: "auto",
   });
 
-  const endpoint = `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET_NAME}/${key}`;
+  // aws4fetch (1.0.x) has no `expires` option - for service "s3" it hardcodes
+  // X-Amz-Expires to 86400 unless the query param is already on the URL, so
+  // it has to be set here before signing.
+  const endpoint = `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET_NAME}/${key}?X-Amz-Expires=${expiresInSeconds}`;
 
   const signed = await client.sign(
     new Request(endpoint, {
@@ -28,7 +31,6 @@ export async function createPresignedUploadUrl(
     }),
     {
       aws: { signQuery: true },
-      expires: expiresInSeconds,
     } as any
   );
 
