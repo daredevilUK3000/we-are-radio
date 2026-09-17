@@ -16,9 +16,11 @@ export function Home() {
   return (
     <div>
       <section style={{ textAlign: "center", padding: "40px 0" }}>
-        <h1 style={{ marginBottom: 4 }}>Kizzi Radio</h1>
+        <h1 style={{ marginBottom: 4 }}>We Are Radio</h1>
         <p style={{ color: "var(--text-dim)", marginTop: 0 }}>
-          {nowPlaying?.on_air ? nowPlaying.programme?.title : "Kizzi's personal radio network"}
+          {nowPlaying?.on_air
+            ? `${nowPlaying.channel?.name}: ${nowPlaying.programme?.title}`
+            : "Kizzi's personal radio network, starting with Kizzi Radio"}
         </p>
         <Link to="/listen" className="listen-now-btn">
           LISTEN NOW

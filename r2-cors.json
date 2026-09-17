@@ -2,7 +2,7 @@
   "rules": [
     {
       "allowed": {
-        "origins": ["https://kizzi-radio-api.kizzi.workers.dev", "http://localhost:5173"],
+        "origins": ["https://weareradio.app", "https://kizzi-radio-api.kizzi.workers.dev", "http://localhost:5173"],
         "methods": ["PUT", "GET", "HEAD"],
         "headers": ["Content-Type"]
       },

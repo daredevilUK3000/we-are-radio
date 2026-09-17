@@ -27,7 +27,7 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <header className="top-nav">
-        <span className="brand">🎙️ Kizzi Radio</span>
+        <span className="brand">📡 We Are Radio</span>
         <nav>
           <NavLink to="/" end>
             Home
@@ -48,7 +48,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <header className="top-nav">
-        <span className="brand">🎛️ Kizzi Radio Studio</span>
+        <span className="brand">🎛️ We Are Radio Studio</span>
         <nav>
           <NavLink to="/studio" end>
             Dashboard

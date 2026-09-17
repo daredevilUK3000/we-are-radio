@@ -22,7 +22,7 @@ export function Login() {
 
   return (
     <div style={{ maxWidth: 320, margin: "80px auto" }}>
-      <h1>Kizzi Radio Studio</h1>
+      <h1>We Are Radio Studio</h1>
       <form onSubmit={submit}>
         <div className="form-row">
           <label>Studio password</label>

@@ -1,13 +1,21 @@
-# Kizzi Radio
+# We Are Radio
 
-Personal digital radio network and broadcasting platform. See `Kizzi_Radio_Brief_v2.md`
-for the full product brief this scaffold implements (Section 42's first-release scope).
+Personal digital radio network and broadcasting platform. **Kizzi Radio** is the
+flagship channel within the network (not the product name - see the v3 brief's
+revision note). See `We_Are_Radio_Brief_v3.md` for the full product brief this
+scaffold implements (Section 42's first-release scope); `Kizzi_Radio_Brief_v2.md`
+is kept for history.
+
+Internal identifiers (the D1 database, R2 bucket, Worker name, `package.json`
+names) still say "kizzi-radio" - renaming those means recreating/migrating actual
+Cloudflare resources for zero user-visible benefit, so they were deliberately left
+alone. Everything a listener or Kizzi actually sees says "We Are Radio".
 
 ## Structure
 
 ```
 worker/     Cloudflare Worker API (Hono + D1 + R2)
-app/        Listener PWA + Kizzi Radio Studio (Vite + React)
+app/        Listener PWA + We Are Radio Studio (Vite + React)
 migrations/ D1 schema (six core tables + seed channels)
 wrangler.toml   Cloudflare bindings (D1 / R2 / KV)
 ```
@@ -51,7 +59,7 @@ wrangler.toml   Cloudflare bindings (D1 / R2 / KV)
    npx wrangler r2 bucket cors set kizzi-radio-media --file r2-cors.json
    ```
    Update the `origins` list in `r2-cors.json` first if your app isn't served from
-   `kizzi-radio-api.kizzi.workers.dev`.
+   `weareradio.app` (or the `kizzi-radio-api.kizzi.workers.dev` fallback, also allowed).
 
 ## Running locally
 
@@ -65,8 +73,12 @@ everything else.
 
 ## Deploying
 
-**Live deployment:** https://kizzi-radio-api.kizzi.workers.dev (one Worker serves both
-the app and the API - see "Single-app deployment" below).
+**Live deployment:** https://weareradio.app (custom domain, added via `wrangler.toml`'s
+`[[routes]]` with `custom_domain = true` - the zone was already active on this Cloudflare
+account, so this was a one-command change, no DNS/nameserver work needed). The original
+`https://kizzi-radio-api.kizzi.workers.dev` still works too; Workers keep their
+`workers.dev` URL live alongside any custom domains. One Worker serves both the app and
+the API on both - see "Single-app deployment" below.
 
 ```
 cd app && npx vite build && cd ..
