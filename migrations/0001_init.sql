@@ -106,11 +106,18 @@ CREATE TABLE IF NOT EXISTS track_tags (
   PRIMARY KEY (track_id, tag_id)
 );
 
--- Seed the six planned channels (five start in `building`, Kizzi Radio starts `live`)
+-- Seed the six planned channels (five start in `building`, Kizzi Radio starts `live`).
+-- Only the flagship keeps the "Kizzi" name - it's the one personality-driven,
+-- Kizzi-presented channel (We Are Radio brief v3, decision #4). The other five
+-- are automatic, tag-curated lenses over the catalogue, not personally hosted,
+-- so they carry the network's "We Are ___" naming instead - this also keeps the
+-- door open for other presenters later without every channel being tied to Kizzi
+-- by name. Row ids/slugs were kept identical to when the channels were still
+-- named "Kizzi ___" - only the display name and public slug changed.
 INSERT OR IGNORE INTO channels (id, slug, name, emoji, description, status, created_at) VALUES
-  ('ch_kizzi_radio',       'kizzi-radio',       'Kizzi Radio',        '🎙️', 'Main, personality-driven station', 'live',     datetime('now')),
-  ('ch_kizzi_rock',        'kizzi-rock',        'Kizzi Rock',         '🎸', 'Rock material',                     'building', datetime('now')),
-  ('ch_kizzi_love',        'kizzi-love',        'Kizzi Love',         '❤️', 'Romantic music',                    'building', datetime('now')),
-  ('ch_kizzi_after_dark',  'kizzi-after-dark',  'Kizzi After Dark',   '🌙', 'Slower, atmospheric material',      'building', datetime('now')),
-  ('ch_kizzi_instrumental','kizzi-instrumental','Kizzi Instrumental', '🎼', 'Instrumental material',             'building', datetime('now')),
-  ('ch_kizzi_archive',     'kizzi-archive',     'The Kizzi Archive',  '📻', 'Older recordings, stories, interviews, career material', 'building', datetime('now'));
+  ('ch_kizzi_radio',       'kizzi-radio',        'Kizzi Radio',         '🎙️', 'Main, personality-driven station', 'live',     datetime('now')),
+  ('ch_kizzi_rock',        'we-are-rock',        'We Are Rock',         '🎸', 'Rock material',                     'building', datetime('now')),
+  ('ch_kizzi_love',        'we-are-love',        'We Are Love',         '❤️', 'Romantic music',                    'building', datetime('now')),
+  ('ch_kizzi_after_dark',  'we-are-after-dark',  'We Are After Dark',   '🌙', 'Slower, atmospheric material',      'building', datetime('now')),
+  ('ch_kizzi_instrumental','we-are-instrumental','We Are Instrumental', '🎼', 'Instrumental material',             'building', datetime('now')),
+  ('ch_kizzi_archive',     'we-are-archive',     'We Are Archive',      '📻', 'Older recordings, stories, interviews, career material', 'building', datetime('now'));

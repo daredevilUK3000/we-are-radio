@@ -5,7 +5,9 @@
 1. **Channel status.** All six planned channels exist in the schema from day one, but only channels marked `live` are visible to listeners. Kizzi Radio launches `live`; the other five launch `building` and become visible only when Kizzi flips them on.
 2. **Saturday Morning with Kizzi is a flagship *programme*, not a separate channel.** It airs within the main Kizzi Radio channel and is promoted heavily, rather than existing as its own station.
 3. **A detailed core data model** (tracks, channels, programmes, programme items, audio assets, tags) has been specified — see Section 33 below, which replaces the placeholder table list in the original draft. `schedules`, `favourites`, and `listening_history` are deliberately deferred — see the note at the end of Section 33.
-4. **Product / network rename.** The app and network are now called **We Are Radio** (domain: weareradio.app), replacing "Kizzi Radio" as the top-level product name. The earlier name centred the whole network on Kizzi personally, which worked against the plan to eventually bring in other presenters and channels. **"Kizzi Radio" survives as the flagship channel** — Kizzi's own personality-driven show, still the one marked `live` at launch — living inside the We Are Radio network alongside the other five channels (Kizzi Rock, Kizzi Love, Kizzi After Dark, Kizzi Instrumental, The Kizzi Archive), which remain `building` until ready. **Open question, not yet decided:** whether those five channel names should also drop the "Kizzi" prefix for consistency, or stay as-is now that they sit under a non-personal network name. Not urgent for backend work — worth settling before those channels actually go live.
+4. **Product / network rename.** The app and network are now called **We Are Radio** (domain: weareradio.app), replacing "Kizzi Radio" as the top-level product name. The earlier name centred the whole network on Kizzi personally, which worked against the plan to eventually bring in other presenters and channels. **"Kizzi Radio" survives as the flagship channel** — Kizzi's own personality-driven show, still the one marked `live` at launch — living inside the We Are Radio network alongside the other five channels, which remain `building` until ready.
+
+   **Resolved (2026-09-17):** the five non-flagship channels drop the "Kizzi" prefix and take the network's own **"We Are ___"** naming instead: **We Are Rock**, **We Are Love**, **We Are After Dark**, **We Are Instrumental**, **We Are Archive** (was Kizzi Rock, Kizzi Love, Kizzi After Dark, Kizzi Instrumental, The Kizzi Archive). Reasoning: these five are automatic, tag-curated lenses over the shared catalogue (Section 10), not personally-presented shows the way Kizzi Radio is - a network-branded name fits how they actually work, and it keeps the door open for other presenters later without every channel being tied to Kizzi by name. Kizzi Radio is the deliberate exception, kept because it's explicitly personality-driven. Row ids and internal identifiers were left alone; only each channel's public `name` and `slug` changed.
 
 Everything else in the v2 brief still stands. This document is intended to be handed to a developer (or to Claude Code) to generate the D1 (SQLite) DDL and scaffold the build.
 
@@ -179,11 +181,11 @@ The architecture supports multiple channels from day one, even though only one i
 | Channel | Focus | Launch status |
 |---|---|---|
 | 🎙️ Kizzi Radio | Main, personality-driven station | `live` |
-| 🎸 Kizzi Rock | Rock material | `building` |
-| ❤️ Kizzi Love | Romantic music | `building` |
-| 🌙 Kizzi After Dark | Slower, atmospheric material | `building` |
-| 🎼 Kizzi Instrumental | Instrumental material | `building` |
-| 📻 The Kizzi Archive | Older recordings, stories, interviews, career material | `building` |
+| 🎸 We Are Rock | Rock material | `building` |
+| ❤️ We Are Love | Romantic music | `building` |
+| 🌙 We Are After Dark | Slower, atmospheric material | `building` |
+| 🎼 We Are Instrumental | Instrumental material | `building` |
+| 📻 We Are Archive | Older recordings, stories, interviews, career material | `building` |
 
 Each channel supports: name, description, logo/artwork, programme schedule, playlist/catalogue rules, station IDs, and a **status** of `building` or `live` (replacing the earlier "active/inactive" naming to make clear that "not live" means "not ready yet," not "broken").
 
@@ -449,7 +451,7 @@ track_tags
 
 Mood/vibe descriptors are modelled as a tag table rather than fixed columns on `tracks`, because the tag vocabulary will keep growing as AI suggests new descriptors (Section 17), and this avoids a schema migration every time a new mood appears. The same `tags`/`track_tags` pattern can later be reused for programmes or audio assets without duplicating the taxonomy.
 
-**`catalogue_rules` on channels** works against this tag system — e.g. Kizzi Rock's rule might be `{"genre": ["Rock"], "tags_any": ["rock", "upbeat"]}`, and any track matching that rule appears in Kizzi Rock's rotation automatically. Nothing needs to be manually assigned per channel.
+**`catalogue_rules` on channels** works against this tag system — e.g. We Are Rock's rule might be `{"genre": ["Rock"], "tags_any": ["rock", "upbeat"]}`, and any track matching that rule appears in We Are Rock's rotation automatically. Nothing needs to be manually assigned per channel.
 
 ### `schedules`, `favourites`, and `listening_history` — deliberately deferred
 
