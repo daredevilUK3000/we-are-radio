@@ -77,8 +77,11 @@ export const studioApi = {
     request<{ ok: true }>(`${STUDIO_BASE}/tracks/${id}/tags`, { method: "PUT", body: JSON.stringify({ tags }) }),
 
   albums: () => request<{ albums: any[] }>(`${STUDIO_BASE}/albums`),
+  album: (id: string) => request<{ album: any; tracks: any[] }>(`${STUDIO_BASE}/albums/${id}`),
   createAlbum: (data: Record<string, unknown>) =>
     request<{ id: string }>(`${STUDIO_BASE}/albums`, { method: "POST", body: JSON.stringify(data) }),
+  updateAlbum: (id: string, data: Record<string, unknown>) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/albums/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   channels: () => request<{ channels: any[] }>(`${STUDIO_BASE}/channels?all=1`),
   setChannelStatus: (id: string, status: "building" | "live") =>

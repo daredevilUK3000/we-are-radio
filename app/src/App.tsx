@@ -19,6 +19,8 @@ import { ProgrammeBuilder } from "./studio/pages/ProgrammeBuilder";
 import { AudioAssets } from "./studio/pages/AudioAssets";
 import { UploadAudioAsset } from "./studio/pages/UploadAudioAsset";
 import { Guide } from "./studio/pages/Guide";
+import { Albums as StudioAlbums } from "./studio/pages/Albums";
+import { AlbumDetail as StudioAlbumDetail } from "./studio/pages/AlbumDetail";
 
 function ListenerLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -51,6 +53,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
             Dashboard
           </NavLink>
           <NavLink to="/studio/tracks">Music</NavLink>
+          <NavLink to="/studio/albums">Albums</NavLink>
           <NavLink to="/studio/audio">Audio</NavLink>
           <NavLink to="/studio/channels">Channels</NavLink>
           <NavLink to="/studio/programmes">Programmes</NavLink>
@@ -77,6 +80,8 @@ function StudioApp() {
         <Route path="/" element={<Dashboard />} />
         <Route path="tracks" element={<Tracks />} />
         <Route path="tracks/upload" element={<UploadTrack />} />
+        <Route path="albums" element={<StudioAlbums />} />
+        <Route path="albums/:id" element={<StudioAlbumDetail />} />
         <Route path="audio" element={<AudioAssets />} />
         <Route path="audio/upload" element={<UploadAudioAsset />} />
         <Route path="channels" element={<Channels />} />
