@@ -1,5 +1,7 @@
 # We Are Radio
 
+[![GitHub repo](https://img.shields.io/badge/GitHub-we--are--radio-181717?logo=github)](https://github.com/daredevilUK3000/we-are-radio)
+
 Personal digital radio network and broadcasting platform. **Kizzi Radio** is the
 flagship channel within the network (not the product name - see the v3 brief's
 revision note). See `We_Are_Radio_Brief_v3.md` for the full product brief this
