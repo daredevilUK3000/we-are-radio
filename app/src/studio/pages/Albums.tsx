@@ -11,8 +11,15 @@ export function Albums() {
   const [artworkFile, setArtworkFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const load = () => studioApi.albums().then((r) => setAlbums(r.albums));
+  const load = () => {
+    setLoadError(null);
+    studioApi
+      .albums()
+      .then((r) => setAlbums(r.albums))
+      .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load albums"));
+  };
   useEffect(() => {
     load();
   }, []);
@@ -71,6 +78,15 @@ export function Albums() {
         </button>
       </form>
 
+      {loadError && (
+        <p style={{ color: "var(--accent)" }}>
+          Couldn't load albums ({loadError}).{" "}
+          <button className="btn" onClick={load} type="button">
+            Retry
+          </button>
+        </p>
+      )}
+
       <div className="grid">
         {albums.map((a) => (
           <Link key={a.id} to={`/studio/albums/${a.id}`} className="card">
@@ -87,7 +103,7 @@ export function Albums() {
             <div style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>{a.genre}</div>
           </Link>
         ))}
-        {albums.length === 0 && <div style={{ color: "var(--text-dim)" }}>No albums yet.</div>}
+        {albums.length === 0 && !loadError && <div style={{ color: "var(--text-dim)" }}>No albums yet.</div>}
       </div>
     </div>
   );

@@ -7,19 +7,36 @@ export function AlbumDetail() {
   const [album, setAlbum] = useState<any>(null);
   const [albumTracks, setAlbumTracks] = useState<any[]>([]);
   const [allTracks, setAllTracks] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = async () => {
     if (!id) return;
-    const [a, t] = await Promise.all([studioApi.album(id), studioApi.tracks()]);
-    setAlbum(a.album);
-    setAlbumTracks(a.tracks);
-    setAllTracks(t.tracks);
+    setLoadError(null);
+    try {
+      const [a, t] = await Promise.all([studioApi.album(id), studioApi.tracks()]);
+      setAlbum(a.album);
+      setAlbumTracks(a.tracks);
+      setAllTracks(t.tracks);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load album");
+    }
   };
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  if (loadError) {
+    return (
+      <p style={{ color: "var(--accent)" }}>
+        Couldn't load this album ({loadError}).{" "}
+        <button className="btn" onClick={load} type="button">
+          Retry
+        </button>
+      </p>
+    );
+  }
 
   const addTrack = async (trackId: string) => {
     if (!id || !trackId) return;

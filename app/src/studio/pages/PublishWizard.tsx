@@ -47,6 +47,7 @@ export function PublishWizard() {
 
   // Step 2 - album
   const [albums, setAlbums] = useState<any[]>([]);
+  const [albumsError, setAlbumsError] = useState<string | null>(null);
   const [albumChoice, setAlbumChoice] = useState<AlbumChoice>({ mode: "none" });
 
   // Step 3 - publish
@@ -54,8 +55,16 @@ export function PublishWizard() {
   const [publishError, setPublishError] = useState<string | null>(null);
   const [result, setResult] = useState<{ trackId: string; albumId: string | null } | null>(null);
 
+  const loadAlbums = () => {
+    setAlbumsError(null);
+    studioApi
+      .albums()
+      .then((r) => setAlbums(r.albums))
+      .catch((err) => setAlbumsError(err instanceof Error ? err.message : "Failed to load albums"));
+  };
+
   useEffect(() => {
-    studioApi.albums().then((r) => setAlbums(r.albums));
+    loadAlbums();
   }, []);
 
   const goToStep2 = () => {
@@ -227,10 +236,20 @@ export function PublishWizard() {
           <div className="form-row">
             <label>Audio file</label>
             <input type="file" accept="audio/*" onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)} />
+            {audioFile && (
+              <p style={{ color: "var(--text-dim)", fontSize: "0.85rem", margin: "4px 0 0" }}>
+                ✓ {audioFile.name} selected
+              </p>
+            )}
           </div>
           <div className="form-row">
             <label>Artwork (optional)</label>
             <input type="file" accept="image/*" onChange={(e) => setArtworkFile(e.target.files?.[0] ?? null)} />
+            {artworkFile && (
+              <p style={{ color: "var(--text-dim)", fontSize: "0.85rem", margin: "4px 0 0" }}>
+                ✓ {artworkFile.name} selected
+              </p>
+            )}
           </div>
           {step1Error && <p style={{ color: "var(--accent)" }}>{step1Error}</p>}
           <button className="btn primary" onClick={goToStep2}>
@@ -242,6 +261,14 @@ export function PublishWizard() {
       {step === 2 && (
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Step 2 - Where does it belong?</h3>
+          {albumsError && (
+            <p style={{ color: "var(--accent)" }}>
+              Couldn't load your albums ({albumsError}).{" "}
+              <button className="btn" onClick={loadAlbums} type="button">
+                Retry
+              </button>
+            </p>
+          )}
           <div className="form-row">
             <label>
               <input
@@ -262,7 +289,7 @@ export function PublishWizard() {
                 }
                 disabled={albums.length === 0}
               />{" "}
-              Add to an existing album {albums.length === 0 && "(none yet)"}
+              Add to an existing album {albums.length === 0 && !albumsError && "(none yet)"}
             </label>
             {albumChoice.mode === "existing" && (
               <select
@@ -320,6 +347,11 @@ export function PublishWizard() {
                     accept="image/*"
                     onChange={(e) => setAlbumChoice({ ...albumChoice, artworkFile: e.target.files?.[0] ?? null })}
                   />
+                  {albumChoice.artworkFile && (
+                    <p style={{ color: "var(--text-dim)", fontSize: "0.85rem", margin: "4px 0 0" }}>
+                      ✓ {albumChoice.artworkFile.name} selected
+                    </p>
+                  )}
                 </div>
               </div>
             )}
