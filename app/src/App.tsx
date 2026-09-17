@@ -10,6 +10,7 @@ import { MyRadio } from "./listener/pages/MyRadio";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
 import { ListenerAuthProvider } from "./listener/auth/ListenerAuthContext";
 import { FavouritesProvider } from "./listener/favourites/FavouritesContext";
+import { BrandMark } from "./listener/components/BrandMark";
 
 import { StudioAuthProvider, useStudioAuth } from "./studio/auth/StudioAuthContext";
 import { Login } from "./studio/pages/Login";
@@ -28,9 +29,12 @@ import { PublishWizard } from "./studio/pages/PublishWizard";
 
 function ListenerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="app-shell">
+    <div className="app-shell listener-shell">
       <header className="top-nav">
-        <span className="brand">📡 We Are Radio</span>
+        <span className="brand listener-logo">
+          <BrandMark />
+          We Are Radio
+        </span>
         <nav>
           <NavLink to="/" end>
             Home

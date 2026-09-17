@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { publicApi, mediaUrl } from "../../api/client";
 
+function PlayIcon() {
+  return <span className="play-triangle" />;
+}
+
+function PauseIcon() {
+  return (
+    <span className="mp-pause-icon">
+      <span />
+      <span />
+    </span>
+  );
+}
+
 export function NowPlayingBar() {
   const [data, setData] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
@@ -55,28 +68,22 @@ export function NowPlayingBar() {
 
   return (
     <div className="now-playing-bar">
-      <span className="on-air-badge">
-        <span className="on-air-dot" /> ON AIR
-      </span>
-      {data.now_playing?.artwork_url && (
-        <img
-          src={mediaUrl(data.now_playing.artwork_url)}
-          alt=""
-          width={40}
-          height={40}
-          style={{ objectFit: "cover", borderRadius: 4, flexShrink: 0 }}
-        />
+      {data.now_playing?.artwork_url ? (
+        <img className="mp-art" src={mediaUrl(data.now_playing.artwork_url)} alt="" />
+      ) : (
+        <div className="mp-art" />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {data.now_playing?.label ?? "Kizzi Radio"}
-        </div>
-        <div style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>
+        <span className="mp-onair">
+          <span className="mp-onair-dot" /> On Air
+        </span>
+        <div className="mp-title">{data.now_playing?.label ?? "Kizzi Radio"}</div>
+        <div className="mp-programme">
           {data.up_next ? `Up next: ${data.up_next.label}` : data.programme?.title}
         </div>
       </div>
-      <button className="btn primary" onClick={togglePlay}>
-        {playing ? "Pause" : "Play"}
+      <button className="mp-play-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
+        {playing ? <PauseIcon /> : <PlayIcon />}
       </button>
       <audio
         ref={audioRef}
