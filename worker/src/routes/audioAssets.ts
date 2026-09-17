@@ -20,7 +20,7 @@ audioAssetRoutes.get("/", async (c) => {
 
 audioAssetRoutes.post("/", async (c) => {
   const body = await c.req.json<Partial<AudioAsset>>();
-  if (!body.type || !body.title || !body.audio_url || !body.duration_seconds) {
+  if (!body.type || !body.title || !body.audio_url || body.duration_seconds == null) {
     return c.json({ error: "type, title, audio_url and duration_seconds are required" }, 400);
   }
   const id = newId("aa");

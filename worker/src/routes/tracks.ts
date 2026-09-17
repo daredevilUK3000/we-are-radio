@@ -52,7 +52,7 @@ trackRoutes.get("/:id", async (c) => {
 // Studio-only: create/update/tag tracks. Mounted behind requireStudioAuth in index.ts.
 trackRoutes.post("/", async (c) => {
   const body = await c.req.json<Partial<Track>>();
-  if (!body.title || !body.duration_seconds || !body.audio_url) {
+  if (!body.title || body.duration_seconds == null || !body.audio_url) {
     return c.json({ error: "title, duration_seconds and audio_url are required" }, 400);
   }
   const id = newId("trk");
