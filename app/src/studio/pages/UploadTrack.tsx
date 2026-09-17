@@ -96,7 +96,7 @@ export function UploadTrack() {
 
       const { id } = await studioApi.createTrack({
         title,
-        genre: genre[0] ?? null,
+        genre: genre.length > 0 ? genre.join(", ") : null,
         description: description || null,
         tempo_bpm: bpm ? Number(bpm) : null,
         duration_seconds: duration,
@@ -127,7 +127,7 @@ export function UploadTrack() {
         </div>
         <div className="form-row">
           <label>Genre</label>
-          <ChipPicker options={GENRE_OPTIONS} value={genre} onChange={setGenre} multi={false} customPlaceholder="Other genre..." />
+          <ChipPicker options={GENRE_OPTIONS} value={genre} onChange={setGenre} customPlaceholder="Other genre..." />
         </div>
         <div className="form-row">
           <label>Mood / vibe</label>
