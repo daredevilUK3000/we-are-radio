@@ -27,6 +27,7 @@ export function Tracks() {
       <table>
         <thead>
           <tr>
+            <th></th>
             <th>Title</th>
             <th>Genre</th>
             <th>Status</th>
@@ -37,6 +38,27 @@ export function Tracks() {
           {tracks.map((t) => (
             <Fragment key={t.id}>
               <tr>
+                <td style={{ width: 48 }}>
+                  {t.artwork_url ? (
+                    <img
+                      src={mediaUrl(t.artwork_url)}
+                      alt=""
+                      width={40}
+                      height={40}
+                      style={{ objectFit: "cover", borderRadius: 4, display: "block" }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 4,
+                        background: "var(--bg-raised)",
+                        border: "1px solid var(--border)",
+                      }}
+                    />
+                  )}
+                </td>
                 <td>{t.title}</td>
                 <td>{t.genre}</td>
                 <td>
@@ -58,7 +80,7 @@ export function Tracks() {
               </tr>
               {playingId === t.id && (
                 <tr>
-                  <td colSpan={4} style={{ paddingTop: 0 }}>
+                  <td colSpan={5} style={{ paddingTop: 0 }}>
                     <audio controls autoPlay src={mediaUrl(t.audio_url)} style={{ width: "100%" }} />
                   </td>
                 </tr>
@@ -67,7 +89,7 @@ export function Tracks() {
           ))}
           {tracks.length === 0 && (
             <tr>
-              <td colSpan={4} style={{ color: "var(--text-dim)" }}>
+              <td colSpan={5} style={{ color: "var(--text-dim)" }}>
                 Nothing uploaded yet.
               </td>
             </tr>

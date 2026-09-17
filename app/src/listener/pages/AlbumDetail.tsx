@@ -40,15 +40,50 @@ export function AlbumDetail() {
 
   return (
     <div>
-      <h1>{album.title}</h1>
-      <p style={{ color: "var(--text-dim)" }}>{album.description}</p>
-      <button className="btn primary" style={{ marginBottom: 20 }} onClick={playAlbum} disabled={tracks.length === 0}>
-        Play Album
-      </button>
+      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", marginBottom: 20 }}>
+        {album.artwork_url ? (
+          <img
+            src={mediaUrl(album.artwork_url)}
+            alt=""
+            width={160}
+            height={160}
+            style={{ objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 160,
+              height: 160,
+              borderRadius: 8,
+              background: "var(--bg-raised)",
+              border: "1px solid var(--border)",
+              flexShrink: 0,
+            }}
+          />
+        )}
+        <div>
+          <h1 style={{ marginTop: 0 }}>{album.title}</h1>
+          <p style={{ color: "var(--text-dim)" }}>{album.description}</p>
+          <button className="btn primary" onClick={playAlbum} disabled={tracks.length === 0}>
+            Play Album
+          </button>
+        </div>
+      </div>
       <table>
         <tbody>
           {tracks.map((t, index) => (
             <tr key={t.id} style={playingIndex === index ? { color: "var(--accent)" } : undefined}>
+              <td style={{ width: 40 }}>
+                {t.artwork_url ? (
+                  <img
+                    src={mediaUrl(t.artwork_url)}
+                    alt=""
+                    width={32}
+                    height={32}
+                    style={{ objectFit: "cover", borderRadius: 4, display: "block" }}
+                  />
+                ) : null}
+              </td>
               <td>{t.track_number}</td>
               <td>{t.title}</td>
               <td>{Math.round(t.duration_seconds / 60)} min</td>
@@ -61,7 +96,7 @@ export function AlbumDetail() {
           ))}
           {tracks.length === 0 && (
             <tr>
-              <td colSpan={4} style={{ color: "var(--text-dim)" }}>
+              <td colSpan={5} style={{ color: "var(--text-dim)" }}>
                 No published tracks on this album yet.
               </td>
             </tr>

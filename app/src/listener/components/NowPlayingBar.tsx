@@ -58,6 +58,15 @@ export function NowPlayingBar() {
       <span className="on-air-badge">
         <span className="on-air-dot" /> ON AIR
       </span>
+      {data.now_playing?.artwork_url && (
+        <img
+          src={mediaUrl(data.now_playing.artwork_url)}
+          alt=""
+          width={40}
+          height={40}
+          style={{ objectFit: "cover", borderRadius: 4, flexShrink: 0 }}
+        />
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {data.now_playing?.label ?? "Kizzi Radio"}
