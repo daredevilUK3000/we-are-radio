@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS track_tags (
 -- named "Kizzi ___" - only the display name and public slug changed.
 INSERT OR IGNORE INTO channels (id, slug, name, emoji, description, status, created_at) VALUES
   ('ch_kizzi_radio',       'kizzi-radio',        'Kizzi Radio',         '🎙️', 'Main, personality-driven station', 'live',     datetime('now')),
-  ('ch_kizzi_rock',        'we-are-rock',        'We Are Rock',         '🎸', 'Rock material',                     'building', datetime('now')),
+  ('ch_kizzi_rock',        'we-are-50s',         'We Are 50s',          '🕺', '1950s-inspired music',              'building', datetime('now')),
   ('ch_kizzi_love',        'we-are-love',        'We Are Love',         '❤️', 'Romantic music',                    'building', datetime('now')),
   ('ch_kizzi_after_dark',  'we-are-after-dark',  'We Are After Dark',   '🌙', 'Slower, atmospheric material',      'building', datetime('now')),
   ('ch_kizzi_instrumental','we-are-instrumental','We Are Instrumental', '🎼', 'Instrumental material',             'building', datetime('now')),
