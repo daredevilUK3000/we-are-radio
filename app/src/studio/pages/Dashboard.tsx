@@ -30,14 +30,19 @@ export function Dashboard() {
         }}
       >
         <div>
-          <strong>New to the Studio?</strong>
+          <strong>Got a new song to put out?</strong>
           <div style={{ color: "var(--text-dim)", fontSize: "0.85rem" }}>
-            A step-by-step walkthrough of uploading, building programmes, and publishing.
+            One guided flow: upload, choose an album, publish - in that order, nothing skipped.
           </div>
         </div>
-        <Link to="/studio/guide" className="btn primary">
-          Read the guide
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link to="/studio/guide" className="btn">
+            Read the guide
+          </Link>
+          <Link to="/studio/publish" className="btn primary">
+            Publish music
+          </Link>
+        </div>
       </div>
 
       <div className="grid">

@@ -21,6 +21,7 @@ import { UploadAudioAsset } from "./studio/pages/UploadAudioAsset";
 import { Guide } from "./studio/pages/Guide";
 import { Albums as StudioAlbums } from "./studio/pages/Albums";
 import { AlbumDetail as StudioAlbumDetail } from "./studio/pages/AlbumDetail";
+import { PublishWizard } from "./studio/pages/PublishWizard";
 
 function ListenerLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -52,6 +53,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/studio" end>
             Dashboard
           </NavLink>
+          <NavLink to="/studio/publish">Publish Music</NavLink>
           <NavLink to="/studio/tracks">Music</NavLink>
           <NavLink to="/studio/albums">Albums</NavLink>
           <NavLink to="/studio/audio">Audio</NavLink>
@@ -78,6 +80,7 @@ function StudioApp() {
     <StudioLayout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="publish" element={<PublishWizard />} />
         <Route path="tracks" element={<Tracks />} />
         <Route path="tracks/upload" element={<UploadTrack />} />
         <Route path="albums" element={<StudioAlbums />} />

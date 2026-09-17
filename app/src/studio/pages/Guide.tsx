@@ -38,11 +38,21 @@ export function Guide() {
         purpose, and nothing reaches listeners until you explicitly publish it.
       </p>
 
+      <div className="card" style={{ marginBottom: 20, borderColor: "var(--accent-dim)" }}>
+        <strong>Shortcut:</strong> if all you want is to add a song and make it audible - upload,
+        pick or create an album, publish - the{" "}
+        <a href="/studio/publish" style={{ color: "var(--accent)" }}>
+          Publish Music
+        </a>{" "}
+        wizard on the Dashboard walks through exactly that in one guided flow. Steps 1-2 below
+        cover the same ground manually, plus spoken content, which the wizard doesn't handle yet.
+      </div>
+
       <Step n={1} title="Upload some music">
         Go to <strong>Music</strong> and click <strong>Upload music</strong>. Fill in the
-        title and (optionally) genre, mood/vibe tags, BPM and a description - the mood
-        tags are free text (comma-separated, e.g. "upbeat, summer, dance") and become
-        reusable tags other tracks can share. Pick an audio file; artwork is optional.
+        title and click chips for genre, mood/vibe and BPM (or add your own if nothing fits)
+        - moods become reusable tags other tracks can share. Pick an audio file; artwork is
+        optional.
         <br />
         <br />
         A newly uploaded track starts as <span className="badge">ready</span>, not{" "}
