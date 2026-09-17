@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./lib/types";
-import { requireStudioAuth } from "./lib/auth";
+import { requireStudioAuth, requireListenerAuth } from "./lib/auth";
 
 import { authRoutes } from "./routes/auth";
+import { listenerAuthRoutes } from "./routes/listenerAuth";
 import { trackRoutes } from "./routes/tracks";
 import { albumRoutes } from "./routes/albums";
 import { channelRoutes } from "./routes/channels";
@@ -14,6 +15,8 @@ import { uploadRoutes } from "./routes/upload";
 import { aiRoutes } from "./routes/ai";
 import { publicRoutes } from "./routes/public";
 import { mediaRoutes } from "./routes/media";
+import { favouriteRoutes } from "./routes/favourites";
+import { historyRoutes } from "./routes/history";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -24,6 +27,18 @@ app.get("/health", (c) => c.json({ ok: true }));
 // Public, listener-facing API - read-only, no auth. See routes/public.ts:
 // it only ever selects published/live rows, independently of the Studio CRUD routers.
 app.route("/api", publicRoutes);
+
+// Listener auth (login/logout/session are unauthenticated by nature).
+app.route("/api/auth", listenerAuthRoutes);
+
+// Favourites and listening history belong to the single listener account
+// (Kizzi, across her own devices) - gated on her session, not on the
+// Studio's. See migrations/0002_favourites_and_history.sql.
+const listener = new Hono<{ Bindings: Env }>();
+listener.use("*", requireListenerAuth);
+listener.route("/favourites", favouriteRoutes);
+listener.route("/history", historyRoutes);
+app.route("/api", listener);
 
 // Studio auth (login/logout are unauthenticated by nature).
 app.route("/studio/api/auth", authRoutes);

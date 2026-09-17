@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { publicApi, mediaUrl } from "../../api/client";
+import { publicApi, listenerApi, mediaUrl } from "../../api/client";
+import { FavouriteButton } from "../components/FavouriteButton";
 
 export function AlbumDetail() {
   const { id } = useParams();
@@ -23,6 +24,7 @@ export function AlbumDetail() {
     setPlayingIndex(index);
     audioRef.current.src = mediaUrl(track.audio_url);
     audioRef.current.play().catch(() => {});
+    listenerApi.recordPlay("track", track.id).catch(() => {});
   };
 
   const playAlbum = () => playIndex(0);
@@ -64,9 +66,12 @@ export function AlbumDetail() {
         <div>
           <h1 style={{ marginTop: 0 }}>{album.title}</h1>
           <p style={{ color: "var(--text-dim)" }}>{album.description}</p>
-          <button className="btn primary" onClick={playAlbum} disabled={tracks.length === 0}>
-            Play Album
-          </button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn primary" onClick={playAlbum} disabled={tracks.length === 0}>
+              Play Album
+            </button>
+            <FavouriteButton itemType="album" itemId={album.id} />
+          </div>
         </div>
       </div>
       <table>
@@ -87,10 +92,11 @@ export function AlbumDetail() {
               <td>{t.track_number}</td>
               <td>{t.title}</td>
               <td>{Math.round(t.duration_seconds / 60)} min</td>
-              <td>
+              <td style={{ display: "flex", gap: 8 }}>
                 <button className="btn" onClick={() => playIndex(index)}>
                   {playingIndex === index ? "Playing" : "Play"}
                 </button>
+                <FavouriteButton itemType="track" itemId={t.id} />
               </td>
             </tr>
           ))}

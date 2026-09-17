@@ -58,6 +58,40 @@ export const publicApi = {
   ),
 };
 
+// ---- Listener account (favourites / listening history) ----
+
+export type FavouriteItemType = "track" | "album" | "programme";
+export type HistoryItemType = "track" | "programme";
+
+export const listenerApi = {
+  session: () => request<{ authenticated: boolean }>(`${API_BASE}/auth/session`),
+  login: (password: string) =>
+    request<{ ok: true }>(`${API_BASE}/auth/login`, { method: "POST", body: JSON.stringify({ password }) }),
+  logout: () => request<{ ok: true }>(`${API_BASE}/auth/logout`, { method: "POST" }),
+
+  favourites: () =>
+    request<{ favourites: { item_type: FavouriteItemType; item_id: string; created_at: string; item: any }[] }>(
+      `${API_BASE}/favourites`
+    ),
+  addFavourite: (itemType: FavouriteItemType, itemId: string) =>
+    request<{ ok: true }>(`${API_BASE}/favourites`, {
+      method: "POST",
+      body: JSON.stringify({ item_type: itemType, item_id: itemId }),
+    }),
+  removeFavourite: (itemType: FavouriteItemType, itemId: string) =>
+    request<{ ok: true }>(`${API_BASE}/favourites/${itemType}/${itemId}`, { method: "DELETE" }),
+
+  history: () =>
+    request<{ history: { item_type: HistoryItemType; item_id: string; played_at: string; item: any }[] }>(
+      `${API_BASE}/history`
+    ),
+  recordPlay: (itemType: HistoryItemType, itemId: string) =>
+    request<{ ok: true }>(`${API_BASE}/history`, {
+      method: "POST",
+      body: JSON.stringify({ item_type: itemType, item_id: itemId }),
+    }),
+};
+
 // ---- Studio (authenticated) API ----
 
 export const studioApi = {

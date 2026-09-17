@@ -32,7 +32,8 @@ R2_BUCKET_NAME = "kizzi-radio-media"
 
 # Secrets (set with `wrangler secret put <NAME>`, never committed):
 #   STUDIO_PASSWORD   - password for the single Studio admin account
-#   SESSION_SECRET    - random string used to sign Studio session cookies
+#   LISTENER_PASSWORD - password for the single listener account (favourites/history)
+#   SESSION_SECRET    - random string used to sign Studio and listener session cookies
 #   R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY - R2 API token for presigned uploads
 #   R2_ACCOUNT_ID     - Cloudflare account id (for the R2 S3-compatible endpoint)
 #   ANTHROPIC_API_KEY - used by the AI producer endpoints

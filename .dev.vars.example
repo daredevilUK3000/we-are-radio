@@ -1,4 +1,5 @@
 STUDIO_PASSWORD=change-me
+LISTENER_PASSWORD=change-me-too
 SESSION_SECRET=replace-with-a-long-random-string
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=

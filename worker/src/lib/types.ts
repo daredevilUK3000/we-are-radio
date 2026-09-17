@@ -5,6 +5,7 @@ export type Env = {
   ASSETS: Fetcher;
 
   STUDIO_PASSWORD: string;
+  LISTENER_PASSWORD: string;
   SESSION_SECRET: string;
 
   R2_ACCESS_KEY_ID: string;

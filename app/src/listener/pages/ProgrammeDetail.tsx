@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { publicApi, mediaUrl } from "../../api/client";
+import { publicApi, listenerApi, mediaUrl } from "../../api/client";
+import { FavouriteButton } from "../components/FavouriteButton";
 
 export function ProgrammeDetail() {
   const { id } = useParams();
@@ -47,9 +48,17 @@ export function ProgrammeDetail() {
         <button className="btn primary" onClick={() => navigate("/listen")}>
           Listen Now
         </button>
-        <button className="btn" onClick={() => playIndex(0)} disabled={items.length === 0}>
+        <button
+          className="btn"
+          onClick={() => {
+            playIndex(0);
+            listenerApi.recordPlay("programme", programme.id).catch(() => {});
+          }}
+          disabled={items.length === 0}
+        >
           Listen On Demand
         </button>
+        <FavouriteButton itemType="programme" itemId={programme.id} />
       </div>
 
       <h3>Running order</h3>

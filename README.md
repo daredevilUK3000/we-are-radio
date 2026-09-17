@@ -45,7 +45,9 @@ wrangler.toml   Cloudflare bindings (D1 / R2 / KV)
 
 4. Copy `.dev.vars.example` to `.dev.vars` (repo root, next to `wrangler.toml`) and fill in:
    - `STUDIO_PASSWORD` - the password for the single Studio admin account
-   - `SESSION_SECRET` - any long random string
+   - `LISTENER_PASSWORD` - the password for the single listener account (favourites/history
+     sync across Kizzi's own devices - see `worker/src/routes/listenerAuth.ts`)
+   - `SESSION_SECRET` - any long random string, used to sign both Studio and listener sessions
    - `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` - an R2 API token (Cloudflare dashboard ->
      R2 -> Manage API Tokens), needed to sign direct-to-R2 upload URLs
    - `R2_ACCOUNT_ID` - your Cloudflare account ID
@@ -89,8 +91,8 @@ npm run deploy:worker
 
 That's it - one command deploys everything. Secrets are set on the Worker with
 `wrangler secret put <NAME>` (not committed, not in `.dev.vars`); all of
-`STUDIO_PASSWORD`, `SESSION_SECRET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
-`ANTHROPIC_API_KEY` are already set on the live deployment.
+`STUDIO_PASSWORD`, `LISTENER_PASSWORD`, `SESSION_SECRET`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, and `ANTHROPIC_API_KEY` are already set on the live deployment.
 
 ### Single-app deployment
 
