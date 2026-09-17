@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { studioApi, uploadFileToR2 } from "../../api/client";
+import { ChipPicker } from "../components/ChipPicker";
 
 function readAudioDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -12,11 +13,59 @@ function readAudioDuration(file: File): Promise<number> {
   });
 }
 
+const GENRE_OPTIONS = [
+  "Pop",
+  "Rock",
+  "Gospel",
+  "Pop Gospel",
+  "R&B",
+  "Soul",
+  "Hip-Hop",
+  "Jazz",
+  "Blues",
+  "Country",
+  "Electronic",
+  "Dance",
+  "Classical",
+  "Reggae",
+  "Folk",
+  "Instrumental",
+];
+
+// Straight from Section 5 of the brief - the flexible, growable mood/vibe vocabulary.
+const MOOD_OPTIONS = [
+  "romantic",
+  "upbeat",
+  "relaxing",
+  "dance",
+  "rock",
+  "pop",
+  "instrumental",
+  "orchestral",
+  "1950s-inspired",
+  "1960s-inspired",
+  "Christmas",
+  "summer",
+  "night",
+  "morning",
+  "slow",
+  "fast",
+];
+
+const BPM_PRESETS: { label: string; value: number }[] = [
+  { label: "Slow (~70)", value: 70 },
+  { label: "Chill (~90)", value: 90 },
+  { label: "Medium (~110)", value: 110 },
+  { label: "Upbeat (~128)", value: 128 },
+  { label: "Fast (~140)", value: 140 },
+  { label: "Very fast (~160)", value: 160 },
+];
+
 export function UploadTrack() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
-  const [genre, setGenre] = useState("");
-  const [mood, setMood] = useState("");
+  const [genre, setGenre] = useState<string[]>([]);
+  const [mood, setMood] = useState<string[]>([]);
   const [bpm, setBpm] = useState("");
   const [description, setDescription] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -47,7 +96,7 @@ export function UploadTrack() {
 
       const { id } = await studioApi.createTrack({
         title,
-        genre: genre || null,
+        genre: genre[0] ?? null,
         description: description || null,
         tempo_bpm: bpm ? Number(bpm) : null,
         duration_seconds: duration,
@@ -56,11 +105,8 @@ export function UploadTrack() {
         status: "ready",
       });
 
-      if (mood.trim()) {
-        await studioApi.setTrackTags(
-          id,
-          mood.split(",").map((m) => m.trim()).filter(Boolean)
-        );
+      if (mood.length > 0) {
+        await studioApi.setTrackTags(id, mood);
       }
 
       navigate("/studio/tracks");
@@ -72,7 +118,7 @@ export function UploadTrack() {
   };
 
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div style={{ maxWidth: 560 }}>
       <h1>Upload music</h1>
       <form onSubmit={submit}>
         <div className="form-row">
@@ -81,15 +127,38 @@ export function UploadTrack() {
         </div>
         <div className="form-row">
           <label>Genre</label>
-          <input value={genre} onChange={(e) => setGenre(e.target.value)} />
+          <ChipPicker options={GENRE_OPTIONS} value={genre} onChange={setGenre} multi={false} customPlaceholder="Other genre..." />
         </div>
         <div className="form-row">
-          <label>Mood / vibe tags (comma-separated)</label>
-          <input value={mood} onChange={(e) => setMood(e.target.value)} placeholder="upbeat, summer, dance" />
+          <label>Mood / vibe</label>
+          <ChipPicker options={MOOD_OPTIONS} value={mood} onChange={setMood} customPlaceholder="Other mood/vibe..." />
         </div>
         <div className="form-row">
           <label>BPM</label>
-          <input value={bpm} onChange={(e) => setBpm(e.target.value)} type="number" />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+            {BPM_PRESETS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                className="btn"
+                onClick={() => setBpm(String(p.value))}
+                style={
+                  Number(bpm) === p.value
+                    ? { background: "var(--accent)", borderColor: "var(--accent)", color: "#fff" }
+                    : undefined
+                }
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <input
+            value={bpm}
+            onChange={(e) => setBpm(e.target.value)}
+            type="number"
+            placeholder="or enter an exact BPM"
+            style={{ maxWidth: 200 }}
+          />
         </div>
         <div className="form-row">
           <label>Description</label>
