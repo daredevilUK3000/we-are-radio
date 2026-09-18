@@ -20,6 +20,17 @@ body,
   height: 100%;
 }
 
+html,
+body {
+  /* Defense in depth: on mobile, any single element that overflows the
+     page horizontally makes the browser widen the whole layout viewport
+     rather than just clip it - which drags every position:fixed element
+     (the mini-player, notably) wider too, shoving its right-aligned
+     content off past the visible screen edge. This guarantees that can't
+     happen regardless of what overflows in the future. */
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -61,6 +72,7 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .top-nav nav {
@@ -68,6 +80,17 @@ button {
   gap: 14px;
   font-size: 0.9rem;
   color: var(--text-dim);
+  /* Brand + all nav links can be wider than a phone screen - scroll the
+     links rather than let them overflow the page (see the html/body
+     overflow-x note above for why that matters beyond just clipping). */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+
+.top-nav nav::-webkit-scrollbar {
+  display: none;
 }
 
 .top-nav nav a.active {
