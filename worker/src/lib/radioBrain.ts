@@ -46,7 +46,7 @@ function mulberry32(seed: number) {
   };
 }
 
-function hashSeed(key: string): number {
+export function hashSeed(key: string): number {
   let h = 0;
   for (let i = 0; i < key.length; i++) {
     h = (Math.imul(h, 31) + key.charCodeAt(i)) | 0;

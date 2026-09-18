@@ -61,6 +61,8 @@ export const publicApi = {
       `${API_BASE}/sessions`,
       { method: "POST", body: JSON.stringify({ mood, duration_minutes: durationMinutes }) }
     ),
+  sweeper: (band?: string) =>
+    request<{ asset: any | null }>(`${API_BASE}/sweeper${band ? `?band=${encodeURIComponent(band)}` : ""}`),
 };
 
 // ---- Listener account (favourites / listening history) ----
@@ -153,6 +155,8 @@ export const studioApi = {
     request<{ id: string }>(`${STUDIO_BASE}/audio-assets`, { method: "POST", body: JSON.stringify(data) }),
   updateAudioAsset: (id: string, data: Record<string, unknown>) =>
     request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  setAudioAssetTags: (id: string, tags: string[]) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/tags`, { method: "PUT", body: JSON.stringify({ tags }) }),
 
   tags: () => request<{ tags: any[] }>(`${STUDIO_BASE}/tags`),
 

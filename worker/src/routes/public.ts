@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Env, Programme, Channel, Track, AudioAsset } from "../lib/types";
-import { buildRotation, buildSession, locateInLoop, type RotationItem } from "../lib/radioBrain";
+import { buildRotation, buildSession, hashSeed, locateInLoop, type RotationItem } from "../lib/radioBrain";
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -255,7 +255,11 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
     stationIds.map((a) => a.id).sort().join(","),
   ].join("|");
   const seedKey = `${channel.id}:${fingerprint}`;
-  const cacheKey = `radio-brain:${seedKey}`;
+  // KV keys are capped at 512 bytes - the raw fingerprint alone blows past
+  // that once there are more than a handful of tracks/assets, so the cache
+  // key is a hash of it instead. The PRNG seed (seedKey) can stay the full
+  // string - that's just in-memory, no length limit there.
+  const cacheKey = `radio-brain:${channel.id}:${hashSeed(fingerprint)}`;
 
   let items = await kv.get<RotationItem[]>(cacheKey, "json");
   if (!items) {
@@ -326,6 +330,43 @@ publicRoutes.post("/sessions", async (c) => {
   return c.json({
     session: { mood, duration_minutes: durationMinutes, total_duration_seconds: totalDurationSeconds, items },
   });
+});
+
+/**
+ * Phase 3 (handoff_radio_brain_roadmap.md): when the main player switches
+ * channel - a time-of-day boundary passing, or a listener using Vibe Shift
+ * - this picks a jingle to sweep the transition with, so it feels like a
+ * live broadcast handing over rather than an app switching screens.
+ * Prefers a jingle/station ID/promo tagged with the given time band; falls
+ * back to any published one of those types if none match that band (or no
+ * band is given), and to nothing at all if none exist yet - the transition
+ * just cuts silently rather than erroring.
+ */
+publicRoutes.get("/sweeper", async (c) => {
+  const band = c.req.query("band");
+
+  let asset = null;
+  if (band) {
+    asset = await c.env.DB.prepare(
+      `SELECT aa.* FROM audio_assets aa
+       JOIN audio_asset_tags aat ON aat.audio_asset_id = aa.id
+       JOIN tags tg ON tg.id = aat.tag_id
+       WHERE aa.status = 'published' AND aa.type IN ('jingle','station_id','promo') AND tg.name = ?
+       ORDER BY RANDOM() LIMIT 1`
+    )
+      .bind(band)
+      .first<AudioAsset>();
+  }
+
+  if (!asset) {
+    asset = await c.env.DB.prepare(
+      `SELECT * FROM audio_assets
+       WHERE status = 'published' AND type IN ('jingle','station_id','promo')
+       ORDER BY RANDOM() LIMIT 1`
+    ).first<AudioAsset>();
+  }
+
+  return c.json({ asset });
 });
 
 publicRoutes.get("/search", async (c) => {

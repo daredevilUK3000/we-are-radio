@@ -14,8 +14,16 @@ export const MOOD_OPTIONS = [
   "1960s-inspired",
   "Christmas",
   "summer",
-  "night",
   "morning",
+  "afternoon",
+  "evening",
+  "night",
   "slow",
   "fast",
 ];
+
+// The four bands Phase 3's time-of-day flow tunes between (handoff_radio_
+// brain_roadmap.md) - a subset of MOOD_OPTIONS above, used to tag jingles/
+// station IDs so the right sweeper plays for the right transition.
+export const TIME_OF_DAY_BANDS = ["morning", "afternoon", "evening", "night"] as const;
+export type TimeOfDayBand = (typeof TIME_OF_DAY_BANDS)[number];

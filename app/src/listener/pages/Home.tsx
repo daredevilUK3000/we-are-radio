@@ -3,6 +3,14 @@ import { Link } from "react-router-dom";
 import { publicApi } from "../../api/client";
 import { HeroBackdrop } from "../components/HeroBackdrop";
 import { EyebrowPill } from "../components/BrandMark";
+import { useActiveChannel } from "../context/ActiveChannelContext";
+
+const CHANNEL_LABELS: Record<string, string> = {
+  "kizzi-radio": "Kizzi Radio",
+  "we-are-love": "We Are Love",
+  "we-are-50s": "We Are 50s",
+  "we-are-after-dark": "We Are After Dark",
+};
 
 // The network was designed from day one with six channels total (see
 // migrations/0001_init.sql) - only `live` ones are ever named to listeners,
@@ -20,14 +28,16 @@ function themeFor(slug: string) {
 }
 
 export function Home() {
+  const { channelSlug } = useActiveChannel();
   const [nowPlaying, setNowPlaying] = useState<any>(null);
   const [channels, setChannels] = useState<any[]>([]);
 
   useEffect(() => {
-    publicApi.nowPlaying().then(setNowPlaying).catch(() => {});
+    publicApi.nowPlaying(channelSlug).then(setNowPlaying).catch(() => {});
     publicApi.channels().then((r) => setChannels(r.channels)).catch(() => {});
-  }, []);
+  }, [channelSlug]);
 
+  const channelLabel = CHANNEL_LABELS[channelSlug] ?? "We Are Radio";
   const subhead = nowPlaying?.on_air
     ? `${nowPlaying.channel?.name} · ${nowPlaying.programme?.title}`
     : "Kizzi's personal radio network";
@@ -48,13 +58,13 @@ export function Home() {
         />
         <div className="hero-scrim" aria-hidden="true" />
         <HeroBackdrop />
-        <EyebrowPill label="On Air · Kizzi Radio" className="hero-eyebrow" />
+        <EyebrowPill label={`On Air · ${channelLabel}`} className="hero-eyebrow" />
         <h1 className="hero-logo">
           <img src="/weareradio-logo-hero.webp" alt="We Are Radio" />
         </h1>
         <p className="hero-subhead">{subhead}</p>
         <div className="hero-actions">
-          <Link to="/listen" className="pill-btn pill-btn-solid">
+          <Link to={`/listen?channel=${channelSlug}`} className="pill-btn pill-btn-solid">
             <span className="play-triangle" />
             Listen Now
           </Link>

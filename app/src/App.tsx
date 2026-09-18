@@ -11,6 +11,7 @@ import { SessionBuilder } from "./listener/pages/SessionBuilder";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
 import { ListenerAuthProvider } from "./listener/auth/ListenerAuthContext";
 import { FavouritesProvider } from "./listener/favourites/FavouritesContext";
+import { ActiveChannelProvider } from "./listener/context/ActiveChannelContext";
 
 import { StudioAuthProvider, useStudioAuth } from "./studio/auth/StudioAuthContext";
 import { Login } from "./studio/pages/Login";
@@ -120,19 +121,21 @@ export default function App() {
         element={
           <ListenerAuthProvider>
             <FavouritesProvider>
-              <ListenerLayout>
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="listen" element={<Listen />} />
-                  <Route path="albums" element={<Albums />} />
-                  <Route path="albums/:id" element={<AlbumDetail />} />
-                  <Route path="programmes" element={<Programmes />} />
-                  <Route path="programmes/:id" element={<ProgrammeDetail />} />
-                  <Route path="search" element={<Search />} />
-                  <Route path="my-radio" element={<MyRadio />} />
-                  <Route path="my-mood" element={<SessionBuilder />} />
-                </Routes>
-              </ListenerLayout>
+              <ActiveChannelProvider>
+                <ListenerLayout>
+                  <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="listen" element={<Listen />} />
+                    <Route path="albums" element={<Albums />} />
+                    <Route path="albums/:id" element={<AlbumDetail />} />
+                    <Route path="programmes" element={<Programmes />} />
+                    <Route path="programmes/:id" element={<ProgrammeDetail />} />
+                    <Route path="search" element={<Search />} />
+                    <Route path="my-radio" element={<MyRadio />} />
+                    <Route path="my-mood" element={<SessionBuilder />} />
+                  </Routes>
+                </ListenerLayout>
+              </ActiveChannelProvider>
             </FavouritesProvider>
           </ListenerAuthProvider>
         }
