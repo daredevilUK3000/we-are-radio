@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env, Programme } from "../lib/types";
+import type { Env, Programme, Channel, Track } from "../lib/types";
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -130,11 +130,48 @@ interface ItemRow {
   audio_asset_audio_url: string | null;
 }
 
+interface RotationItem {
+  id: string;
+  item_type: string;
+  label: string | null;
+  track_id: string | null;
+  audio_asset_id: string | null;
+  duration_seconds: number;
+  audio_url: string | null;
+  artwork_url: string | null;
+}
+
+// Shared with the programme branch and the tag-rotation branch below: given
+// a loop of items and how many seconds have elapsed since some fixed
+// reference point, find which item is "playing" right now and how far into
+// it we are - looping back to the start once the total duration is passed.
+function locateInLoop(items: RotationItem[], elapsedSeconds: number) {
+  let cursor = 0;
+  let currentIndex = 0;
+  for (let i = 0; i < items.length; i++) {
+    if (elapsedSeconds < cursor + items[i].duration_seconds) {
+      currentIndex = i;
+      break;
+    }
+    cursor += items[i].duration_seconds;
+    currentIndex = i;
+  }
+  return { currentIndex, position_seconds: elapsedSeconds - cursor };
+}
+
 /**
  * Section 20: the station doesn't need a real 24/7 audio stream. Instead we
  * pick the current on-air programme for a live channel and deterministically
  * compute *where in it* a listener joining right now would be, looping the
  * programme once it finishes. That's enough to make "Listen Now" feel live.
+ *
+ * Channels with no programme are the automatic, tag-curated ones (Section
+ * 33's catalogue_rules) - We Are 50s and friends. There's no running order
+ * to loop, so instead we build one on the fly from every published track
+ * matching the channel's tags_any rule, ordered by id for a stable rotation,
+ * and loop that the same way. There's no "publish date" to anchor to (it's
+ * not a scheduled show), so the loop is anchored to the Unix epoch - any
+ * fixed reference works, since all listeners just need the same one.
  */
 publicRoutes.get("/now-playing", async (c) => {
   const channelSlug = c.req.query("channel") ?? "kizzi-radio";
@@ -143,7 +180,7 @@ publicRoutes.get("/now-playing", async (c) => {
     "SELECT * FROM channels WHERE slug = ? AND status = 'live'"
   )
     .bind(channelSlug)
-    .first();
+    .first<Channel>();
   if (!channel) return c.json({ error: "channel not found or not live" }, 404);
 
   const programme = await c.env.DB.prepare(
@@ -152,62 +189,91 @@ publicRoutes.get("/now-playing", async (c) => {
      ORDER BY is_flagship DESC, publish_date DESC
      LIMIT 1`
   )
-    .bind(channel.id as string)
+    .bind(channel.id)
     .first<Programme>();
 
-  if (!programme || !programme.duration_seconds) {
+  if (programme && programme.duration_seconds) {
+    const { results: rows } = await c.env.DB.prepare(
+      `SELECT pi.*, t.title as track_title, t.duration_seconds as track_duration_seconds, t.audio_url as track_audio_url, t.artwork_url as track_artwork_url,
+              aa.title as audio_asset_title, aa.duration_seconds as audio_asset_duration_seconds, aa.audio_url as audio_asset_audio_url
+       FROM programme_items pi
+       LEFT JOIN tracks t ON t.id = pi.track_id
+       LEFT JOIN audio_assets aa ON aa.id = pi.audio_asset_id
+       WHERE pi.programme_id = ?
+       ORDER BY pi.position ASC`
+    )
+      .bind(programme.id)
+      .all<ItemRow>();
+
+    if (rows.length > 0) {
+      const items: RotationItem[] = rows.map((row) => ({
+        id: row.id,
+        item_type: row.item_type,
+        label: row.label ?? row.track_title ?? row.audio_asset_title,
+        track_id: row.track_id,
+        audio_asset_id: row.audio_asset_id,
+        duration_seconds: row.track_duration_seconds ?? row.audio_asset_duration_seconds ?? 0,
+        audio_url: row.track_audio_url ?? row.audio_asset_audio_url,
+        artwork_url: row.track_artwork_url,
+      }));
+      const publishedAt = programme.publish_date ? new Date(programme.publish_date).getTime() : Date.now();
+      const elapsed = Math.floor(((Date.now() - publishedAt) / 1000) % programme.duration_seconds);
+      const { currentIndex, position_seconds } = locateInLoop(items, elapsed);
+
+      return c.json({
+        channel,
+        programme,
+        on_air: true,
+        position_seconds,
+        now_playing: items[currentIndex],
+        up_next: items[currentIndex + 1] ? items[currentIndex + 1] : null,
+      });
+    }
+  }
+
+  // No programme (or an empty one) - fall back to the tag-curated rotation.
+  const rules = channel.catalogue_rules ? JSON.parse(channel.catalogue_rules) : null;
+  const tagsAny: string[] = rules?.tags_any ?? [];
+  if (tagsAny.length === 0) {
     return c.json({ channel, on_air: false });
   }
 
-  const { results: items } = await c.env.DB.prepare(
-    `SELECT pi.*, t.title as track_title, t.duration_seconds as track_duration_seconds, t.audio_url as track_audio_url, t.artwork_url as track_artwork_url,
-            aa.title as audio_asset_title, aa.duration_seconds as audio_asset_duration_seconds, aa.audio_url as audio_asset_audio_url
-     FROM programme_items pi
-     LEFT JOIN tracks t ON t.id = pi.track_id
-     LEFT JOIN audio_assets aa ON aa.id = pi.audio_asset_id
-     WHERE pi.programme_id = ?
-     ORDER BY pi.position ASC`
+  const placeholders = tagsAny.map(() => "?").join(",");
+  const { results: tracks } = await c.env.DB.prepare(
+    `SELECT DISTINCT t.* FROM tracks t
+     JOIN track_tags tt ON tt.track_id = t.id
+     JOIN tags tg ON tg.id = tt.tag_id
+     WHERE t.status = 'published' AND tg.name IN (${placeholders})
+     ORDER BY t.id ASC`
   )
-    .bind(programme.id)
-    .all<ItemRow>();
+    .bind(...tagsAny)
+    .all<Track>();
 
-  if (items.length === 0) {
-    return c.json({ channel, programme, on_air: false });
+  const items: RotationItem[] = tracks.map((t) => ({
+    id: t.id,
+    item_type: "song",
+    label: t.title,
+    track_id: t.id,
+    audio_asset_id: null,
+    duration_seconds: t.duration_seconds,
+    audio_url: t.audio_url,
+    artwork_url: t.artwork_url,
+  }));
+  const totalDuration = items.reduce((sum, i) => sum + i.duration_seconds, 0);
+  if (items.length === 0 || totalDuration === 0) {
+    return c.json({ channel, on_air: false });
   }
 
-  const publishedAt = programme.publish_date ? new Date(programme.publish_date).getTime() : Date.now();
-  const elapsed = Math.floor(((Date.now() - publishedAt) / 1000) % programme.duration_seconds);
-
-  let cursor = 0;
-  let currentIndex = 0;
-  for (let i = 0; i < items.length; i++) {
-    const duration = items[i].track_duration_seconds ?? items[i].audio_asset_duration_seconds ?? 0;
-    if (elapsed < cursor + duration) {
-      currentIndex = i;
-      break;
-    }
-    cursor += duration;
-    currentIndex = i;
-  }
-
-  const toPayload = (row: ItemRow) => ({
-    id: row.id,
-    item_type: row.item_type,
-    label: row.label ?? row.track_title ?? row.audio_asset_title,
-    track_id: row.track_id,
-    audio_asset_id: row.audio_asset_id,
-    duration_seconds: row.track_duration_seconds ?? row.audio_asset_duration_seconds ?? 0,
-    audio_url: row.track_audio_url ?? row.audio_asset_audio_url,
-    artwork_url: row.track_artwork_url,
-  });
+  const elapsed = Math.floor((Date.now() / 1000) % totalDuration);
+  const { currentIndex, position_seconds } = locateInLoop(items, elapsed);
 
   return c.json({
     channel,
-    programme,
+    programme: { id: null, title: channel.name, description: channel.description },
     on_air: true,
-    position_seconds: elapsed - cursor,
-    now_playing: toPayload(items[currentIndex]),
-    up_next: items[currentIndex + 1] ? toPayload(items[currentIndex + 1]) : null,
+    position_seconds,
+    now_playing: items[currentIndex],
+    up_next: items[currentIndex + 1] ? items[currentIndex + 1] : null,
   });
 });
 

@@ -61,7 +61,7 @@ export function Home() {
         </div>
         <div className="channel-grid">
           {channels.map((c) => (
-            <Link key={c.id} to="/listen" className="channel-card">
+            <Link key={c.id} to={`/listen?channel=${c.slug}`} className="channel-card">
               <div className={`channel-card-art ${themeFor(c.slug)}`}>
                 <span className="live-pill">LIVE</span>
                 {c.emoji ?? "📻"}
