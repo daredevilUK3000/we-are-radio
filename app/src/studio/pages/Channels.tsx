@@ -16,6 +16,12 @@ export function Channels() {
     load();
   };
 
+  const toggleMode = async (c: any) => {
+    const next = c.programming_mode === "autopilot" ? "manual" : "autopilot";
+    await studioApi.setChannelProgrammingMode(c.id, next);
+    load();
+  };
+
   const showChecklist = async (c: any) => {
     const { checklist } = await studioApi.channelLaunchChecklist(c.id);
     setChecklists((prev) => ({ ...prev, [c.id]: checklist }));
@@ -30,7 +36,10 @@ export function Channels() {
             <div>
               <span style={{ marginRight: 8 }}>{c.emoji}</span>
               <strong>{c.name}</strong>{" "}
-              <span className={`badge ${c.status === "live" ? "live" : ""}`}>{c.status}</span>
+              <span className={`badge ${c.status === "live" ? "live" : ""}`}>{c.status}</span>{" "}
+              <span className="badge" title="How this channel decides what plays - see the Radio Brain roadmap">
+                {c.programming_mode === "autopilot" ? "autopilot" : "manual"}
+              </span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {c.status === "building" && (
@@ -38,6 +47,9 @@ export function Channels() {
                   Check readiness
                 </button>
               )}
+              <button className="btn" onClick={() => toggleMode(c)}>
+                {c.programming_mode === "autopilot" ? "Switch to manual" : "Switch to autopilot"}
+              </button>
               <button className="btn primary" onClick={() => toggle(c)}>
                 {c.status === "live" ? "Set to building" : "Go live"}
               </button>

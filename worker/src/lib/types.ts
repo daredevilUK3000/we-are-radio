@@ -19,6 +19,7 @@ export type Env = {
 export type ContentStatus = "draft" | "processing" | "ready" | "published" | "archived";
 export type ProgrammeStatus = "draft" | "preview" | "published" | "archived";
 export type ChannelStatus = "building" | "live";
+export type ProgrammingMode = "manual" | "autopilot";
 export type ProgrammeItemType = "song" | "link" | "station_id" | "feature" | "interview";
 export type AudioAssetType = "station_id" | "jingle" | "link" | "feature" | "interview" | "promo";
 
@@ -53,6 +54,7 @@ export interface Channel {
   artwork_url: string | null;
   status: ChannelStatus;
   catalogue_rules: string | null;
+  programming_mode: ProgrammingMode;
   created_at: string;
 }
 

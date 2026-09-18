@@ -125,6 +125,11 @@ export const studioApi = {
     }),
   channelLaunchChecklist: (id: string) =>
     request<{ checklist: Record<string, unknown> }>(`${STUDIO_BASE}/channels/${id}/launch-checklist`),
+  setChannelProgrammingMode: (id: string, programming_mode: "manual" | "autopilot") =>
+    request<{ ok: true }>(`${STUDIO_BASE}/channels/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ programming_mode }),
+    }),
 
   programmes: () => request<{ programmes: any[] }>(`${STUDIO_BASE}/programmes`),
   programme: (id: string) => request<{ programme: any; items: any[] }>(`${STUDIO_BASE}/programmes/${id}`),
