@@ -334,6 +334,15 @@ td {
   padding: 130px 20px 70px;
   overflow: hidden;
   isolation: isolate;
+  /* main.tsx's <main> caps content at 960px so text stays readable -
+     breaks the hero (background video/animation included) out of that to
+     go full-bleed edge-to-edge, which is what a hero section should do,
+     while its own content (logo/text/buttons) stays centered as before.
+     width must be 100vw, not 100% - 100% only resolves against the still-
+     narrow parent, it doesn't force the box wider than that. */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
 }
 
 .hero-video {
