@@ -287,21 +287,13 @@ td {
 .listener-logo {
   display: flex;
   align-items: center;
-  gap: 9px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-size: 1rem;
+  text-decoration: none;
 }
 
-.listener-logo-mark circle:first-child {
-  fill: var(--accent);
-}
-
-.listener-logo-mark path,
-.listener-logo-mark circle:not(:first-child) {
-  stroke: var(--accent);
+.listener-logo-img {
+  height: 38px;
+  width: auto;
+  display: block;
 }
 
 /* ---- Eyebrow pill ("On Air · Kizzi Radio") ---- */

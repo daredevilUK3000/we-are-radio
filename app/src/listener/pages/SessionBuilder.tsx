@@ -59,7 +59,7 @@ export function SessionBuilder() {
 
   return (
     <div>
-      <h1>Build a Session</h1>
+      <h1>My Mood</h1>
       <p style={{ color: "var(--text-dim)" }}>
         Pick a mood and how long you've got - we'll put a running order together from the catalogue
         instantly. No account needed, and every build is a fresh mix.

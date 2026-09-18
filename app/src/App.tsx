@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { Home } from "./listener/pages/Home";
 import { Listen } from "./listener/pages/Listen";
 import { Albums } from "./listener/pages/Albums";
@@ -11,7 +11,6 @@ import { SessionBuilder } from "./listener/pages/SessionBuilder";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
 import { ListenerAuthProvider } from "./listener/auth/ListenerAuthContext";
 import { FavouritesProvider } from "./listener/favourites/FavouritesContext";
-import { BrandMark } from "./listener/components/BrandMark";
 
 import { StudioAuthProvider, useStudioAuth } from "./studio/auth/StudioAuthContext";
 import { Login } from "./studio/pages/Login";
@@ -32,17 +31,16 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell listener-shell">
       <header className="top-nav">
-        <span className="brand listener-logo">
-          <BrandMark />
-          We Are Radio
-        </span>
+        <Link to="/" className="brand listener-logo">
+          <img src="/weareradio-logo.png" alt="We Are Radio" className="listener-logo-img" />
+        </Link>
         <nav>
           <NavLink to="/" end>
             Home
           </NavLink>
           <NavLink to="/albums">Albums</NavLink>
           <NavLink to="/programmes">Programmes</NavLink>
-          <NavLink to="/session">Session</NavLink>
+          <NavLink to="/my-mood">My Mood</NavLink>
           <NavLink to="/search">Search</NavLink>
           <NavLink to="/my-radio">My Radio</NavLink>
         </nav>
@@ -132,7 +130,7 @@ export default function App() {
                   <Route path="programmes/:id" element={<ProgrammeDetail />} />
                   <Route path="search" element={<Search />} />
                   <Route path="my-radio" element={<MyRadio />} />
-                  <Route path="session" element={<SessionBuilder />} />
+                  <Route path="my-mood" element={<SessionBuilder />} />
                 </Routes>
               </ListenerLayout>
             </FavouritesProvider>
