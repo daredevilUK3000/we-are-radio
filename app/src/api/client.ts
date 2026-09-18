@@ -6,10 +6,15 @@ const API_ORIGIN = import.meta.env.VITE_API_ORIGIN ?? "";
 const API_BASE = `${API_ORIGIN}/api`;
 const STUDIO_BASE = `${API_ORIGIN}/studio/api`;
 
-// tracks.audio_url / audio_assets.audio_url store the R2 object key
-// (e.g. "audio/upl_xxx-song.mp3"), not a playable URL - this turns one into
-// the other via the Worker's /media/* streaming route.
+// tracks.audio_url / audio_assets.audio_url normally store the R2 object
+// key (e.g. "audio/upl_xxx-song.mp3"), not a playable URL - this turns one
+// into the other via the Worker's /media/* streaming route. A podcast-
+// imported audio_asset (storage='external') stores a full Spotify-hosted
+// URL instead - already playable as-is, so it's returned unchanged rather
+// than treated as an R2 key. Every existing call site gets this for free
+// without needing to know or care where a given asset's bytes live.
 export function mediaUrl(key: string): string {
+  if (/^https?:\/\//i.test(key)) return key;
   return `${API_ORIGIN}/media/${key}`;
 }
 
@@ -171,6 +176,17 @@ export const studioApi = {
       `${STUDIO_BASE}/ai/propose-programme`,
       { method: "POST", body: JSON.stringify({ brief, channel_id }) }
     ),
+
+  fetchPodcastFeed: (feedUrl: string) =>
+    request<{ episodes: any[] }>(`${STUDIO_BASE}/podcast-import/fetch`, {
+      method: "POST",
+      body: JSON.stringify({ feed_url: feedUrl }),
+    }),
+  importPodcastEpisodes: (channelId: string, episodes: any[]) =>
+    request<{ imported: number; skipped: number }>(`${STUDIO_BASE}/podcast-import/import`, {
+      method: "POST",
+      body: JSON.stringify({ channel_id: channelId, episodes }),
+    }),
 };
 
 export async function uploadFileToR2(uploadUrl: string, file: File): Promise<void> {

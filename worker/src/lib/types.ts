@@ -22,6 +22,7 @@ export type ChannelStatus = "building" | "live";
 export type ProgrammingMode = "manual" | "autopilot";
 export type ProgrammeItemType = "song" | "link" | "station_id" | "feature" | "interview";
 export type AudioAssetType = "station_id" | "jingle" | "link" | "feature" | "interview" | "promo";
+export type AudioAssetStorage = "r2" | "external";
 
 export interface Track {
   id: string;
@@ -91,5 +92,7 @@ export interface AudioAsset {
   duration_seconds: number;
   description: string | null;
   status: ContentStatus;
+  storage: AudioAssetStorage;
+  external_guid: string | null;
   created_at: string;
 }

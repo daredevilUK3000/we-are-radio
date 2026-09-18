@@ -17,6 +17,7 @@ import { publicRoutes } from "./routes/public";
 import { mediaRoutes } from "./routes/media";
 import { favouriteRoutes } from "./routes/favourites";
 import { historyRoutes } from "./routes/history";
+import { podcastImportRoutes } from "./routes/podcastImport";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -54,6 +55,7 @@ studio.route("/audio-assets", audioAssetRoutes);
 studio.route("/tags", tagRoutes);
 studio.route("/upload", uploadRoutes);
 studio.route("/ai", aiRoutes);
+studio.route("/podcast-import", podcastImportRoutes);
 app.route("/studio/api", studio);
 
 // Streams audio straight out of R2 - not gated on Studio auth, since
