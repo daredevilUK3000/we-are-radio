@@ -92,6 +92,23 @@ publicRoutes.get("/programmes", async (c) => {
   return c.json({ programmes: results });
 });
 
+// Podcast Importer episodes are just programmes underneath, but a listener
+// browsing shouldn't have to know that - this finds them by the actual
+// technical fact that makes them podcast episodes (their audio comes from
+// storage='external', i.e. pulled in from an RSS feed rather than
+// recorded/uploaded), regardless of which channel they landed in.
+publicRoutes.get("/podcasts", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT DISTINCT p.* FROM programmes p
+     JOIN programme_items pi ON pi.programme_id = p.id
+     JOIN audio_assets aa ON aa.id = pi.audio_asset_id
+     WHERE p.status = 'published' AND aa.storage = 'external'
+     ORDER BY p.publish_date DESC, p.created_at DESC
+     LIMIT 200`
+  ).all();
+  return c.json({ podcasts: results });
+});
+
 publicRoutes.get("/programmes/:id", async (c) => {
   const programme = await c.env.DB.prepare(
     "SELECT * FROM programmes WHERE id = ? AND status = 'published'"

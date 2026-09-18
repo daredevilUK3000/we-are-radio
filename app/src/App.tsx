@@ -5,6 +5,7 @@ import { Albums } from "./listener/pages/Albums";
 import { AlbumDetail } from "./listener/pages/AlbumDetail";
 import { Programmes } from "./listener/pages/Programmes";
 import { ProgrammeDetail } from "./listener/pages/ProgrammeDetail";
+import { Podcasts } from "./listener/pages/Podcasts";
 import { Search } from "./listener/pages/Search";
 import { MyRadio } from "./listener/pages/MyRadio";
 import { SessionBuilder } from "./listener/pages/SessionBuilder";
@@ -42,6 +43,7 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
           </NavLink>
           <NavLink to="/albums">Albums</NavLink>
           <NavLink to="/programmes">Programmes</NavLink>
+          <NavLink to="/podcasts">Podcasts</NavLink>
           <NavLink to="/my-mood">My Mood</NavLink>
           <NavLink to="/search">Search</NavLink>
           <NavLink to="/my-radio">My Radio</NavLink>
@@ -133,6 +135,7 @@ export default function App() {
                     <Route path="albums/:id" element={<AlbumDetail />} />
                     <Route path="programmes" element={<Programmes />} />
                     <Route path="programmes/:id" element={<ProgrammeDetail />} />
+                    <Route path="podcasts" element={<Podcasts />} />
                     <Route path="search" element={<Search />} />
                     <Route path="my-radio" element={<MyRadio />} />
                     <Route path="my-mood" element={<SessionBuilder />} />

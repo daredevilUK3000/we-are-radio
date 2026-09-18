@@ -56,6 +56,7 @@ export const publicApi = {
     return request<{ programmes: any[] }>(`${API_BASE}/programmes${query ? `?${query}` : ""}`);
   },
   programme: (id: string) => request<{ programme: any; items: any[] }>(`${API_BASE}/programmes/${id}`),
+  podcasts: () => request<{ podcasts: any[] }>(`${API_BASE}/podcasts`),
   nowPlaying: (channel = "kizzi-radio") =>
     request<any>(`${API_BASE}/now-playing?channel=${encodeURIComponent(channel)}`),
   search: (q: string) => request<{ tracks: any[]; albums: any[]; programmes: any[] }>(
