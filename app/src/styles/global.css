@@ -428,16 +428,17 @@ td {
   margin-bottom: 26px;
 }
 
-.hero-headline {
+.hero-logo {
   position: relative;
-  font-family: var(--font-display);
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: clamp(2.6rem, 9vw, 6.75rem);
-  line-height: 0.94;
-  letter-spacing: -0.02em;
   margin: 0;
-  text-shadow: 0 0 60px rgba(225, 29, 46, 0.28);
+  filter: drop-shadow(0 0 60px rgba(225, 29, 46, 0.28));
+}
+
+.hero-logo img {
+  display: block;
+  width: min(90vw, 620px);
+  height: auto;
+  margin: 0 auto;
 }
 
 .hero-subhead {

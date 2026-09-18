@@ -32,7 +32,7 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
     <div className="app-shell listener-shell">
       <header className="top-nav">
         <Link to="/" className="brand listener-logo">
-          <img src="/weareradio-logo.png" alt="We Are Radio" className="listener-logo-img" />
+          <img src="/weareradio-logo.webp" alt="We Are Radio" className="listener-logo-img" />
         </Link>
         <nav>
           <NavLink to="/" end>

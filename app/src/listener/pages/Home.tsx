@@ -39,7 +39,9 @@ export function Home() {
       <section className="hero">
         <HeroBackdrop />
         <EyebrowPill label="On Air · Kizzi Radio" className="hero-eyebrow" />
-        <h1 className="hero-headline">We Are Radio</h1>
+        <h1 className="hero-logo">
+          <img src="/weareradio-logo-hero.webp" alt="We Are Radio" />
+        </h1>
         <p className="hero-subhead">{subhead}</p>
         <div className="hero-actions">
           <Link to="/listen" className="pill-btn pill-btn-solid">
