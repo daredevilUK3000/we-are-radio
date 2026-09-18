@@ -22,22 +22,10 @@ function themeFor(slug: string) {
 export function Home() {
   const [nowPlaying, setNowPlaying] = useState<any>(null);
   const [channels, setChannels] = useState<any[]>([]);
-  const [showVideo, setShowVideo] = useState(false);
 
   useEffect(() => {
     publicApi.nowPlaying().then(setNowPlaying).catch(() => {});
     publicApi.channels().then((r) => setChannels(r.channels)).catch(() => {});
-  }, []);
-
-  // Skip the hero video entirely below tablet width - not just visually
-  // hidden, not fetched at all - so phones on mobile data don't pay for a
-  // background loop they'd barely notice at that size anyway.
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    setShowVideo(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setShowVideo(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   const subhead = nowPlaying?.on_air
@@ -49,20 +37,16 @@ export function Home() {
   return (
     <div>
       <section className="hero">
-        {showVideo && (
-          <>
-            <video
-              className="hero-video"
-              src="/hero-video.mp4"
-              poster="/hero-video-poster.jpg"
-              autoPlay
-              muted
-              loop
-              playsInline
-            />
-            <div className="hero-scrim" aria-hidden="true" />
-          </>
-        )}
+        <video
+          className="hero-video"
+          src="/hero-video.mp4"
+          poster="/hero-video-poster.jpg"
+          autoPlay
+          muted
+          loop
+          playsInline
+        />
+        <div className="hero-scrim" aria-hidden="true" />
         <HeroBackdrop />
         <EyebrowPill label="On Air · Kizzi Radio" className="hero-eyebrow" />
         <h1 className="hero-logo">
