@@ -336,6 +336,29 @@ td {
   isolation: isolate;
 }
 
+.hero-video {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 10, 12, 0.5) 0%,
+    rgba(10, 10, 12, 0.72) 55%,
+    rgba(10, 10, 12, 0.94) 100%
+  );
+}
+
 .hero-backdrop {
   position: absolute;
   inset: 0;
