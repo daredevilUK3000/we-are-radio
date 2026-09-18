@@ -352,6 +352,11 @@ td {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* The hero is much wider than the 16:9 source, so cover crops a large
+     band off both top and bottom to fill it - centering that crop cuts
+     off most of her face. Biasing toward the top keeps her face/the mic
+     in frame instead of the lower shoulder/background. */
+  object-position: center 15%;
   pointer-events: none;
 }
 
