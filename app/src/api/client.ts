@@ -56,6 +56,11 @@ export const publicApi = {
   search: (q: string) => request<{ tracks: any[]; albums: any[]; programmes: any[] }>(
     `${API_BASE}/search?q=${encodeURIComponent(q)}`
   ),
+  buildSession: (mood: string, durationMinutes: number) =>
+    request<{ session: { mood: string; duration_minutes: number; total_duration_seconds: number; items: any[] } | null; message?: string }>(
+      `${API_BASE}/sessions`,
+      { method: "POST", body: JSON.stringify({ mood, duration_minutes: durationMinutes }) }
+    ),
 };
 
 // ---- Listener account (favourites / listening history) ----

@@ -156,13 +156,36 @@ function alternateEnergy(tracks: Track[]): Track[] {
   return out;
 }
 
-function insertStationIds(items: RotationItem[], stationIds: AudioAsset[], seed: number): RotationItem[] {
+function insertStationIds(
+  items: RotationItem[],
+  stationIds: AudioAsset[],
+  seed: number,
+  opts: { leading?: boolean } = {}
+): RotationItem[] {
   if (stationIds.length === 0) return items;
 
   const rand = mulberry32(seed);
   const out: RotationItem[] = [];
   let sinceLastId = 0;
   let nextIdIndex = 0;
+
+  const pushStationId = () => {
+    const asset = stationIds[nextIdIndex % stationIds.length];
+    out.push({
+      id: `${asset.id}-${out.length}`,
+      item_type: asset.type === "jingle" || asset.type === "promo" ? "station_id" : asset.type,
+      label: asset.title,
+      track_id: null,
+      audio_asset_id: asset.id,
+      duration_seconds: asset.duration_seconds,
+      audio_url: asset.audio_url,
+      artwork_url: null,
+    });
+    nextIdIndex++;
+    sinceLastId = 0;
+  };
+
+  if (opts.leading) pushStationId();
 
   for (const item of items) {
     out.push(item);
@@ -171,20 +194,75 @@ function insertStationIds(items: RotationItem[], stationIds: AudioAsset[], seed:
     // feel metronomic.
     const target = STATION_ID_TARGET_SECONDS + (rand() - 0.5) * 5 * 60;
     if (sinceLastId >= target) {
-      const asset = stationIds[nextIdIndex % stationIds.length];
-      out.push({
-        id: `${asset.id}-${out.length}`,
-        item_type: asset.type === "jingle" || asset.type === "promo" ? "station_id" : asset.type,
-        label: asset.title,
-        track_id: null,
-        audio_asset_id: asset.id,
-        duration_seconds: asset.duration_seconds,
-        audio_url: asset.audio_url,
-        artwork_url: null,
-      });
-      nextIdIndex++;
-      sinceLastId = 0;
+      pushStationId();
     }
   }
   return out;
+}
+
+// Arranges a pool into a session arc - an energetic-leaning open, a steady
+// middle, a wind-down close - by clustering tracks tagged with a "high" or
+// "low" energy tier at either end. A no-op once every track shares the same
+// tier (today: none of them are tagged, so this returns the pool unchanged
+// until energy tags actually exist).
+function energyArc(tracks: Track[]): Track[] {
+  const high = tracks.filter((t) => t.energy === "high");
+  const low = tracks.filter((t) => t.energy === "low");
+  if (high.length === 0 && low.length === 0) return tracks;
+
+  const rest = tracks.filter((t) => t.energy !== "high" && t.energy !== "low");
+  return [...high, ...rest, ...low];
+}
+
+/**
+ * Phase 2 of the roadmap: a listener-facing "build my own session" - pick a
+ * mood and a duration, get a running order back instantly. Still the Radio
+ * Brain, still zero AI calls, just called with a listener's filter instead
+ * of a channel's fixed catalogue_rules.
+ *
+ * Unlike an autopilot channel's rotation, a session has no "many listeners
+ * must all hear the same thing right now" requirement - it's personal and
+ * on-demand, so seedKey should include something request-specific (the
+ * route handler mixes in the current time) so tapping "build" again gives a
+ * fresh mix rather than the identical session every time.
+ */
+export function buildSession(
+  seedKey: string,
+  tracks: Track[],
+  stationIds: AudioAsset[],
+  targetDurationSeconds: number
+): RotationItem[] {
+  if (tracks.length === 0) return [];
+
+  const shuffled = seededShuffle(tracks, hashSeed(seedKey));
+  const spaced = spaceOutAlbums(shuffled);
+  const arced = energyArc(spaced);
+
+  // Fill to roughly the target duration, always finishing the track that
+  // crosses the threshold rather than cutting it short - looping back
+  // through the pool if the target is longer than one pass through it (a
+  // 60-minute session from a handful of short tracks).
+  const picked: Track[] = [];
+  let total = 0;
+  let i = 0;
+  const safetyLimit = arced.length * 25 + 50;
+  while (total < targetDurationSeconds && i < safetyLimit) {
+    const t = arced[i % arced.length];
+    picked.push(t);
+    total += t.duration_seconds;
+    i++;
+  }
+
+  const songItems: RotationItem[] = picked.map((t, idx) => ({
+    id: `${t.id}-${idx}`,
+    item_type: "song",
+    label: t.title,
+    track_id: t.id,
+    audio_asset_id: null,
+    duration_seconds: t.duration_seconds,
+    audio_url: t.audio_url,
+    artwork_url: t.artwork_url,
+  }));
+
+  return insertStationIds(songItems, stationIds, hashSeed(seedKey + ":ids"), { leading: true });
 }

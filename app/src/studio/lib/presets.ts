@@ -17,25 +17,7 @@ export const GENRE_OPTIONS = [
   "Instrumental",
 ];
 
-// Straight from Section 5 of the brief - the flexible, growable mood/vibe vocabulary.
-export const MOOD_OPTIONS = [
-  "romantic",
-  "upbeat",
-  "relaxing",
-  "dance",
-  "rock",
-  "pop",
-  "instrumental",
-  "orchestral",
-  "1950s-inspired",
-  "1960s-inspired",
-  "Christmas",
-  "summer",
-  "night",
-  "morning",
-  "slow",
-  "fast",
-];
+export { MOOD_OPTIONS } from "../../shared/moods";
 
 export const BPM_PRESETS: { label: string; value: number }[] = [
   { label: "Slow (~70)", value: 70 },

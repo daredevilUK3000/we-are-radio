@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Env, Programme, Channel, Track, AudioAsset } from "../lib/types";
-import { buildRotation, locateInLoop, type RotationItem } from "../lib/radioBrain";
+import { buildRotation, buildSession, locateInLoop, type RotationItem } from "../lib/radioBrain";
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -280,6 +280,53 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
     up_next: items[currentIndex + 1] ? items[currentIndex + 1] : null,
   };
 }
+
+const SESSION_DURATIONS_MINUTES = [15, 30, 45, 60];
+
+/**
+ * Phase 2 of handoff_radio_brain_roadmap.md: a listener picks a mood and a
+ * duration and gets a produced running order back instantly - the Radio
+ * Brain called with a listener's filter instead of a channel's fixed
+ * catalogue_rules. No account, no persistence of who asked for what
+ * (nothing is written here at all) - each call is a fresh, independent
+ * build, which is also why the seed mixes in the current time: repeat
+ * taps should feel like a new mix, not the same session replayed.
+ */
+publicRoutes.post("/sessions", async (c) => {
+  const body = await c.req.json<{ mood?: string; duration_minutes?: number }>().catch(() => ({}) as never);
+  const mood = body.mood?.trim();
+  const durationMinutes = body.duration_minutes;
+
+  if (!mood) return c.json({ error: "mood is required" }, 400);
+  if (!durationMinutes || !SESSION_DURATIONS_MINUTES.includes(durationMinutes)) {
+    return c.json({ error: `duration_minutes must be one of ${SESSION_DURATIONS_MINUTES.join(", ")}` }, 400);
+  }
+
+  const { results: tracks } = await c.env.DB.prepare(
+    `SELECT DISTINCT t.* FROM tracks t
+     JOIN track_tags tt ON tt.track_id = t.id
+     JOIN tags tg ON tg.id = tt.tag_id
+     WHERE t.status = 'published' AND tg.name = ?`
+  )
+    .bind(mood)
+    .all<Track>();
+
+  if (tracks.length === 0) {
+    return c.json({ session: null, message: `No published tracks tagged "${mood}" yet.` });
+  }
+
+  const { results: stationIds } = await c.env.DB.prepare(
+    "SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle','promo')"
+  ).all<AudioAsset>();
+
+  const seedKey = `session:${mood}:${durationMinutes}:${Date.now()}`;
+  const items = buildSession(seedKey, tracks, stationIds, durationMinutes * 60);
+  const totalDurationSeconds = items.reduce((sum, i) => sum + i.duration_seconds, 0);
+
+  return c.json({
+    session: { mood, duration_minutes: durationMinutes, total_duration_seconds: totalDurationSeconds, items },
+  });
+});
 
 publicRoutes.get("/search", async (c) => {
   const q = c.req.query("q")?.trim();

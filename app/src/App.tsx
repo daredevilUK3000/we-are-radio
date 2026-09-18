@@ -7,6 +7,7 @@ import { Programmes } from "./listener/pages/Programmes";
 import { ProgrammeDetail } from "./listener/pages/ProgrammeDetail";
 import { Search } from "./listener/pages/Search";
 import { MyRadio } from "./listener/pages/MyRadio";
+import { SessionBuilder } from "./listener/pages/SessionBuilder";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
 import { ListenerAuthProvider } from "./listener/auth/ListenerAuthContext";
 import { FavouritesProvider } from "./listener/favourites/FavouritesContext";
@@ -41,6 +42,7 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
           </NavLink>
           <NavLink to="/albums">Albums</NavLink>
           <NavLink to="/programmes">Programmes</NavLink>
+          <NavLink to="/session">Session</NavLink>
           <NavLink to="/search">Search</NavLink>
           <NavLink to="/my-radio">My Radio</NavLink>
         </nav>
@@ -130,6 +132,7 @@ export default function App() {
                   <Route path="programmes/:id" element={<ProgrammeDetail />} />
                   <Route path="search" element={<Search />} />
                   <Route path="my-radio" element={<MyRadio />} />
+                  <Route path="session" element={<SessionBuilder />} />
                 </Routes>
               </ListenerLayout>
             </FavouritesProvider>
