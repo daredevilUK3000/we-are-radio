@@ -26,6 +26,7 @@ export function PodcastImporter() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [channels, setChannels] = useState<any[]>([]);
   const [channelId, setChannelId] = useState("");
+  const [channelEdited, setChannelEdited] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +51,13 @@ export function PodcastImporter() {
       // has typed (e.g. when the feed calls the show something different
       // from what she wants listeners to see).
       if (!showNameEdited && show_title) setShowName(show_title);
+      // Preselect the channel named after the show (e.g. "Kizzi's Friday Game
+      // Changers" -> "Friday Game Changers"), unless she has already chosen.
+      if (!channelEdited && show_title) {
+        const norm = (t: string) => t.toLowerCase().replace(/['’]/g, "");
+        const match = channels.find((c) => norm(show_title).includes(norm(c.name)));
+        if (match) setChannelId(match.id);
+      }
       setEpisodes(fetched);
       setSelected(new Set(fetched.filter((e: FeedEpisode) => !e.already_imported).map((e: FeedEpisode) => e.guid)));
     } catch (err) {
@@ -128,7 +136,10 @@ export function PodcastImporter() {
           <div className="card" style={{ marginBottom: 20, display: "flex", gap: 14, alignItems: "center" }}>
             <div className="form-row" style={{ marginBottom: 0, flex: 1 }}>
               <label>Import into channel</label>
-              <select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+              <select value={channelId} onChange={(e) => {
+                  setChannelId(e.target.value);
+                  setChannelEdited(true);
+                }}>
                 {channels.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
