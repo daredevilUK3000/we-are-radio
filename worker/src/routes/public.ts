@@ -395,8 +395,17 @@ publicRoutes.post("/sessions", async (c) => {
   const items = buildSession(seedKey, tracks, stationIds, durationMinutes * 60);
   const totalDurationSeconds = items.reduce((sum, i) => sum + i.duration_seconds, 0);
 
+  // Songs never repeat, so a mood with little music tagged gives a session
+  // shorter than asked for - say so rather than leave it looking like a bug.
+  const shortBy = durationMinutes * 60 - totalDurationSeconds;
+  const message =
+    shortBy > 120
+      ? `Only about ${Math.round(totalDurationSeconds / 60)} minutes of "${mood}" music is available right now, so this mix is shorter than the ${durationMinutes} you asked for.`
+      : undefined;
+
   return c.json({
     session: { mood, duration_minutes: durationMinutes, total_duration_seconds: totalDurationSeconds, items },
+    message,
   });
 });
 

@@ -94,7 +94,18 @@ const ENERGY_TIERS = ["low", "medium", "high"];
 export function buildRotation(seedKey: string, tracks: Track[], stationIds: AudioAsset[]): RotationItem[] {
   if (tracks.length === 0) return [];
 
-  const shuffled = seededShuffle(tracks, hashSeed(seedKey));
+  // Each song plays at most once. Two rows with the same title are the same
+  // song (e.g. it was uploaded on a single and again on an album), so only
+  // the first is kept.
+  const seenTitles = new Set<string>();
+  const unique = tracks.filter((t) => {
+    const key = t.title.trim().toLowerCase();
+    if (seenTitles.has(key)) return false;
+    seenTitles.add(key);
+    return true;
+  });
+
+  const shuffled = seededShuffle(unique, hashSeed(seedKey));
   const spaced = spaceOutAlbums(shuffled);
   const paced = alternateEnergy(spaced);
 
@@ -239,18 +250,15 @@ export function buildSession(
   const arced = energyArc(spaced);
 
   // Fill to roughly the target duration, always finishing the track that
-  // crosses the threshold rather than cutting it short - looping back
-  // through the pool if the target is longer than one pass through it (a
-  // 60-minute session from a handful of short tracks).
+  // crosses the threshold rather than cutting it short. If the mood doesn't
+  // have enough music to reach the target, the session is simply shorter -
+  // songs are never repeated to pad it out.
   const picked: Track[] = [];
   let total = 0;
-  let i = 0;
-  const safetyLimit = arced.length * 25 + 50;
-  while (total < targetDurationSeconds && i < safetyLimit) {
-    const t = arced[i % arced.length];
+  for (const t of arced) {
+    if (total >= targetDurationSeconds) break;
     picked.push(t);
     total += t.duration_seconds;
-    i++;
   }
 
   const songItems: RotationItem[] = picked.map((t, idx) => ({

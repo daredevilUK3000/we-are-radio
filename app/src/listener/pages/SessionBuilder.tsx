@@ -35,6 +35,7 @@ export function SessionBuilder() {
         setMessage(r.message ?? "No tracks tagged for that mood yet.");
       } else {
         setSession(r.session);
+        setMessage(r.message ?? null);
       }
     } catch {
       setMessage("Couldn't build a session just now - try again.");
