@@ -221,3 +221,115 @@ podcastImportRoutes.post("/import", async (c) => {
 
   return c.json({ imported: toImport.length, skipped: episodes.length - toImport.length });
 });
+
+// ---------------------------------------------------------------- Managing imported episodes
+//
+// The Studio "Podcasts" page: list every imported episode, publish/unpublish
+// them in bulk, and delete them. "Podcast episode" here means a programme
+// whose audio is an external (feed-hosted) asset - every route below refuses
+// ids that aren't, so these can never touch a normal radio programme.
+
+const ID_CHUNK = 90; // D1 allows at most 100 bound parameters per query
+
+async function podcastEpisodeIds(db: D1Database, ids: string[]): Promise<string[]> {
+  const found: string[] = [];
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const chunk = ids.slice(i, i + ID_CHUNK);
+    const { results } = await db
+      .prepare(
+        `SELECT DISTINCT p.id FROM programmes p
+         JOIN programme_items pi ON pi.programme_id = p.id
+         JOIN audio_assets aa ON aa.id = pi.audio_asset_id
+         WHERE aa.storage = 'external' AND p.id IN (${chunk.map(() => "?").join(",")})`
+      )
+      .bind(...chunk)
+      .all<{ id: string }>();
+    found.push(...results.map((r) => r.id));
+  }
+  return found;
+}
+
+podcastImportRoutes.get("/episodes", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT DISTINCT p.id, p.title, p.show_name, p.episode_number, p.status, p.publish_date,
+            p.duration_seconds, p.channel_id, ch.name AS channel_name
+     FROM programmes p
+     JOIN programme_items pi ON pi.programme_id = p.id
+     JOIN audio_assets aa ON aa.id = pi.audio_asset_id
+     LEFT JOIN channels ch ON ch.id = p.channel_id
+     WHERE aa.storage = 'external'
+     ORDER BY p.publish_date DESC, p.created_at DESC`
+  ).all();
+  return c.json({ episodes: results });
+});
+
+podcastImportRoutes.post("/episodes/status", async (c) => {
+  const { ids, status } = await c.req.json<{ ids?: string[]; status?: string }>();
+  if (!ids || ids.length === 0 || (status !== "published" && status !== "draft")) {
+    return c.json({ error: "ids and a status of 'published' or 'draft' are required" }, 400);
+  }
+  const valid = await podcastEpisodeIds(c.env.DB, ids);
+  const ts = nowIso();
+  // publish_date keeps the episode's original release date; only an episode
+  // that somehow has none is stamped with today.
+  const statements: D1PreparedStatement[] = [];
+  for (let i = 0; i < valid.length; i += ID_CHUNK) {
+    const chunk = valid.slice(i, i + ID_CHUNK);
+    statements.push(
+      c.env.DB.prepare(
+        `UPDATE programmes SET status = ?, publish_date = COALESCE(publish_date, ?), updated_at = ?
+         WHERE id IN (${chunk.map(() => "?").join(",")})`
+      ).bind(status, ts, ts, ...chunk)
+    );
+  }
+  if (statements.length > 0) await c.env.DB.batch(statements);
+  return c.json({ updated: valid.length });
+});
+
+podcastImportRoutes.post("/episodes/delete", async (c) => {
+  const { ids } = await c.req.json<{ ids?: string[] }>();
+  if (!ids || ids.length === 0) return c.json({ error: "ids are required" }, 400);
+  const valid = await podcastEpisodeIds(c.env.DB, ids);
+  if (valid.length === 0) return c.json({ deleted: 0 });
+
+  // Capture the audio assets first - they're unreachable once the items go.
+  const assetIds = new Set<string>();
+  for (let i = 0; i < valid.length; i += ID_CHUNK) {
+    const chunk = valid.slice(i, i + ID_CHUNK);
+    const { results } = await c.env.DB.prepare(
+      `SELECT audio_asset_id FROM programme_items
+       WHERE audio_asset_id IS NOT NULL AND programme_id IN (${chunk.map(() => "?").join(",")})`
+    )
+      .bind(...chunk)
+      .all<{ audio_asset_id: string }>();
+    results.forEach((r) => assetIds.add(r.audio_asset_id));
+  }
+
+  for (let i = 0; i < valid.length; i += ID_CHUNK) {
+    const chunk = valid.slice(i, i + ID_CHUNK);
+    const marks = chunk.map(() => "?").join(",");
+    await c.env.DB.batch([
+      c.env.DB.prepare(`DELETE FROM programme_items WHERE programme_id IN (${marks})`).bind(...chunk),
+      c.env.DB.prepare(`DELETE FROM favourites WHERE item_type = 'programme' AND item_id IN (${marks})`).bind(...chunk),
+      c.env.DB.prepare(`DELETE FROM listening_history WHERE item_type = 'programme' AND item_id IN (${marks})`).bind(...chunk),
+      c.env.DB.prepare(`DELETE FROM programmes WHERE id IN (${marks})`).bind(...chunk),
+    ]);
+  }
+
+  // Remove the feed audio records too (only external ones no other programme
+  // still uses), so deleting an episode lets the importer bring it back later.
+  const assets = Array.from(assetIds);
+  for (let i = 0; i < assets.length; i += ID_CHUNK) {
+    const chunk = assets.slice(i, i + ID_CHUNK);
+    await c.env.DB.prepare(
+      `DELETE FROM audio_assets
+       WHERE storage = 'external'
+         AND id IN (${chunk.map(() => "?").join(",")})
+         AND NOT EXISTS (SELECT 1 FROM programme_items pi WHERE pi.audio_asset_id = audio_assets.id)`
+    )
+      .bind(...chunk)
+      .run();
+  }
+
+  return c.json({ deleted: valid.length });
+});

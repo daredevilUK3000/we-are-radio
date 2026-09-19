@@ -192,6 +192,17 @@ export const studioApi = {
       method: "POST",
       body: JSON.stringify({ feed_url: feedUrl }),
     }),
+  podcastEpisodes: () => request<{ episodes: any[] }>(`${STUDIO_BASE}/podcast-import/episodes`),
+  setPodcastEpisodesStatus: (ids: string[], status: "published" | "draft") =>
+    request<{ updated: number }>(`${STUDIO_BASE}/podcast-import/episodes/status`, {
+      method: "POST",
+      body: JSON.stringify({ ids, status }),
+    }),
+  deletePodcastEpisodes: (ids: string[]) =>
+    request<{ deleted: number }>(`${STUDIO_BASE}/podcast-import/episodes/delete`, {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
   importPodcastEpisodes: (channelId: string, episodes: any[], showName: string) =>
     request<{ imported: number; skipped: number }>(`${STUDIO_BASE}/podcast-import/import`, {
       method: "POST",
