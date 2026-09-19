@@ -23,6 +23,66 @@ function loadSampleTracks(): Promise<any[]> {
   return sampleTracks;
 }
 
+// Which song each jingle is previewed against. Every jingle remembers its own
+// choice (between visits too), so picking a song for one never changes another.
+// This only affects what you hear when you press Preview - on air, a jingle
+// plays over whatever song the station is playing at the time.
+const TRACK_KEY = "we-are-radio:studio-preview-tracks";
+let chosenTracks: Record<string, string> = {};
+try {
+  chosenTracks = JSON.parse(localStorage.getItem(TRACK_KEY) ?? "{}") ?? {};
+} catch {
+  // storage unavailable or unreadable - choices just won't be remembered
+}
+const trackListeners = new Set<() => void>();
+
+function chooseTrack(assetId: string, trackId: string) {
+  chosenTracks = { ...chosenTracks, [assetId]: trackId };
+  try {
+    localStorage.setItem(TRACK_KEY, JSON.stringify(chosenTracks));
+  } catch {
+    // ignore
+  }
+  trackListeners.forEach((notify) => notify());
+}
+
+export function usePreviewTrack(assetId: string) {
+  const [tracks, setTracks] = useState<any[]>([]);
+  const [, refresh] = useState(0);
+
+  useEffect(() => {
+    loadSampleTracks().then(setTracks);
+    const notify = () => refresh((n) => n + 1);
+    trackListeners.add(notify);
+    return () => {
+      trackListeners.delete(notify);
+    };
+  }, []);
+
+  // Falls back to the first song if none was chosen (or it has since been removed).
+  const track = tracks.find((t) => t.id === chosenTracks[assetId]) ?? tracks[0];
+  return { tracks, track, trackId: track?.id ?? "", setTrackId: (id: string) => chooseTrack(assetId, id) };
+}
+
+/** The "preview this jingle over which song?" dropdown. */
+export function PreviewSongPicker({ assetId, style }: { assetId: string; style?: React.CSSProperties }) {
+  const { tracks, trackId, setTrackId } = usePreviewTrack(assetId);
+  return (
+    <select
+      value={trackId}
+      onChange={(e) => setTrackId(e.target.value)}
+      style={style}
+      aria-label="Song to preview this jingle over"
+    >
+      {tracks.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.title}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /**
  * Plays a real song and brings a jingle in the way it will be heard on air,
  * so it can be judged by ear before it goes live:
@@ -91,9 +151,9 @@ export function useJinglePreview() {
 /** One-click preview of a jingle using its saved settings (the row button). */
 export function JinglePreviewButton({ asset }: { asset: any }) {
   const { previewing, start, stop } = useJinglePreview();
+  const { track } = usePreviewTrack(asset.id);
 
-  const run = async () => {
-    const tracks = await loadSampleTracks();
+  const run = () =>
     start(
       asset,
       {
@@ -101,15 +161,15 @@ export function JinglePreviewButton({ asset }: { asset: any }) {
         levelPct: Math.round((asset.duck_level ?? 0.28) * 100),
         fadeMs: asset.duck_fade_ms ?? 400,
       },
-      tracks[0]
+      track
     );
-  };
 
   return (
     <button
       className="btn"
       onClick={previewing ? stop : run}
-      title="Hear this jingle against a song, the way it will sound on air"
+      disabled={!track && !previewing}
+      title={`Hear this jingle over "${track?.title ?? "a song"}", the way it will sound on air`}
     >
       {previewing ? "Stop preview" : "Preview"}
     </button>
@@ -126,18 +186,10 @@ export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => 
   const [mode, setMode] = useState<PlayMode>(asset.play_mode ?? "sequenced");
   const [levelPct, setLevelPct] = useState(Math.round((asset.duck_level ?? 0.28) * 100));
   const [fadeMs, setFadeMs] = useState<number>(asset.duck_fade_ms ?? 400);
-  const [tracks, setTracks] = useState<any[]>([]);
-  const [trackId, setTrackId] = useState("");
+  const { track, trackId } = usePreviewTrack(asset.id);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { previewing, start, stop } = useJinglePreview();
-
-  useEffect(() => {
-    loadSampleTracks().then((published) => {
-      setTracks(published);
-      setTrackId(published[0]?.id ?? "");
-    });
-  }, []);
 
   const save = async () => {
     setSaving(true);
@@ -190,13 +242,7 @@ export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => 
       <div className="form-row" style={{ marginBottom: 0 }}>
         <label>Preview against a song</label>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <select value={trackId} onChange={(e) => setTrackId(e.target.value)} style={{ flex: 1, minWidth: 180 }}>
-            {tracks.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.title}
-              </option>
-            ))}
-          </select>
+          <PreviewSongPicker assetId={asset.id} style={{ flex: 1, minWidth: 180 }} />
           {previewing ? (
             <button className="btn" onClick={stop}>
               Stop
@@ -204,7 +250,7 @@ export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => 
           ) : (
             <button
               className="btn"
-              onClick={() => start(asset, { mode, levelPct, fadeMs }, tracks.find((t) => t.id === trackId))}
+              onClick={() => start(asset, { mode, levelPct, fadeMs }, track)}
               disabled={!trackId}
             >
               Preview

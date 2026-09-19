@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { studioApi, mediaUrl } from "../../api/client";
 import { ChipPicker } from "../components/ChipPicker";
-import { JingleSettings, JinglePreviewButton } from "../components/JingleSettings";
+import { JingleSettings, JinglePreviewButton, PreviewSongPicker } from "../components/JingleSettings";
 import { MOOD_OPTIONS } from "../lib/presets";
 
 // The Audio library is split in two so a jingle is never lost among the
@@ -93,7 +93,7 @@ export function AudioAssets() {
   };
 
   const showPlaybackColumn = tab === "jingles";
-  const columns = showPlaybackColumn ? 6 : 5;
+  const columns = showPlaybackColumn ? 7 : 5;
 
   return (
     <div>
@@ -131,6 +131,7 @@ export function AudioAssets() {
             <th>Type</th>
             <th>Tags</th>
             {showPlaybackColumn && <th>Plays</th>}
+            {showPlaybackColumn && <th>Preview over</th>}
             <th>Status</th>
             <th></th>
           </tr>
@@ -161,6 +162,11 @@ export function AudioAssets() {
                         ? `Over music · ${Math.round((a.duck_level ?? 0.28) * 100)}%`
                         : "Sequenced"}
                     </span>
+                  </td>
+                )}
+                {showPlaybackColumn && (
+                  <td>
+                    <PreviewSongPicker assetId={a.id} style={{ maxWidth: 170 }} />
                   </td>
                 )}
                 <td>
