@@ -292,8 +292,7 @@ publicRoutes.get("/now-playing", async (c) => {
     programme,
     on_air: true,
     position_seconds,
-    now_playing: items[currentIndex],
-    up_next: items[currentIndex + 1] ? items[currentIndex + 1] : null,
+    ...(await describePlayback(c.env.DB, items, currentIndex)),
   });
 });
 
@@ -373,8 +372,58 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
     programme: { id: null, title: channel.name, description: channel.description },
     on_air: true,
     position_seconds,
-    now_playing: items[currentIndex],
-    up_next: items[currentIndex + 1] ? items[currentIndex + 1] : null,
+    ...(await describePlayback(db, items, currentIndex)),
+  };
+}
+
+/**
+ * What the Now Playing screen needs beyond "the current item": the next few
+ * things on air (so the listener sees the flow of the station, not one track),
+ * and for songs the album they belong to and its artwork as a fallback.
+ * Station IDs are left out of the queue - listeners care about the songs and
+ * talk, not that a jingle is coming.
+ */
+async function describePlayback(db: D1Database, items: RotationItem[], currentIndex: number) {
+  const now = items[currentIndex];
+  const upNext = items[currentIndex + 1] ?? null;
+
+  const comingUp: RotationItem[] = [];
+  for (let step = 1; step < items.length && comingUp.length < 3; step++) {
+    const item = items[(currentIndex + step) % items.length];
+    if (item.item_type !== "station_id" && item.id !== now.id) comingUp.push(item);
+  }
+
+  const trackIds = Array.from(
+    new Set([now, upNext, ...comingUp].map((i) => i?.track_id).filter((id): id is string => !!id))
+  );
+  const albumByTrack = new Map<string, { album_id: string | null; album_title: string | null; album_artwork_url: string | null }>();
+  if (trackIds.length > 0) {
+    const { results } = await db
+      .prepare(
+        `SELECT t.id, t.album_id, a.title AS album_title, a.artwork_url AS album_artwork_url
+         FROM tracks t LEFT JOIN albums a ON a.id = t.album_id
+         WHERE t.id IN (${trackIds.map(() => "?").join(",")})`
+      )
+      .bind(...trackIds)
+      .all<{ id: string; album_id: string | null; album_title: string | null; album_artwork_url: string | null }>();
+    for (const row of results) albumByTrack.set(row.id, row);
+  }
+
+  const enrich = (item: RotationItem | null): RotationItem | null => {
+    if (!item) return null;
+    const album = item.track_id ? albumByTrack.get(item.track_id) : undefined;
+    return {
+      ...item,
+      album_id: album?.album_id ?? null,
+      album_title: album?.album_title ?? null,
+      artwork_url: item.artwork_url ?? album?.album_artwork_url ?? null,
+    };
+  };
+
+  return {
+    now_playing: enrich(now),
+    up_next: enrich(upNext),
+    coming_up: comingUp.map((i) => enrich(i)),
   };
 }
 

@@ -23,6 +23,9 @@ export interface RotationItem {
   audio_url: string | null;
   artwork_url: string | null;
   overlays?: RotationOverlay[];
+  // Filled in when a now-playing response is built (not stored in cached rotations):
+  album_id?: string | null;
+  album_title?: string | null;
 }
 
 // A jingle Kizzi has pinned to a particular song: it plays over that song

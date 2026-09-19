@@ -729,6 +729,7 @@ td {
 }
 
 .mp-title {
+  display: block;
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 0.9rem;
@@ -738,6 +739,7 @@ td {
 }
 
 .mp-programme {
+  display: block;
   font-size: 0.78rem;
   color: var(--text-dim);
   overflow: hidden;
@@ -772,6 +774,517 @@ td {
   height: 12px;
   background: currentColor;
   border-radius: 1px;
+}
+
+/* The compact player's left side opens the full Now Playing screen. */
+.mp-open {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mp-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mp-station {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text);
+}
+
+.mp-station::before {
+  content: "\00b7";
+  margin: 0 6px;
+  color: var(--text-muted);
+}
+
+.mp-chevron {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.mp-open:hover .mp-chevron {
+  color: var(--text);
+  transform: translateY(-2px);
+}
+
+/* ==========================================================================
+   Expanded Now Playing: the station takes over the screen.
+   ========================================================================== */
+
+.np-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--bg);
+  color: var(--text);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: npIn 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes npIn {
+  from {
+    opacity: 0;
+    transform: translateY(5%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes npFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.np-backdrop {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* The artwork, blurred and darkened until it is only atmosphere. */
+.np-backdrop-art {
+  position: absolute;
+  inset: -12%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(70px) saturate(1.15) brightness(0.45);
+  animation: npFade 0.9s ease;
+}
+
+.np-backdrop-shade {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 105%, rgba(225, 29, 46, 0.24), transparent 62%),
+    linear-gradient(180deg, rgba(10, 10, 12, 0.5), rgba(10, 10, 12, 0.82) 65%, #0a0a0c);
+}
+
+.np-inner {
+  position: relative;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 24px calc(36px + env(safe-area-inset-bottom, 0px));
+}
+
+.np-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.np-top-spacer {
+  width: 44px;
+}
+
+.np-close {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.2s ease;
+}
+
+.np-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.np-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(225, 29, 46, 0.14);
+  border: 1px solid var(--accent-dim);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.np-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  animation: dotPulse 1.6s ease-in-out infinite;
+}
+
+.np-main {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) 1fr;
+  gap: 52px;
+  align-items: center;
+}
+
+.np-art {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--bg-raised);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 70px rgba(225, 29, 46, 0.2);
+}
+
+.np-art img,
+.np-art video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  animation: npFade 0.6s ease;
+}
+
+.np-art-fallback {
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 30% 20%, #7a1d24, #2a0a0c 75%);
+}
+
+.np-eyebrow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.np-block {
+  margin-bottom: 20px;
+}
+
+.np-block-current {
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.np-station {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 6px 0 0;
+}
+
+.np-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(2rem, 6vw, 4rem);
+  line-height: 1.02;
+  letter-spacing: -0.005em;
+  text-transform: uppercase;
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+  animation: npFade 0.5s ease;
+}
+
+.np-meta {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+}
+
+/* The signature red waveform, from the hero. */
+.np-wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 64px;
+  margin: 4px 0 14px;
+}
+
+.np-wave span {
+  flex: 1;
+  min-width: 2px;
+  max-width: 8px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(180deg, #ff4b5a, var(--accent));
+  box-shadow: 0 0 10px rgba(225, 29, 46, 0.35);
+  transform-origin: bottom;
+  animation: npWave 1.4s ease-in-out infinite;
+  transition: transform 0.4s ease, opacity 0.4s ease;
+}
+
+.np-wave.is-still span {
+  animation: none;
+  transform: scaleY(0.16);
+  opacity: 0.7;
+}
+
+@keyframes npWave {
+  0%,
+  100% {
+    transform: scaleY(0.22);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.np-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 18px;
+}
+
+.np-progress span {
+  min-width: 34px;
+}
+
+.np-progress span:last-child {
+  text-align: right;
+}
+
+.np-progress-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.np-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(225, 29, 46, 0.6);
+}
+
+.np-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.np-play {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 4px; /* optically centre the triangle */
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 10px 40px rgba(225, 29, 46, 0.45);
+  transition: transform 0.2s ease;
+}
+
+.np-play:hover {
+  transform: scale(1.05);
+}
+
+.np-play .play-triangle {
+  border-top-width: 13px;
+  border-bottom-width: 13px;
+  border-left-width: 20px;
+}
+
+.np-play .pl-pause-icon {
+  margin-left: -4px;
+  gap: 5px;
+}
+
+.np-play .pl-pause-icon span {
+  width: 5px;
+  height: 22px;
+}
+
+.np-controls-note {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.np-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.np-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-decoration: none;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.np-chip:hover {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: var(--accent-dim);
+}
+
+.np-notice {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.np-lower {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 36px;
+  margin-top: 40px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border);
+}
+
+.np-queue-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.np-queue-row {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  column-gap: 12px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.np-queue-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.np-queue-row:first-child .np-queue-label {
+  color: var(--accent);
+}
+
+.np-queue-title {
+  font-weight: 600;
+}
+
+.np-queue-sub {
+  grid-column: 2;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.np-vibe-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.np-vibe-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.np-vibe-chip small {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.np-vibe-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.np-vibe-chip.selected {
+  border-color: var(--accent);
+  background: rgba(225, 29, 46, 0.16);
+  box-shadow: 0 0 22px rgba(225, 29, 46, 0.25);
+}
+
+@media (max-width: 800px) {
+  .np-inner {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .np-main {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+  .np-art-col {
+    width: min(78vw, 360px);
+    margin: 0 auto;
+  }
+  .np-lower {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .np-overlay,
+  .np-backdrop-art,
+  .np-art img,
+  .np-art video,
+  .np-title {
+    animation: none;
+  }
+  .np-wave span {
+    animation: none;
+    transform: scaleY(0.5);
+  }
 }
 
 /* ---- Programme page ---- */

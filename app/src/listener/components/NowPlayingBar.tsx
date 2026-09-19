@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
+import { NowPlayingExpanded } from "./NowPlayingExpanded";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -52,11 +54,19 @@ export function NowPlayingBar() {
   const [playing, setPlaying] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [showVibeShift, setShowVibeShift] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const location = useLocation();
+  const closeExpanded = useCallback(() => setExpanded(false), []);
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentItemId = useRef<string | null>(null);
   const prevChannelSlug = useRef(channelSlug);
   const playingRef = useRef(playing);
   playingRef.current = playing;
+
+  // Following a link out of the expanded player closes it.
+  useEffect(() => {
+    setExpanded(false);
+  }, [location.pathname]);
 
   // If a podcast/album page starts playing, this player steps aside (and its
   // button must show "play" again rather than a stale "pause").
@@ -91,6 +101,21 @@ export function NowPlayingBar() {
       clearInterval(id);
     };
   }, [channelSlug]);
+
+  // Refresh right as the current item is due to finish, so titles, artwork and
+  // the queue change with the broadcast rather than up to 30 s afterwards.
+  useEffect(() => {
+    const item = data?.now_playing;
+    if (!item?.duration_seconds) return;
+    const remaining = item.duration_seconds - (data.position_seconds ?? 0);
+    const id = setTimeout(() => {
+      publicApi
+        .nowPlaying(channelSlug)
+        .then(setData)
+        .catch(() => {});
+    }, Math.max(1500, remaining * 1000 + 500));
+    return () => clearTimeout(id);
+  }, [data, channelSlug]);
 
   // Phase 3: when the active channel changes - a time-band boundary
   // passing, or a Vibe Shift pick - sweep between them with a jingle if
@@ -155,61 +180,86 @@ export function NowPlayingBar() {
     }
   };
 
-  return (
-    <div className="now-playing-bar">
-      {data.now_playing?.artwork_url ? (
-        <img className="mp-art" src={mediaUrl(data.now_playing.artwork_url)} alt="" />
-      ) : (
-        <div className="mp-art" />
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <span className="mp-onair">
-          <span className="mp-onair-dot" /> {switching ? "Switching..." : "On Air"}
-        </span>
-        <div className="mp-title">{data.now_playing?.label ?? "We Are Radio"}</div>
-        <div className="mp-programme">
-          {data.up_next ? `Up next: ${data.up_next.label}` : data.programme?.title}
-        </div>
-      </div>
+  const station = data.channel?.name ?? "We Are Radio";
+  const upNextLabel = data.up_next?.label;
 
-      <div style={{ position: "relative" }}>
-        <button className="btn" onClick={() => setShowVibeShift((s) => !s)}>
-          Vibe Shift
+  return (
+    <>
+      <div className="now-playing-bar">
+        <button className="mp-open" onClick={() => setExpanded(true)} aria-label="Open Now Playing">
+          {data.now_playing?.artwork_url ? (
+            <img className="mp-art" src={mediaUrl(data.now_playing.artwork_url)} alt="" />
+          ) : (
+            <div className="mp-art" />
+          )}
+          <span className="mp-text">
+            <span className="mp-onair">
+              <span className="mp-onair-dot" /> {switching ? "Switching..." : "On Air"}
+              <span className="mp-station">{station}</span>
+            </span>
+            <span className="mp-title">{data.now_playing?.label ?? "We Are Radio"}</span>
+            <span className="mp-programme">{upNextLabel ? `Next: ${upNextLabel}` : data.programme?.title}</span>
+          </span>
+          <svg className="mp-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 15l6-6 6 6" />
+          </svg>
         </button>
-        {showVibeShift && (
-          <div className="vibe-shift-popover">
-            <button
-              className={`chip${!isOverridden ? " selected" : ""}`}
-              onClick={() => {
-                clearOverride();
-                setShowVibeShift(false);
-              }}
-            >
-              Auto &middot; {band}
-            </button>
-            {VIBE_SHIFT_CHANNELS.map((c) => (
+
+        <div style={{ position: "relative" }}>
+          <button className="btn" onClick={() => setShowVibeShift((s) => !s)}>
+            Vibe Shift
+          </button>
+          {showVibeShift && (
+            <div className="vibe-shift-popover">
               <button
-                key={c.slug}
-                className={`chip${isOverridden && channelSlug === c.slug ? " selected" : ""}`}
+                className={`chip${!isOverridden ? " selected" : ""}`}
                 onClick={() => {
-                  setOverride(c.slug);
+                  clearOverride();
                   setShowVibeShift(false);
                 }}
               >
-                {c.label}
+                Auto &middot; {band}
               </button>
-            ))}
-          </div>
-        )}
+              {VIBE_SHIFT_CHANNELS.map((c) => (
+                <button
+                  key={c.slug}
+                  className={`chip${isOverridden && channelSlug === c.slug ? " selected" : ""}`}
+                  onClick={() => {
+                    setOverride(c.slug);
+                    setShowVibeShift(false);
+                  }}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button className="mp-play-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
+          {playing ? <PauseIcon /> : <PlayIcon />}
+        </button>
+        <audio
+          ref={audioRef}
+          onEnded={() => publicApi.nowPlaying(channelSlug).then(setData).catch(() => {})}
+        />
       </div>
 
-      <button className="mp-play-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
-        {playing ? <PauseIcon /> : <PlayIcon />}
-      </button>
-      <audio
-        ref={audioRef}
-        onEnded={() => publicApi.nowPlaying(channelSlug).then(setData).catch(() => {})}
-      />
-    </div>
+      {/* A sibling of the bar, not a child: the bar's blur would otherwise pin it to the bar's box. */}
+      {expanded && (
+        <NowPlayingExpanded
+          data={data}
+          audioRef={audioRef}
+          playing={playing}
+          switching={switching}
+          onTogglePlay={togglePlay}
+          onClose={closeExpanded}
+          channelSlug={channelSlug}
+          band={band}
+          isOverridden={isOverridden}
+          onVibe={(slug) => (slug ? setOverride(slug) : clearOverride())}
+        />
+      )}
+    </>
   );
 }
