@@ -50,6 +50,21 @@ function parsePublishedAt(raw: string | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+// D1 allows at most 100 bound parameters per query, and a long-running show's
+// feed can have more episodes than that - so look guids up in chunks.
+async function findImportedGuids(db: D1Database, guids: string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (let i = 0; i < guids.length; i += 90) {
+    const chunk = guids.slice(i, i + 90);
+    const { results } = await db
+      .prepare(`SELECT external_guid FROM audio_assets WHERE external_guid IN (${chunk.map(() => "?").join(",")})`)
+      .bind(...chunk)
+      .all<{ external_guid: string }>();
+    for (const r of results) found.add(r.external_guid);
+  }
+  return found;
+}
+
 async function fetchAndParseFeed(feedUrl: string): Promise<{ showTitle: string | null; episodes: FeedEpisode[] }> {
   const res = await fetch(feedUrl, { headers: { "User-Agent": "WeAreRadio-PodcastImporter/1.0" } });
   if (!res.ok) throw new Error(`Feed fetch failed: HTTP ${res.status}`);
@@ -118,13 +133,7 @@ podcastImportRoutes.post("/fetch", async (c) => {
     return c.json({ show_title: showTitle, episodes: [] });
   }
 
-  const placeholders = episodes.map(() => "?").join(",");
-  const { results: existing } = await c.env.DB.prepare(
-    `SELECT external_guid FROM audio_assets WHERE external_guid IN (${placeholders})`
-  )
-    .bind(...episodes.map((e) => e.guid))
-    .all<{ external_guid: string }>();
-  const alreadyImported = new Set(existing.map((r) => r.external_guid));
+  const alreadyImported = await findImportedGuids(c.env.DB, episodes.map((e) => e.guid));
 
   return c.json({
     show_title: showTitle,
@@ -151,17 +160,14 @@ podcastImportRoutes.post("/import", async (c) => {
 
   // Defensive re-check against double-import (e.g. a double click), even
   // though the review screen shouldn't offer already-imported episodes.
-  const placeholders = episodes.map(() => "?").join(",");
-  const { results: existing } = await c.env.DB.prepare(
-    `SELECT external_guid FROM audio_assets WHERE external_guid IN (${placeholders})`
-  )
-    .bind(...episodes.map((e) => e.guid))
-    .all<{ external_guid: string }>();
-  const alreadyImported = new Set(existing.map((r) => r.external_guid));
+  const alreadyImported = await findImportedGuids(c.env.DB, episodes.map((e) => e.guid));
   const toImport = episodes.filter((e) => !alreadyImported.has(e.guid));
 
   const ts = nowIso();
-  const statements = toImport.flatMap((episode) => {
+  // One entry per episode (its three inserts together), so the work can be
+  // committed in modest batches - an all-at-once batch for a 100+ episode
+  // feed is too big - without ever splitting an episode across batches.
+  const perEpisode = toImport.map((episode) => {
     const audioAssetId = newId("aa");
     const programmeId = newId("prog");
     const itemId = newId("pi");
@@ -183,8 +189,8 @@ podcastImportRoutes.post("/import", async (c) => {
         ts
       ),
       c.env.DB.prepare(
-        `INSERT INTO programmes (id, channel_id, title, description, artwork_url, episode_number, show_name, status, duration_seconds, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO programmes (id, channel_id, title, description, artwork_url, episode_number, show_name, status, publish_date, duration_seconds, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
       ).bind(
         programmeId,
         channel_id,
@@ -194,6 +200,10 @@ podcastImportRoutes.post("/import", async (c) => {
         episode.episode_number ?? null,
         show_name?.trim() || null,
         "draft",
+        // The feed's own release date, so episodes sort by when they came
+        // out (not by when they were imported or published). Harmless on a
+        // draft - nothing reads publish_date until status is 'published'.
+        episode.published_at ?? null,
         episode.duration_seconds,
         ts,
         ts
@@ -205,8 +215,8 @@ podcastImportRoutes.post("/import", async (c) => {
     ];
   });
 
-  if (statements.length > 0) {
-    await c.env.DB.batch(statements);
+  for (let i = 0; i < perEpisode.length; i += 25) {
+    await c.env.DB.batch(perEpisode.slice(i, i + 25).flat());
   }
 
   return c.json({ imported: toImport.length, skipped: episodes.length - toImport.length });

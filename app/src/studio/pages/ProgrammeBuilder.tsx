@@ -96,7 +96,12 @@ export function ProgrammeBuilder() {
   const publish = async () => {
     if (!id) return;
     await save();
-    await studioApi.updateProgramme(id, { status: "published", publish_date: new Date().toISOString() });
+    // Keep a date the programme already has (an imported episode's original
+    // release date) rather than restamping it with today.
+    await studioApi.updateProgramme(id, {
+      status: "published",
+      publish_date: programme?.publish_date ?? new Date().toISOString(),
+    });
     await load();
   };
 
