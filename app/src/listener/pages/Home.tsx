@@ -18,6 +18,16 @@ const CHANNEL_THEME: Record<string, string> = {
   "we-are-50s": "theme-we-are-50s",
 };
 
+// Looping clips that stand in for the old emoji on the channel cards
+// (public/channels/channel-<slug>.mp4, with a still frame alongside). A
+// channel without one falls back to its emoji, so a newly launched channel
+// still gets a card.
+const CHANNEL_VIDEOS = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark"]);
+
+// Visitors who've asked their system for reduced motion get the still frame.
+const prefersReducedMotion =
+  typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
 function themeFor(slug: string) {
   return CHANNEL_THEME[slug] ?? "theme-default";
 }
@@ -88,9 +98,25 @@ export function Home() {
         <div className="channel-grid">
           {channels.map((c) => (
             <Link key={c.id} to={`/listen?channel=${c.slug}`} className="channel-card">
-              <div className={`channel-card-art ${themeFor(c.slug)}`}>
+              <div className={`channel-card-art ${themeFor(c.slug)}${CHANNEL_VIDEOS.has(c.slug) ? " has-video" : ""}`}>
+                {CHANNEL_VIDEOS.has(c.slug) &&
+                  (prefersReducedMotion ? (
+                    <img className="channel-card-video" data-slug={c.slug} src={`/channels/channel-${c.slug}.jpg`} alt="" />
+                  ) : (
+                    <video
+                      className="channel-card-video"
+                      data-slug={c.slug}
+                      src={`/channels/channel-${c.slug}.mp4`}
+                      poster={`/channels/channel-${c.slug}.jpg`}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      aria-hidden="true"
+                    />
+                  ))}
                 <span className="live-pill">LIVE</span>
-                {c.emoji ?? "📻"}
+                {!CHANNEL_VIDEOS.has(c.slug) && (c.emoji ?? "📻")}
               </div>
               <div className="channel-card-body">
                 <div className="channel-name">{c.name}</div>

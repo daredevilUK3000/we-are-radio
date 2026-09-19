@@ -610,8 +610,45 @@ td {
   background: radial-gradient(circle at 30% 20%, #3a3a42, #131316 75%);
 }
 
+/* Cards with a looping clip instead of an emoji: a taller picture, slightly
+   darkened top and bottom so the LIVE pill and the title below stay legible. */
+.channel-card-art.has-video {
+  height: auto;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.channel-card-art.has-video::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(10, 10, 12, 0.4), transparent 35%, transparent 65%, rgba(10, 10, 12, 0.45));
+}
+
+.channel-card-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.channel-card:hover .channel-card-video {
+  transform: scale(1.06);
+}
+
+/* Keep each clip's subject in frame when the 16:9 picture is cropped to 4:3. */
+.channel-card-video[data-slug="we-are-50s"],
+.channel-card-video[data-slug="kizzi-radio"] {
+  object-position: 22% 50%;
+}
+
 .live-pill {
   position: absolute;
+  z-index: 1;
   top: 10px;
   right: 10px;
   background: var(--accent);
