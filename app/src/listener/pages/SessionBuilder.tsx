@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { SelectChips } from "../components/SelectChips";
 import { MOOD_OPTIONS } from "../../shared/moods";
+import { PlayerCard } from "../components/PlayerCard";
+import { useExclusiveAudio } from "../lib/audioUtils";
 
 const DURATIONS = [15, 30, 45, 60];
 
@@ -18,6 +20,8 @@ export function SessionBuilder() {
   const [building, setBuilding] = useState(false);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  useExclusiveAudio("session", audioRef, !!session);
 
   const build = async () => {
     if (!mood || !duration) return;
@@ -89,6 +93,26 @@ export function SessionBuilder() {
           <h3 style={{ fontFamily: "var(--font-display)", textTransform: "uppercase" }}>
             {session.mood} &middot; ~{Math.round(session.total_duration_seconds / 60)} min
           </h3>
+
+          {playingIndex === null ? (
+            <button className="pill-btn pill-btn-solid" style={{ marginBottom: 16 }} onClick={() => playIndex(0)}>
+              <span className="play-triangle" />
+              Play session
+            </button>
+          ) : (
+            <div className="player-sticky">
+            <PlayerCard
+              audioRef={audioRef}
+              title={session.items[playingIndex].label}
+              artUrl={session.items[playingIndex].artwork_url}
+              fallbackDuration={session.items[playingIndex].duration_seconds}
+              subtitle={`Track ${playingIndex + 1} of ${session.items.length}`}
+              onPrev={playingIndex > 0 ? () => playIndex(playingIndex - 1) : undefined}
+              onNext={playingIndex + 1 < session.items.length ? () => playIndex(playingIndex + 1) : undefined}
+            />
+            </div>
+          )}
+
           <div className="up-next-list">
             {session.items.map((item, index) => (
               <div

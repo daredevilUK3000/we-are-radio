@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { publicApi, mediaUrl } from "../../api/client";
+import { useExclusiveAudio } from "../lib/audioUtils";
 
 export function Listen() {
   const [searchParams] = useSearchParams();
@@ -9,6 +10,9 @@ export function Listen() {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentItemId = useRef<string | null>(null);
+
+  // Starting a podcast/album elsewhere pauses this stream (and its button).
+  useExclusiveAudio("listen", audioRef, !!(data && data.on_air), () => setPlaying(false));
 
   useEffect(() => {
     setData(null);

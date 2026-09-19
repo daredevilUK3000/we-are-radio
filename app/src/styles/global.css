@@ -854,6 +854,19 @@ td {
   margin: 2px 0 8px;
 }
 
+/* Keeps the controls in view while scrolling a long track list. */
+.player-sticky {
+  position: sticky;
+  top: 72px;
+  z-index: 5;
+}
+
+.now-playing-card-sub {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin: -4px 0 8px;
+}
+
 .progress-bar {
   height: 3px;
   border-radius: 2px;
