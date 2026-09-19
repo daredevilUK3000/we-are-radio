@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { FavouriteButton } from "../components/FavouriteButton";
+import { useExclusiveAudio } from "../lib/audioUtils";
 
 export function AlbumDetail() {
   const { id } = useParams();
@@ -11,6 +12,8 @@ export function AlbumDetail() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [searchParams] = useSearchParams();
   const autoplayed = useRef(false);
+
+  useExclusiveAudio("album", audioRef, !!album);
 
   useEffect(() => {
     if (!id) return;

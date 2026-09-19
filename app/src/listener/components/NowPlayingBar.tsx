@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
+import { useExclusiveAudio } from "../lib/audioUtils";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -55,6 +56,10 @@ export function NowPlayingBar() {
   const prevChannelSlug = useRef(channelSlug);
   const playingRef = useRef(playing);
   playingRef.current = playing;
+
+  // If a podcast/album page starts playing, this player steps aside (and its
+  // button must show "play" again rather than a stale "pause").
+  useExclusiveAudio("mini-player", audioRef, !!(data && data.on_air), () => setPlaying(false));
 
   // The landing page's "Vibe Shift" card opens this same control rather
   // than duplicating it.
