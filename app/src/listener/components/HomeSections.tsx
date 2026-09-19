@@ -83,35 +83,120 @@ export function FeaturedAlbumSection({ album, tracks }: { album: any; tracks: an
 
 // ---------------------------------------------------------------- Podcasts
 
-// Nine gradients in three hue families. Each distinct show claims a family
-// (in alphabetical order, so it's stable as new episodes arrive) and its
-// episodes cycle through that family's three shades - so the row isn't
-// monotone, but a show still reads as "the blue one" at a glance.
-const GRADIENTS = [
-  "linear-gradient(135deg, #7a1d24, #e11d2e 60%, #2a0a0c)",
-  "linear-gradient(135deg, #8a2a12, #f0662a 60%, #2a0f08)",
-  "linear-gradient(135deg, #6b1638, #d6336c 60%, #22081a)",
-  "linear-gradient(135deg, #123a6b, #2f7de1 60%, #08142a)",
-  "linear-gradient(135deg, #0f4c4a, #20b2aa 60%, #062322)",
-  "linear-gradient(135deg, #3b1f6b, #8b5cf6 60%, #140a2a)",
-  "linear-gradient(135deg, #7a5a12, #e1a82f 60%, #2a1f08)",
-  "linear-gradient(135deg, #3f5a12, #8fc02f 60%, #141f08)",
-  "linear-gradient(135deg, #5a3a12, #c98a3a 60%, #22160a)",
+// One colour family per show, so the spotlight cards and the episode cards
+// below read as the same identity. Amber is Friday Game Changers and blue is
+// Let's Talk (the two secondary tints the page reserves for feature
+// differentiation); any other show gets the next spare family.
+type Family = { tint: string; soft: string; gradients: string[] };
+
+const FAMILIES: Family[] = [
+  {
+    tint: "#f0a12a",
+    soft: "rgba(240, 161, 42, 0.14)",
+    gradients: [
+      "linear-gradient(135deg, #7a5a12, #e1a82f 60%, #2a1f08)",
+      "linear-gradient(135deg, #8a4a0c, #f0a12a 60%, #2a1806)",
+      "linear-gradient(135deg, #8a2a12, #f0662a 60%, #2a0f08)",
+    ],
+  },
+  {
+    tint: "#3b8bf0",
+    soft: "rgba(59, 139, 240, 0.14)",
+    gradients: [
+      "linear-gradient(135deg, #123a6b, #2f7de1 60%, #08142a)",
+      "linear-gradient(135deg, #0f3f7a, #4aa3f5 60%, #071a30)",
+      "linear-gradient(135deg, #1a2f6b, #5b7cf0 60%, #0a1230)",
+    ],
+  },
+  {
+    tint: "#e11d2e",
+    soft: "rgba(225, 29, 46, 0.14)",
+    gradients: [
+      "linear-gradient(135deg, #7a1d24, #e11d2e 60%, #2a0a0c)",
+      "linear-gradient(135deg, #6b1638, #d6336c 60%, #22081a)",
+      "linear-gradient(135deg, #8a1c1c, #f0453a 60%, #2a0a0a)",
+    ],
+  },
+  {
+    tint: "#20b2aa",
+    soft: "rgba(32, 178, 170, 0.14)",
+    gradients: [
+      "linear-gradient(135deg, #0f4c4a, #20b2aa 60%, #062322)",
+      "linear-gradient(135deg, #0f4a37, #2fc28f 60%, #06231a)",
+      "linear-gradient(135deg, #12474f, #2fb0c8 60%, #062026)",
+    ],
+  },
+  {
+    tint: "#8b5cf6",
+    soft: "rgba(139, 92, 246, 0.14)",
+    gradients: [
+      "linear-gradient(135deg, #3b1f6b, #8b5cf6 60%, #140a2a)",
+      "linear-gradient(135deg, #4a1f6b, #b45cf6 60%, #1a0a2a)",
+      "linear-gradient(135deg, #2f2a6b, #6b6cf6 60%, #100e2a)",
+    ],
+  },
 ];
 
-function gradientsFor(podcasts: any[]): string[] {
-  const shows = Array.from(new Set(podcasts.map((p) => p.show_name ?? ""))).sort();
-  const seenPerShow = new Map<string, number>();
-  return podcasts.map((p) => {
-    const show = p.show_name ?? "";
-    const nth = seenPerShow.get(show) ?? 0;
-    seenPerShow.set(show, nth + 1);
-    return GRADIENTS[(shows.indexOf(show) * 3 + (nth % 3)) % GRADIENTS.length];
-  });
+function familyIndexFor(showName: string): number | null {
+  const n = showName.toLowerCase();
+  if (/friday|game ?changer/.test(n)) return 0;
+  if (/talk/.test(n)) return 1;
+  return null;
 }
 
-export function PodcastShowcase({ podcasts }: { podcasts: any[] }) {
-  const gradients = gradientsFor(podcasts);
+// Stable across renders and new episodes: known shows by name, the rest in
+// alphabetical order.
+function familiesByShow(names: string[]): Map<string, Family> {
+  const map = new Map<string, Family>();
+  const others: string[] = [];
+  for (const name of Array.from(new Set(names))) {
+    const known = familyIndexFor(name);
+    if (known !== null) map.set(name, FAMILIES[known]);
+    else others.push(name);
+  }
+  others.sort().forEach((name, i) => map.set(name, FAMILIES[2 + (i % (FAMILIES.length - 2))]));
+  return map;
+}
+
+function episodeLine(p: any) {
+  return [
+    p.episode_number != null ? `EP ${String(p.episode_number).padStart(2, "0")}` : null,
+    p.duration_seconds ? `${Math.round(p.duration_seconds / 60)} min` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+const NEW_EPISODE_DAYS = 14;
+
+function EqBars({ count, seed }: { count: number; seed: number }) {
+  return (
+    <>
+      {Array.from({ length: count }, (_, b) => (
+        <span
+          key={b}
+          style={{
+            animationDuration: `${0.9 + ((b + seed) % 5) * 0.2}s`,
+            animationDelay: `${((b * 3 + seed) % 7) * 0.1}s`,
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
+export function PodcastShowcase({ shows, recent }: { shows: any[]; recent: any[] }) {
+  const families = familiesByShow([...shows, ...recent].map((p) => p.show_name ?? ""));
+  const familyOf = (p: any) => families.get(p.show_name ?? "") ?? FAMILIES[2];
+
+  const spotlight = [...shows].sort((a, b) => FAMILIES.indexOf(familyOf(a)) - FAMILIES.indexOf(familyOf(b)));
+
+  // The spotlight already features each show's latest episode, so the row
+  // below is the "more" - the next most recent, still both shows merged.
+  const spotlightIds = new Set(spotlight.map((p) => p.id));
+  const more = recent.filter((p) => !spotlightIds.has(p.id)).slice(0, 4);
+
+  const seenPerShow = new Map<string, number>();
 
   return (
     <section className="home-section">
@@ -122,35 +207,75 @@ export function PodcastShowcase({ podcasts }: { podcasts: any[] }) {
         </Link>
       </div>
 
-      <div className="pc-row">
-        {podcasts.map((p, i) => (
-          <Link key={p.id} to={`/programmes/${p.id}`} className="pc-card">
-            <div className="pc-thumb" style={{ background: gradients[i] }}>
-              {p.episode_number != null && <span className="pc-ep">EP {String(p.episode_number).padStart(2, "0")}</span>}
-              <span className="pc-play">
-                <span className="play-triangle" />
-              </span>
-              <div className="pc-wave" aria-hidden="true">
-                {Array.from({ length: 30 }, (_, b) => (
-                  <span
-                    key={b}
-                    style={{
-                      animationDuration: `${0.9 + ((b + i) % 5) * 0.2}s`,
-                      animationDelay: `${((b * 3 + i) % 7) * 0.1}s`,
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="pc-title">{p.title}</div>
-            <div className="pc-meta">
-              {[p.show_name, p.duration_seconds ? `${Math.round(p.duration_seconds / 60)} min` : null]
-                .filter(Boolean)
-                .join(" · ")}
-            </div>
-          </Link>
-        ))}
-      </div>
+      {spotlight.length > 0 && (
+        <div className="ps-row" style={spotlight.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>
+          {spotlight.map((p, i) => {
+            const f = familyOf(p);
+            const isNew =
+              Date.now() - new Date(p.publish_date ?? p.created_at).getTime() < NEW_EPISODE_DAYS * 86400000;
+            return (
+              <Link key={p.id} to={`/programmes/${p.id}?autoplay=1`} className="ps-card" style={tint(f.tint, f.soft)}>
+                <span className="ps-pill">
+                  <span className="wl-live-dot" />
+                  {isNew ? "New Episode" : "On Air"}
+                </span>
+                <div className="ps-body">
+                  <div className="ps-text">
+                    <span className="ps-show">{p.show_name}</span>
+                    <h3 className="ps-latest">
+                      <span>Latest:</span> {p.title}
+                    </h3>
+                    <div className="ps-meta">
+                      <span className="ps-eq" aria-hidden="true">
+                        <EqBars count={5} seed={i} />
+                      </span>
+                      {episodeLine(p)}
+                    </div>
+                  </div>
+                  <span className="ps-play" aria-label={`Play ${p.title}`}>
+                    <span className="play-triangle" />
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {more.length > 0 && (
+        <>
+          <h3 className="home-subheading">More Recent Episodes</h3>
+          <div className="pc-row">
+            {more.map((p, i) => {
+              const f = familyOf(p);
+              const show = p.show_name ?? "";
+              const nth = seenPerShow.get(show) ?? 0;
+              seenPerShow.set(show, nth + 1);
+              return (
+                <Link key={p.id} to={`/programmes/${p.id}?autoplay=1`} className="pc-card">
+                  <div className="pc-thumb" style={{ background: f.gradients[nth % f.gradients.length] }}>
+                    {p.episode_number != null && (
+                      <span className="pc-ep">EP {String(p.episode_number).padStart(2, "0")}</span>
+                    )}
+                    <span className="pc-play">
+                      <span className="play-triangle" />
+                    </span>
+                    <div className="pc-wave" aria-hidden="true">
+                      <EqBars count={30} seed={i} />
+                    </div>
+                  </div>
+                  <div className="pc-title">{p.title}</div>
+                  <div className="pc-meta">
+                    {[p.show_name, p.duration_seconds ? `${Math.round(p.duration_seconds / 60)} min` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </>
+      )}
     </section>
   );
 }

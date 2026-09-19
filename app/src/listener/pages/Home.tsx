@@ -27,7 +27,7 @@ export function Home() {
   const [nowPlaying, setNowPlaying] = useState<any>(null);
   const [channels, setChannels] = useState<any[]>([]);
   const [featured, setFeatured] = useState<{ album: any; tracks: any[] } | null>(null);
-  const [podcasts, setPodcasts] = useState<any[]>([]);
+  const [podcasts, setPodcasts] = useState<{ shows: any[]; recent: any[] } | null>(null);
 
   useEffect(() => {
     publicApi.nowPlaying(channelSlug).then(setNowPlaying).catch(() => {});
@@ -38,7 +38,7 @@ export function Home() {
   // time-of-day / Vibe Shift change.
   useEffect(() => {
     publicApi.featuredAlbum().then(setFeatured).catch(() => {});
-    publicApi.podcasts(4).then((r) => setPodcasts(r.podcasts)).catch(() => {});
+    publicApi.podcastShowcase().then(setPodcasts).catch(() => {});
   }, []);
 
   const channelLabel = CHANNEL_LABELS[channelSlug] ?? "We Are Radio";
@@ -108,7 +108,7 @@ export function Home() {
       </section>
 
       {featured?.album && <FeaturedAlbumSection album={featured.album} tracks={featured.tracks} />}
-      {podcasts.length > 0 && <PodcastShowcase podcasts={podcasts} />}
+      {podcasts && podcasts.recent.length > 0 && <PodcastShowcase shows={podcasts.shows} recent={podcasts.recent} />}
       <WaysToListen channels={channels} />
     </div>
   );

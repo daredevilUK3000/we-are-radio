@@ -112,6 +112,29 @@ publicRoutes.get("/podcasts", async (c) => {
   return c.json({ podcasts: results });
 });
 
+// Landing-page Podcasts section: each show's latest episode (the spotlight
+// cards) plus the most recent episodes across all shows (the "More Recent
+// Episodes" row). Grouped here rather than in the browser so the homepage
+// doesn't download every episode's show notes. Episodes with no show_name
+// (imported before shows were named) only appear in `recent`.
+publicRoutes.get("/podcasts/showcase", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT DISTINCT p.id, p.title, p.show_name, p.episode_number, p.duration_seconds, p.publish_date, p.created_at
+     FROM programmes p
+     JOIN programme_items pi ON pi.programme_id = p.id
+     JOIN audio_assets aa ON aa.id = pi.audio_asset_id
+     WHERE p.status = 'published' AND aa.storage = 'external'
+     ORDER BY p.publish_date DESC, p.created_at DESC
+     LIMIT 200`
+  ).all<any>();
+
+  const latestByShow = new Map<string, any>();
+  for (const ep of results) {
+    if (ep.show_name && !latestByShow.has(ep.show_name)) latestByShow.set(ep.show_name, ep);
+  }
+  return c.json({ shows: Array.from(latestByShow.values()), recent: results.slice(0, 12) });
+});
+
 // The album the homepage showcases. Kizzi picks it in the Studio
 // (albums.is_featured); until she has, falls back to the newest album that
 // actually has something playable, so the section is never empty or broken

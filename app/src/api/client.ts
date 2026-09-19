@@ -56,6 +56,8 @@ export const publicApi = {
     return request<{ programmes: any[] }>(`${API_BASE}/programmes${query ? `?${query}` : ""}`);
   },
   programme: (id: string) => request<{ programme: any; items: any[] }>(`${API_BASE}/programmes/${id}`),
+  podcastShowcase: () =>
+    request<{ shows: any[]; recent: any[] }>(`${API_BASE}/podcasts/showcase`),
   podcasts: (limit?: number) =>
     request<{ podcasts: any[] }>(`${API_BASE}/podcasts${limit ? `?limit=${limit}` : ""}`),
   featuredAlbum: () => request<{ album: any | null; tracks: any[] }>(`${API_BASE}/featured-album`),

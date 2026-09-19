@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { FavouriteButton } from "../components/FavouriteButton";
 import { EyebrowPill } from "../components/BrandMark";
@@ -13,6 +13,8 @@ export function ProgrammeDetail() {
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [searchParams] = useSearchParams();
+  const autoplayed = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -30,6 +32,16 @@ export function ProgrammeDetail() {
     audioRef.current!.src = mediaUrl(item.track_audio_url ?? item.audio_asset_audio_url);
     audioRef.current!.play().catch(() => {});
   };
+
+  // Arriving via a landing-page play button (?autoplay=1) starts the episode
+  // straight away - the click that got us here is the user gesture browsers
+  // require before audio may play.
+  useEffect(() => {
+    if (searchParams.get("autoplay") !== "1" || autoplayed.current || items.length === 0) return;
+    autoplayed.current = true;
+    playIndex(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, searchParams]);
 
   const onEnded = () => {
     if (playingIndex === null) return;
