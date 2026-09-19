@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { publicApi, mediaUrl } from "../../api/client";
 import { useExclusiveAudio } from "../lib/audioUtils";
+import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 
 export function Listen() {
   const [searchParams] = useSearchParams();
@@ -13,6 +14,7 @@ export function Listen() {
 
   // Starting a podcast/album elsewhere pauses this stream (and its button).
   useExclusiveAudio("listen", audioRef, !!(data && data.on_air), () => setPlaying(false));
+  useOverlayJingles(audioRef, data?.now_playing, !!(data && data.on_air));
 
   useEffect(() => {
     setData(null);
@@ -47,6 +49,7 @@ export function Listen() {
       audio.pause();
       setPlaying(false);
     } else {
+      void unlockAudio(audio);
       audio.play().catch(() => {});
       setPlaying(true);
     }

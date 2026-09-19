@@ -3,11 +3,17 @@ import { Link } from "react-router-dom";
 import { studioApi, mediaUrl } from "../../api/client";
 import { ChipPicker } from "../components/ChipPicker";
 import { MOOD_OPTIONS } from "../lib/presets";
+import { JingleSettings } from "../components/JingleSettings";
+
+// Only jingles, station IDs and promos are played over music - spoken
+// links, features and interviews are always their own item.
+const isJingle = (a: any) => a.type === "jingle" || a.type === "station_id" || a.type === "promo";
 
 export function AudioAssets() {
   const [assets, setAssets] = useState<any[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [editingTagsId, setEditingTagsId] = useState<string | null>(null);
+  const [editingPlaybackId, setEditingPlaybackId] = useState<string | null>(null);
 
   const load = () => studioApi.audioAssets().then((r) => setAssets(r.audio_assets));
   useEffect(() => {
@@ -46,6 +52,7 @@ export function AudioAssets() {
             <th>Title</th>
             <th>Type</th>
             <th>Tags</th>
+            <th>Plays</th>
             <th>Status</th>
             <th></th>
           </tr>
@@ -70,6 +77,17 @@ export function AudioAssets() {
                   )}
                 </td>
                 <td>
+                  {isJingle(a) ? (
+                    <span className={`badge${a.play_mode === "duck_over_music" ? " live" : ""}`}>
+                      {a.play_mode === "duck_over_music"
+                        ? `Over music · ${Math.round((a.duck_level ?? 0.28) * 100)}%`
+                        : "Sequenced"}
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--text-dim)" }}>-</span>
+                  )}
+                </td>
+                <td>
                   <span className="badge">{a.status}</span>
                 </td>
                 <td style={{ display: "flex", gap: 8 }}>
@@ -85,6 +103,14 @@ export function AudioAssets() {
                   >
                     {editingTagsId === a.id ? "Done" : "Edit tags"}
                   </button>
+                  {isJingle(a) && (
+                    <button
+                      className="btn"
+                      onClick={() => setEditingPlaybackId(editingPlaybackId === a.id ? null : a.id)}
+                    >
+                      {editingPlaybackId === a.id ? "Close" : "Playback"}
+                    </button>
+                  )}
                   {a.status !== "published" && (
                     <button className="btn" onClick={() => setStatus(a.id, "published")}>
                       Publish
@@ -94,14 +120,27 @@ export function AudioAssets() {
               </tr>
               {playingId === a.id && (
                 <tr>
-                  <td colSpan={5} style={{ paddingTop: 0 }}>
+                  <td colSpan={6} style={{ paddingTop: 0 }}>
                     <audio controls autoPlay src={mediaUrl(a.audio_url)} style={{ width: "100%" }} />
+                  </td>
+                </tr>
+              )}
+              {editingPlaybackId === a.id && (
+                <tr>
+                  <td colSpan={6} style={{ paddingTop: 0 }}>
+                    <JingleSettings
+                      asset={a}
+                      onSaved={() => {
+                        setEditingPlaybackId(null);
+                        load();
+                      }}
+                    />
                   </td>
                 </tr>
               )}
               {editingTagsId === a.id && (
                 <tr>
-                  <td colSpan={5} style={{ paddingTop: 0 }}>
+                  <td colSpan={6} style={{ paddingTop: 0 }}>
                     <ChipPicker options={MOOD_OPTIONS} value={tagsFor(a)} onChange={(next) => setTags(a.id, next)} />
                   </td>
                 </tr>
@@ -110,7 +149,7 @@ export function AudioAssets() {
           ))}
           {assets.length === 0 && (
             <tr>
-              <td colSpan={5} style={{ color: "var(--text-dim)" }}>
+              <td colSpan={6} style={{ color: "var(--text-dim)" }}>
                 Nothing uploaded yet.
               </td>
             </tr>

@@ -4,6 +4,7 @@ import { SelectChips } from "../components/SelectChips";
 import { MOOD_OPTIONS } from "../../shared/moods";
 import { PlayerCard } from "../components/PlayerCard";
 import { useExclusiveAudio } from "../lib/audioUtils";
+import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 
 const DURATIONS = [15, 30, 45, 60];
 
@@ -22,6 +23,7 @@ export function SessionBuilder() {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useExclusiveAudio("session", audioRef, !!session);
+  useOverlayJingles(audioRef, playingIndex !== null ? session?.items[playingIndex] : null, !!session);
 
   const build = async () => {
     if (!mood || !duration) return;
@@ -48,6 +50,7 @@ export function SessionBuilder() {
     const item = session?.items[index];
     if (!item?.audio_url || !audioRef.current) return;
     setPlayingIndex(index);
+    void unlockAudio(audioRef.current);
     audioRef.current.src = mediaUrl(item.audio_url);
     audioRef.current.play().catch(() => {});
     if (item.track_id) listenerApi.recordPlay("track", item.track_id).catch(() => {});

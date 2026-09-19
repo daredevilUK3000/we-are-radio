@@ -95,5 +95,8 @@ export interface AudioAsset {
   status: ContentStatus;
   storage: AudioAssetStorage;
   external_guid: string | null;
+  play_mode: "sequenced" | "duck_over_music";
+  duck_level: number;
+  duck_fade_ms: number;
   created_at: string;
 }

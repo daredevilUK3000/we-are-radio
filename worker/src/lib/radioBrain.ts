@@ -1,5 +1,18 @@
 import type { Track, AudioAsset } from "./types";
 
+// A jingle that plays *over* a song rather than between songs. It takes no
+// time of its own in the running order - the song carries on underneath - so
+// it hangs off the song as data, and the player mixes it in live.
+export interface RotationOverlay {
+  asset_id: string;
+  label: string;
+  audio_url: string;
+  duration_seconds: number;
+  start_offset_seconds: number; // how far into the song the voice comes in
+  duck_level: number; // music volume while the voice plays (fraction of full)
+  duck_fade_ms: number; // length of each volume ramp, down and back up
+}
+
 export interface RotationItem {
   id: string;
   item_type: string;
@@ -9,6 +22,7 @@ export interface RotationItem {
   duration_seconds: number;
   audio_url: string | null;
   artwork_url: string | null;
+  overlays?: RotationOverlay[];
 }
 
 // Given a loop of items and how many seconds have elapsed since some fixed
@@ -180,8 +194,19 @@ function insertStationIds(
   let sinceLastId = 0;
   let nextIdIndex = 0;
 
+  // A ducked jingle isn't a running-order item: it waits here and is attached
+  // to the next song, coming in a few seconds after that song starts - the
+  // usual radio "voice over the intro".
+  let pendingOverlay: AudioAsset | null = null;
+
   const pushStationId = () => {
     const asset = stationIds[nextIdIndex % stationIds.length];
+    if (asset.play_mode === "duck_over_music") {
+      pendingOverlay = asset;
+      nextIdIndex++;
+      sinceLastId = 0;
+      return;
+    }
     out.push({
       id: `${asset.id}-${out.length}`,
       item_type: asset.type === "jingle" || asset.type === "promo" ? "station_id" : asset.type,
@@ -198,7 +223,28 @@ function insertStationIds(
 
   if (opts.leading) pushStationId();
 
-  for (const item of items) {
+  for (const source of items) {
+    let item = source;
+    if (pendingOverlay && item.item_type === "song") {
+      const asset: AudioAsset = pendingOverlay;
+      pendingOverlay = null;
+      // 4-12 s in, but never so late that the jingle would run past the end.
+      const latest = Math.max(0, item.duration_seconds - asset.duration_seconds - 5);
+      item = {
+        ...item,
+        overlays: [
+          {
+            asset_id: asset.id,
+            label: asset.title,
+            audio_url: asset.audio_url,
+            duration_seconds: asset.duration_seconds,
+            start_offset_seconds: Math.min(Math.round(4 + rand() * 8), Math.round(latest)),
+            duck_level: asset.duck_level,
+            duck_fade_ms: asset.duck_fade_ms,
+          },
+        ],
+      };
+    }
     out.push(item);
     sinceLastId += item.duration_seconds;
     // 15-20 minutes, randomised (but seeded) per insertion so it doesn't

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { useExclusiveAudio } from "../lib/audioUtils";
+import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -60,6 +61,10 @@ export function NowPlayingBar() {
   // If a podcast/album page starts playing, this player steps aside (and its
   // button must show "play" again rather than a stale "pause").
   useExclusiveAudio("mini-player", audioRef, !!(data && data.on_air), () => setPlaying(false));
+
+  // Jingles that play over a song (music ducked underneath) rather than
+  // between songs; the rotation says when, this carries it out.
+  useOverlayJingles(audioRef, data?.now_playing, !!(data && data.on_air));
 
   // The landing page's "Vibe Shift" card opens this same control rather
   // than duplicating it.
@@ -143,6 +148,8 @@ export function NowPlayingBar() {
       audio.pause();
       setPlaying(false);
     } else {
+      // The play press is the user gesture that lets the audio engine start.
+      void unlockAudio(audio);
       audio.play().catch(() => {});
       setPlaying(true);
     }

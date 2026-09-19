@@ -327,7 +327,16 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
   // that once there are more than a handful of tracks/assets, so the cache
   // key is a hash of it instead. The PRNG seed (seedKey) can stay the full
   // string - that's just in-memory, no length limit there.
-  const cacheKey = `radio-brain:${channel.id}:${hashSeed(fingerprint)}`;
+  //
+  // How each jingle is played (sequenced vs ducked over a song) changes the
+  // rotation's contents but must NOT change its shuffle order - a listener
+  // mid-song shouldn't be teleported because Kizzi tuned a jingle - so it
+  // goes in the cache key only, not in the seed.
+  const playbackConfig = stationIds
+    .map((a) => `${a.id}:${a.play_mode}:${a.duck_level}:${a.duck_fade_ms}`)
+    .sort()
+    .join(",");
+  const cacheKey = `radio-brain:${channel.id}:${hashSeed(fingerprint + "|" + playbackConfig)}`;
 
   let items = await kv.get<RotationItem[]>(cacheKey, "json");
   if (!items) {

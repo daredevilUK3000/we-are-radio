@@ -70,6 +70,22 @@ audioAssetRoutes.patch("/:id", async (c) => {
   const fields = Object.keys(body);
   if (fields.length === 0) return c.json({ error: "no fields to update" }, 400);
 
+  // Jingle playback settings: reject nonsense rather than store it (a 0
+  // duck level would mute the music, a huge fade would never finish).
+  if ("play_mode" in body && body.play_mode !== "sequenced" && body.play_mode !== "duck_over_music") {
+    return c.json({ error: "play_mode must be 'sequenced' or 'duck_over_music'" }, 400);
+  }
+  if ("duck_level" in body) {
+    const v = Number(body.duck_level);
+    if (!Number.isFinite(v) || v < 0.05 || v > 0.9) return c.json({ error: "duck_level must be between 0.05 and 0.9" }, 400);
+    body.duck_level = v;
+  }
+  if ("duck_fade_ms" in body) {
+    const v = Math.round(Number(body.duck_fade_ms));
+    if (!Number.isFinite(v) || v < 50 || v > 3000) return c.json({ error: "duck_fade_ms must be between 50 and 3000" }, 400);
+    body.duck_fade_ms = v;
+  }
+
   const setClause = fields.map((f) => `${f} = ?`).join(", ");
   await c.env.DB.prepare(`UPDATE audio_assets SET ${setClause} WHERE id = ?`)
     .bind(...fields.map((f) => body[f]), id)
