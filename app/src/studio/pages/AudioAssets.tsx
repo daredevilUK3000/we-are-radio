@@ -162,6 +162,11 @@ export function AudioAssets() {
                         ? `Over music · ${Math.round((a.duck_level ?? 0.28) * 100)}%`
                         : "Sequenced"}
                     </span>
+                    {a.pin_count > 0 && (
+                      <span className="badge live" style={{ marginLeft: 4 }}>
+                        Pinned to {a.pin_count} song{a.pin_count === 1 ? "" : "s"}
+                      </span>
+                    )}
                   </td>
                 )}
                 {showPlaybackColumn && (

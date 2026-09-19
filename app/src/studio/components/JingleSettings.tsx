@@ -113,15 +113,24 @@ export function useJinglePreview() {
   // Don't leave anything playing when the page or panel is closed.
   useEffect(() => stop, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const start = (asset: any, settings: PreviewSettings, track: any) => {
+  // `atSecond` is where in the song the jingle comes in. The song starts a
+  // few seconds before that, so a jingle pinned 40 s in doesn't mean waiting 40 s.
+  const start = (asset: any, settings: PreviewSettings, track: any, atSecond = 3) => {
     stop();
     if (!track) return;
+    const seek = Math.max(0, atSecond - 3);
+    const wait = atSecond - seek;
     const music = new Audio();
     musicRef.current = music;
     setPreviewing(true);
     // Both start straight from the click, so the browser allows the audio.
     void unlockAudio(music);
     music.src = mediaUrl(track.audio_url);
+    if (seek > 0) {
+      music.addEventListener("loadedmetadata", () => {
+        music.currentTime = seek;
+      });
+    }
     music.play().catch(() => setPreviewing(false));
     music.addEventListener("ended", () => setPreviewing(false));
 
@@ -142,7 +151,7 @@ export function useJinglePreview() {
         jingle.addEventListener("ended", () => music.play().catch(() => {}));
         jingle.play().catch(() => music.play().catch(() => {}));
       }
-    }, 3000);
+    }, wait * 1000);
   };
 
   return { previewing, start, stop };
@@ -191,6 +200,36 @@ export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => 
   const [error, setError] = useState<string | null>(null);
   const { previewing, start, stop } = useJinglePreview();
 
+  // Songs this jingle is pinned to: it plays over each of them every time
+  // they come up. Changes here save straight away, like tags do.
+  const { tracks } = usePreviewTrack(asset.id);
+  const [pins, setPins] = useState<{ track_id: string; title: string; start_offset_seconds: number }[]>([]);
+  const [pinChoice, setPinChoice] = useState("");
+  const [pinStatus, setPinStatus] = useState<string | null>(null);
+  const [pinPreviewId, setPinPreviewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    studioApi.audioAssetPins(asset.id).then((r) => setPins(r.pins));
+  }, [asset.id]);
+
+  const savePins = async (next: typeof pins) => {
+    setPinStatus("Saving...");
+    try {
+      await studioApi.setAudioAssetPins(
+        asset.id,
+        next.map((p) => ({ track_id: p.track_id, start_offset_seconds: p.start_offset_seconds }))
+      );
+      setPins(next);
+      setPinStatus("Saved");
+      window.setTimeout(() => setPinStatus(null), 2000);
+    } catch (err) {
+      setPinStatus(err instanceof Error ? err.message : "Could not save");
+    }
+  };
+
+  const unpinned = tracks.filter((t) => !pins.some((p) => p.track_id === t.id));
+  const pinChoiceId = unpinned.some((t) => t.id === pinChoice) ? pinChoice : (unpinned[0]?.id ?? "");
+
   const save = async () => {
     setSaving(true);
     setError(null);
@@ -209,6 +248,8 @@ export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => 
   };
 
   const ducking = mode === "duck_over_music";
+  // Pinned jingles always play over their song, so the level/fade sliders matter for them too.
+  const showDuckSettings = ducking || pins.length > 0;
 
   return (
     <div className="card" style={{ display: "grid", gap: 14 }}>
@@ -220,7 +261,7 @@ export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => 
         </select>
       </div>
 
-      {ducking && (
+      {showDuckSettings && (
         <>
           <div className="form-row" style={{ marginBottom: 0 }}>
             <label>
@@ -262,6 +303,86 @@ export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => 
             ? "Plays the song, then brings the jingle in over it after 3 seconds using the settings above - saved or not."
             : "Plays the song, then pauses it after 3 seconds, plays the jingle as its own clip, and carries on."}
         </small>
+      </div>
+
+      <div className="form-row" style={{ marginBottom: 0 }}>
+        <label>
+          Always play over these songs {pinStatus && <span style={{ color: "var(--text-dim)", fontWeight: 400 }}> - {pinStatus}</span>}
+        </label>
+        {pins.length === 0 ? (
+          <small style={{ color: "var(--text-dim)", marginBottom: 8 }}>
+            Not pinned to any song. Pin it to one and this jingle plays over that song every time it comes up, on top
+            of the jingles the station rotates in by itself.
+          </small>
+        ) : (
+          <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+            {pins.map((pin) => (
+              <div key={pin.track_id + pin.start_offset_seconds} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ flex: 1, minWidth: 140 }}>{pin.title}</span>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem", color: "var(--text-dim)" }}>
+                  comes in after
+                  <input
+                    type="number"
+                    min={0}
+                    max={900}
+                    defaultValue={pin.start_offset_seconds}
+                    style={{ width: 70 }}
+                    aria-label={`Seconds into ${pin.title} that the jingle comes in`}
+                    onBlur={(e) => {
+                      const value = Math.min(900, Math.max(0, Math.round(Number(e.target.value) || 0)));
+                      if (value !== pin.start_offset_seconds) {
+                        void savePins(pins.map((p) => (p.track_id === pin.track_id ? { ...p, start_offset_seconds: value } : p)));
+                      }
+                    }}
+                  />
+                  seconds
+                </label>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    if (pinPreviewId === pin.track_id && previewing) {
+                      stop();
+                      setPinPreviewId(null);
+                      return;
+                    }
+                    setPinPreviewId(pin.track_id);
+                    // A pinned jingle always plays over the song, whatever its rotation mode.
+                    start(
+                      asset,
+                      { mode: "duck_over_music", levelPct, fadeMs },
+                      tracks.find((t) => t.id === pin.track_id),
+                      pin.start_offset_seconds
+                    );
+                  }}
+                >
+                  {previewing && pinPreviewId === pin.track_id ? "Stop" : "Preview"}
+                </button>
+                <button className="btn" onClick={() => savePins(pins.filter((p) => p.track_id !== pin.track_id))}>
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <select value={pinChoiceId} onChange={(e) => setPinChoice(e.target.value)} style={{ flex: 1, minWidth: 180 }} aria-label="Song to pin this jingle to">
+            {unpinned.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn"
+            disabled={!pinChoiceId}
+            onClick={() => {
+              const track = tracks.find((t) => t.id === pinChoiceId);
+              if (track) void savePins([...pins, { track_id: track.id, title: track.title, start_offset_seconds: 4 }]);
+            }}
+          >
+            Pin to this song
+          </button>
+        </div>
       </div>
 
       {error && <p style={{ color: "var(--accent)", margin: 0 }}>{error}</p>}

@@ -25,6 +25,57 @@ export interface RotationItem {
   overlays?: RotationOverlay[];
 }
 
+// A jingle Kizzi has pinned to a particular song: it plays over that song
+// every time the song comes up, on top of the regular rotation jingles.
+export interface PinnedJingle {
+  track_id: string;
+  asset_id: string;
+  label: string;
+  audio_url: string;
+  duration_seconds: number;
+  start_offset_seconds: number;
+  duck_level: number;
+  duck_fade_ms: number;
+}
+
+/**
+ * Attach each song's pinned jingles to it as overlays. Several jingles on one
+ * song are kept in order and spaced so they never talk over each other, and
+ * none is allowed to start so late that it would run past the end of the song.
+ * Pure data: the running-order timeline does not change (a ducked jingle takes
+ * no time of its own), and songs with no pins come back untouched.
+ */
+export function withPinnedJingles(items: RotationItem[], pins: PinnedJingle[]): RotationItem[] {
+  if (pins.length === 0) return items;
+
+  const byTrack = new Map<string, PinnedJingle[]>();
+  for (const pin of pins) byTrack.set(pin.track_id, [...(byTrack.get(pin.track_id) ?? []), pin]);
+
+  return items.map((item) => {
+    const mine = item.item_type === "song" && item.track_id ? byTrack.get(item.track_id) : undefined;
+    if (!mine) return item;
+
+    let earliest = 0;
+    const overlays: RotationOverlay[] = [...mine]
+      .sort((a, b) => a.start_offset_seconds - b.start_offset_seconds)
+      .map((pin) => {
+        const latest = Math.max(0, item.duration_seconds - pin.duration_seconds - 2);
+        const start = Math.min(Math.max(pin.start_offset_seconds, earliest), latest);
+        earliest = start + pin.duration_seconds + 3;
+        return {
+          asset_id: pin.asset_id,
+          label: pin.label,
+          audio_url: pin.audio_url,
+          duration_seconds: pin.duration_seconds,
+          start_offset_seconds: start,
+          duck_level: pin.duck_level,
+          duck_fade_ms: pin.duck_fade_ms,
+        };
+      });
+    return { ...item, overlays };
+  });
+}
+
 // Given a loop of items and how many seconds have elapsed since some fixed
 // reference point, find which item is "playing" right now and how far into
 // it we are - looping back to the start once the total duration is passed.
@@ -105,7 +156,12 @@ const ENERGY_TIERS = ["low", "medium", "high"];
  * which only gets closer to the brief's literal "6 hours" as the catalogue
  * grows (see the roadmap's own Phase 3 gating note on catalogue size).
  */
-export function buildRotation(seedKey: string, tracks: Track[], stationIds: AudioAsset[]): RotationItem[] {
+export function buildRotation(
+  seedKey: string,
+  tracks: Track[],
+  stationIds: AudioAsset[],
+  pins: PinnedJingle[] = []
+): RotationItem[] {
   if (tracks.length === 0) return [];
 
   // Each song plays at most once. Two rows with the same title are the same
@@ -134,7 +190,7 @@ export function buildRotation(seedKey: string, tracks: Track[], stationIds: Audi
     artwork_url: t.artwork_url,
   }));
 
-  return insertStationIds(songItems, stationIds, hashSeed(seedKey + ":ids"));
+  return insertStationIds(withPinnedJingles(songItems, pins), stationIds, hashSeed(seedKey + ":ids"));
 }
 
 // Rejection-based local smoothing: if two adjacent tracks share an album,
@@ -225,7 +281,8 @@ function insertStationIds(
 
   for (const source of items) {
     let item = source;
-    if (pendingOverlay && item.item_type === "song") {
+    // A song that already carries pinned jingles waits: the rotation jingle goes on the next song.
+    if (pendingOverlay && item.item_type === "song" && !item.overlays?.length) {
       const asset: AudioAsset = pendingOverlay;
       pendingOverlay = null;
       // 4-12 s in, but never so late that the jingle would run past the end.
@@ -287,7 +344,8 @@ export function buildSession(
   seedKey: string,
   tracks: Track[],
   stationIds: AudioAsset[],
-  targetDurationSeconds: number
+  targetDurationSeconds: number,
+  pins: PinnedJingle[] = []
 ): RotationItem[] {
   if (tracks.length === 0) return [];
 
@@ -318,5 +376,5 @@ export function buildSession(
     artwork_url: t.artwork_url,
   }));
 
-  return insertStationIds(songItems, stationIds, hashSeed(seedKey + ":ids"), { leading: true });
+  return insertStationIds(withPinnedJingles(songItems, pins), stationIds, hashSeed(seedKey + ":ids"), { leading: true });
 }

@@ -169,6 +169,15 @@ export const studioApi = {
     request<{ audio_assets: any[] }>(`${STUDIO_BASE}/audio-assets${opts?.storage ? `?storage=${opts.storage}` : ""}`),
   createAudioAsset: (data: Record<string, unknown>) =>
     request<{ id: string }>(`${STUDIO_BASE}/audio-assets`, { method: "POST", body: JSON.stringify(data) }),
+  audioAssetPins: (id: string) =>
+    request<{ pins: { track_id: string; title: string; start_offset_seconds: number }[] }>(
+      `${STUDIO_BASE}/audio-assets/${id}/pins`
+    ),
+  setAudioAssetPins: (id: string, pins: { track_id: string; start_offset_seconds: number }[]) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/pins`, {
+      method: "PUT",
+      body: JSON.stringify({ pins }),
+    }),
   updateAudioAsset: (id: string, data: Record<string, unknown>) =>
     request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   setAudioAssetTags: (id: string, tags: string[]) =>

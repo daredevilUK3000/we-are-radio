@@ -9,7 +9,8 @@ audioAssetRoutes.get("/", async (c) => {
   const storage = c.req.query("storage");
   let sql = `SELECT aa.*,
       (SELECT GROUP_CONCAT(tg.name) FROM audio_asset_tags aat
-       JOIN tags tg ON tg.id = aat.tag_id WHERE aat.audio_asset_id = aa.id) as tag_names
+       JOIN tags tg ON tg.id = aat.tag_id WHERE aat.audio_asset_id = aa.id) as tag_names,
+      (SELECT COUNT(*) FROM track_jingles tj WHERE tj.audio_asset_id = aa.id) as pin_count
     FROM audio_assets aa WHERE 1=1`;
   const params: unknown[] = [];
   if (type) {
@@ -24,7 +25,7 @@ audioAssetRoutes.get("/", async (c) => {
   }
   sql += " ORDER BY created_at DESC LIMIT 200";
 
-  const { results } = await c.env.DB.prepare(sql).bind(...params).all<AudioAsset & { tag_names: string | null }>();
+  const { results } = await c.env.DB.prepare(sql).bind(...params).all<AudioAsset & { tag_names: string | null; pin_count: number }>();
   return c.json({ audio_assets: results });
 });
 
@@ -108,5 +109,52 @@ audioAssetRoutes.patch("/:id", async (c) => {
     .bind(...fields.map((f) => body[f]), id)
     .run();
 
+  return c.json({ ok: true });
+});
+
+// Songs a jingle is pinned to: every time one of them plays, this jingle plays
+// over it, `start_offset_seconds` in.
+audioAssetRoutes.get("/:id/pins", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT tj.track_id, tj.start_offset_seconds, t.title
+     FROM track_jingles tj JOIN tracks t ON t.id = tj.track_id
+     WHERE tj.audio_asset_id = ?
+     ORDER BY t.title ASC`
+  )
+    .bind(c.req.param("id"))
+    .all();
+  return c.json({ pins: results });
+});
+
+// Replaces the whole set of songs this jingle is pinned to.
+audioAssetRoutes.put("/:id/pins", async (c) => {
+  const id = c.req.param("id");
+  const { pins } = await c.req.json<{ pins?: Array<{ track_id: string; start_offset_seconds: number }> }>();
+  if (!Array.isArray(pins) || pins.length > 60) return c.json({ error: "pins must be a list of at most 60" }, 400);
+
+  const seen = new Set<string>();
+  for (const pin of pins) {
+    const offset = Number(pin.start_offset_seconds);
+    if (!pin.track_id || !Number.isFinite(offset) || offset < 0 || offset > 900) {
+      return c.json({ error: "each pin needs a track and a start time between 0 and 900 seconds" }, 400);
+    }
+    if (seen.has(pin.track_id)) return c.json({ error: "a song can only be pinned once per jingle" }, 400);
+    seen.add(pin.track_id);
+  }
+
+  const asset = await c.env.DB.prepare("SELECT id FROM audio_assets WHERE id = ?").bind(id).first();
+  if (!asset) return c.json({ error: "not found" }, 404);
+
+  const statements = [c.env.DB.prepare("DELETE FROM track_jingles WHERE audio_asset_id = ?").bind(id)];
+  const ts = nowIso();
+  for (const pin of pins) {
+    statements.push(
+      c.env.DB.prepare(
+        `INSERT INTO track_jingles (id, track_id, audio_asset_id, start_offset_seconds, created_at)
+         SELECT ?, t.id, ?, ?, ? FROM tracks t WHERE t.id = ?`
+      ).bind(newId("tj"), id, Math.round(Number(pin.start_offset_seconds)), ts, pin.track_id)
+    );
+  }
+  await c.env.DB.batch(statements);
   return c.json({ ok: true });
 });

@@ -1,6 +1,14 @@
 import { Hono } from "hono";
 import type { Env, Programme, Channel, Track, AudioAsset } from "../lib/types";
-import { buildRotation, buildSession, hashSeed, locateInLoop, type RotationItem } from "../lib/radioBrain";
+import {
+  buildRotation,
+  buildSession,
+  hashSeed,
+  locateInLoop,
+  withPinnedJingles,
+  type PinnedJingle,
+  type RotationItem,
+} from "../lib/radioBrain";
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -263,7 +271,7 @@ publicRoutes.get("/now-playing", async (c) => {
     return c.json({ channel, programme, on_air: false });
   }
 
-  const items: RotationItem[] = rows.map((row) => ({
+  const baseItems: RotationItem[] = rows.map((row) => ({
     id: row.id,
     item_type: row.item_type,
     label: row.label ?? row.track_title ?? row.audio_asset_title,
@@ -273,6 +281,8 @@ publicRoutes.get("/now-playing", async (c) => {
     audio_url: row.track_audio_url ?? row.audio_asset_audio_url,
     artwork_url: row.track_artwork_url,
   }));
+  // Pinned jingles play over their song here too, not just on autopilot channels.
+  const items = withPinnedJingles(baseItems, await loadPinnedJingles(c.env.DB));
   const publishedAt = programme.publish_date ? new Date(programme.publish_date).getTime() : Date.now();
   const elapsed = Math.floor(((Date.now() - publishedAt) / 1000) % programme.duration_seconds);
   const { currentIndex, position_seconds } = locateInLoop(items, elapsed);
@@ -336,11 +346,17 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
     .map((a) => `${a.id}:${a.play_mode}:${a.duck_level}:${a.duck_fade_ms}`)
     .sort()
     .join(",");
-  const cacheKey = `radio-brain:${channel.id}:${hashSeed(fingerprint + "|" + playbackConfig)}`;
+  // Pinned jingles change the rotation's contents the same way, so they're part of the key too.
+  const pins = await loadPinnedJingles(db);
+  const pinsConfig = pins
+    .map((p) => `${p.track_id}>${p.asset_id}@${p.start_offset_seconds}:${p.duck_level}:${p.duck_fade_ms}`)
+    .sort()
+    .join(",");
+  const cacheKey = `radio-brain:${channel.id}:${hashSeed(fingerprint + "|" + playbackConfig + "|" + pinsConfig)}`;
 
   let items = await kv.get<RotationItem[]>(cacheKey, "json");
   if (!items) {
-    items = buildRotation(seedKey, tracks, stationIds);
+    items = buildRotation(seedKey, tracks, stationIds, pins);
     await kv.put(cacheKey, JSON.stringify(items), { expirationTtl: 60 * 60 * 24 * 30 });
   }
 
@@ -360,6 +376,20 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
     now_playing: items[currentIndex],
     up_next: items[currentIndex + 1] ? items[currentIndex + 1] : null,
   };
+}
+
+// Jingles pinned to specific songs (published jingles only).
+async function loadPinnedJingles(db: D1Database): Promise<PinnedJingle[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT tj.track_id, tj.audio_asset_id AS asset_id, tj.start_offset_seconds,
+              aa.title AS label, aa.audio_url, aa.duration_seconds, aa.duck_level, aa.duck_fade_ms
+       FROM track_jingles tj
+       JOIN audio_assets aa ON aa.id = tj.audio_asset_id
+       WHERE aa.status = 'published'`
+    )
+    .all<PinnedJingle>();
+  return results;
 }
 
 const SESSION_DURATIONS_MINUTES = [15, 30, 45, 60];
@@ -401,7 +431,7 @@ publicRoutes.post("/sessions", async (c) => {
   ).all<AudioAsset>();
 
   const seedKey = `session:${mood}:${durationMinutes}:${Date.now()}`;
-  const items = buildSession(seedKey, tracks, stationIds, durationMinutes * 60);
+  const items = buildSession(seedKey, tracks, stationIds, durationMinutes * 60, await loadPinnedJingles(c.env.DB));
   const totalDurationSeconds = items.reduce((sum, i) => sum + i.duration_seconds, 0);
 
   // Songs never repeat, so a mood with little music tagged gives a session
