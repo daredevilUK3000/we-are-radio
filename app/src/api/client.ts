@@ -56,7 +56,9 @@ export const publicApi = {
     return request<{ programmes: any[] }>(`${API_BASE}/programmes${query ? `?${query}` : ""}`);
   },
   programme: (id: string) => request<{ programme: any; items: any[] }>(`${API_BASE}/programmes/${id}`),
-  podcasts: () => request<{ podcasts: any[] }>(`${API_BASE}/podcasts`),
+  podcasts: (limit?: number) =>
+    request<{ podcasts: any[] }>(`${API_BASE}/podcasts${limit ? `?limit=${limit}` : ""}`),
+  featuredAlbum: () => request<{ album: any | null; tracks: any[] }>(`${API_BASE}/featured-album`),
   nowPlaying: (channel = "kizzi-radio") =>
     request<any>(`${API_BASE}/now-playing?channel=${encodeURIComponent(channel)}`),
   search: (q: string) => request<{ tracks: any[]; albums: any[]; programmes: any[] }>(
@@ -129,6 +131,11 @@ export const studioApi = {
     request<{ id: string }>(`${STUDIO_BASE}/albums`, { method: "POST", body: JSON.stringify(data) }),
   updateAlbum: (id: string, data: Record<string, unknown>) =>
     request<{ ok: true }>(`${STUDIO_BASE}/albums/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  setAlbumFeatured: (id: string, featured: boolean) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/albums/${id}/feature`, {
+      method: "POST",
+      body: JSON.stringify({ featured }),
+    }),
 
   channels: () => request<{ channels: any[] }>(`${STUDIO_BASE}/channels?all=1`),
   setChannelStatus: (id: string, status: "building" | "live") =>
@@ -179,14 +186,14 @@ export const studioApi = {
     ),
 
   fetchPodcastFeed: (feedUrl: string) =>
-    request<{ episodes: any[] }>(`${STUDIO_BASE}/podcast-import/fetch`, {
+    request<{ show_title: string | null; episodes: any[] }>(`${STUDIO_BASE}/podcast-import/fetch`, {
       method: "POST",
       body: JSON.stringify({ feed_url: feedUrl }),
     }),
-  importPodcastEpisodes: (channelId: string, episodes: any[]) =>
+  importPodcastEpisodes: (channelId: string, episodes: any[], showName: string) =>
     request<{ imported: number; skipped: number }>(`${STUDIO_BASE}/podcast-import/import`, {
       method: "POST",
-      body: JSON.stringify({ channel_id: channelId, episodes }),
+      body: JSON.stringify({ channel_id: channelId, episodes, show_name: showName }),
     }),
 };
 

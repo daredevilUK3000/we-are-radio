@@ -13,6 +13,7 @@ interface FeedEpisode {
   duration_seconds: number;
   artwork_url: string | null;
   published_at: string | null;
+  episode_number: number | null;
 }
 
 // RSS text nodes with attributes (e.g. <guid isPermaLink="false">abc</guid>)
@@ -37,13 +38,19 @@ function parseDuration(raw: string | null): number {
   return parts.reduce((acc, p) => acc * 60 + p, 0);
 }
 
+function parseEpisodeNumber(raw: string | null): number | null {
+  if (!raw) return null;
+  const n = parseInt(raw.trim(), 10);
+  return Number.isNaN(n) ? null : n;
+}
+
 function parsePublishedAt(raw: string | undefined): string | null {
   if (!raw) return null;
   const date = new Date(raw);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-async function fetchAndParseFeed(feedUrl: string): Promise<FeedEpisode[]> {
+async function fetchAndParseFeed(feedUrl: string): Promise<{ showTitle: string | null; episodes: FeedEpisode[] }> {
   const res = await fetch(feedUrl, { headers: { "User-Agent": "WeAreRadio-PodcastImporter/1.0" } });
   if (!res.ok) throw new Error(`Feed fetch failed: HTTP ${res.status}`);
   const xml = await res.text();
@@ -53,6 +60,7 @@ async function fetchAndParseFeed(feedUrl: string): Promise<FeedEpisode[]> {
   const channel = doc?.rss?.channel;
   if (!channel) throw new Error("Not a recognisable RSS feed (no <rss><channel>)");
 
+  const showTitle = textOf(channel.title);
   const channelArtwork = textOf(channel["itunes:image"]?.["@_href"]) ?? channel.image?.url ?? null;
   const rawItems = channel.item ?? [];
   const items = Array.isArray(rawItems) ? rawItems : [rawItems];
@@ -75,12 +83,18 @@ async function fetchAndParseFeed(feedUrl: string): Promise<FeedEpisode[]> {
       duration_seconds: parseDuration(textOf(item["itunes:duration"])),
       artwork_url: textOf(itunesImage?.["@_href"]) ?? channelArtwork,
       published_at: parsePublishedAt(textOf(item.pubDate) ?? undefined),
+      // Only what the feed actually says - never a guessed number, since
+      // this ends up on a public "EP ##" badge.
+      episode_number: parseEpisodeNumber(textOf(item["itunes:episode"])),
     };
   });
 
-  return episodes
-    .filter((e) => e.audio_url) // an episode with no playable file isn't importable
-    .sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? ""));
+  return {
+    showTitle,
+    episodes: episodes
+      .filter((e) => e.audio_url) // an episode with no playable file isn't importable
+      .sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? "")),
+  };
 }
 
 /**
@@ -93,14 +107,15 @@ podcastImportRoutes.post("/fetch", async (c) => {
   if (!feed_url) return c.json({ error: "feed_url is required" }, 400);
 
   let episodes: FeedEpisode[];
+  let showTitle: string | null;
   try {
-    episodes = await fetchAndParseFeed(feed_url);
+    ({ showTitle, episodes } = await fetchAndParseFeed(feed_url));
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Could not read that feed" }, 502);
   }
 
   if (episodes.length === 0) {
-    return c.json({ episodes: [] });
+    return c.json({ show_title: showTitle, episodes: [] });
   }
 
   const placeholders = episodes.map(() => "?").join(",");
@@ -112,6 +127,7 @@ podcastImportRoutes.post("/fetch", async (c) => {
   const alreadyImported = new Set(existing.map((r) => r.external_guid));
 
   return c.json({
+    show_title: showTitle,
     episodes: episodes.map((e) => ({ ...e, already_imported: alreadyImported.has(e.guid) })),
   });
 });
@@ -124,7 +140,11 @@ podcastImportRoutes.post("/fetch", async (c) => {
  * through the normal Studio flow, same as anything else.
  */
 podcastImportRoutes.post("/import", async (c) => {
-  const { channel_id, episodes } = await c.req.json<{ channel_id?: string; episodes?: FeedEpisode[] }>();
+  const { channel_id, episodes, show_name } = await c.req.json<{
+    channel_id?: string;
+    episodes?: FeedEpisode[];
+    show_name?: string;
+  }>();
   if (!channel_id || !episodes || episodes.length === 0) {
     return c.json({ error: "channel_id and at least one episode are required" }, 400);
   }
@@ -163,14 +183,16 @@ podcastImportRoutes.post("/import", async (c) => {
         ts
       ),
       c.env.DB.prepare(
-        `INSERT INTO programmes (id, channel_id, title, description, artwork_url, status, duration_seconds, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO programmes (id, channel_id, title, description, artwork_url, episode_number, show_name, status, duration_seconds, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`
       ).bind(
         programmeId,
         channel_id,
         episode.title,
         episode.description,
         episode.artwork_url,
+        episode.episode_number ?? null,
+        show_name?.trim() || null,
         "draft",
         episode.duration_seconds,
         ts,

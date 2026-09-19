@@ -98,15 +98,43 @@ publicRoutes.get("/programmes", async (c) => {
 // storage='external', i.e. pulled in from an RSS feed rather than
 // recorded/uploaded), regardless of which channel they landed in.
 publicRoutes.get("/podcasts", async (c) => {
+  const limit = Math.min(Math.max(Number(c.req.query("limit")) || 200, 1), 200);
   const { results } = await c.env.DB.prepare(
     `SELECT DISTINCT p.* FROM programmes p
      JOIN programme_items pi ON pi.programme_id = p.id
      JOIN audio_assets aa ON aa.id = pi.audio_asset_id
      WHERE p.status = 'published' AND aa.storage = 'external'
      ORDER BY p.publish_date DESC, p.created_at DESC
-     LIMIT 200`
-  ).all();
+     LIMIT ?`
+  )
+    .bind(limit)
+    .all();
   return c.json({ podcasts: results });
+});
+
+// The album the homepage showcases. Kizzi picks it in the Studio
+// (albums.is_featured); until she has, falls back to the newest album that
+// actually has something playable, so the section is never empty or broken
+// - and never hardcoded to one album either way.
+publicRoutes.get("/featured-album", async (c) => {
+  let album = await c.env.DB.prepare("SELECT * FROM albums WHERE is_featured = 1 LIMIT 1").first();
+  if (!album) {
+    album = await c.env.DB.prepare(
+      `SELECT a.* FROM albums a
+       WHERE EXISTS (SELECT 1 FROM tracks t WHERE t.album_id = a.id AND t.status = 'published')
+       ORDER BY a.release_date DESC, a.created_at DESC LIMIT 1`
+    ).first();
+  }
+  if (!album) return c.json({ album: null, tracks: [] });
+
+  const { results: tracks } = await c.env.DB.prepare(
+    `SELECT * FROM tracks WHERE album_id = ? AND status = 'published'
+     ORDER BY track_number ASC, created_at ASC`
+  )
+    .bind(album.id as string)
+    .all();
+
+  return c.json({ album, tracks });
 });
 
 publicRoutes.get("/programmes/:id", async (c) => {

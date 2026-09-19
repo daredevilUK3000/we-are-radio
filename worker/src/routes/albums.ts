@@ -48,6 +48,24 @@ albumRoutes.post("/", async (c) => {
   return c.json({ id }, 201);
 });
 
+// Which album the homepage showcases (handoff_landing_page_lower_half.md).
+// At most one album is ever featured, so featuring one clears the rest in
+// the same batch; unfeaturing just clears it.
+albumRoutes.post("/:id/feature", async (c) => {
+  const id = c.req.param("id");
+  const { featured } = await c.req.json<{ featured: boolean }>();
+
+  if (featured) {
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE albums SET is_featured = 0 WHERE is_featured = 1"),
+      c.env.DB.prepare("UPDATE albums SET is_featured = 1, updated_at = ? WHERE id = ?").bind(nowIso(), id),
+    ]);
+  } else {
+    await c.env.DB.prepare("UPDATE albums SET is_featured = 0, updated_at = ? WHERE id = ?").bind(nowIso(), id).run();
+  }
+  return c.json({ ok: true });
+});
+
 albumRoutes.patch("/:id", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json<Record<string, unknown>>();

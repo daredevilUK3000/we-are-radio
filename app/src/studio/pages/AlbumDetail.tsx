@@ -44,6 +44,12 @@ export function AlbumDetail() {
     load();
   };
 
+  const toggleFeatured = async () => {
+    if (!id) return;
+    await studioApi.setAlbumFeatured(id, !album.is_featured);
+    load();
+  };
+
   const removeTrack = async (trackId: string) => {
     await studioApi.updateTrack(trackId, { album_id: null });
     load();
@@ -73,6 +79,9 @@ export function AlbumDetail() {
         <div>
           <h1 style={{ marginTop: 0, marginBottom: 4 }}>{album.title}</h1>
           <p style={{ color: "var(--text-dim)" }}>{album.description}</p>
+          <button className={album.is_featured ? "btn primary" : "btn"} onClick={toggleFeatured}>
+            {album.is_featured ? "★ Featured on landing page - click to remove" : "Feature on landing page"}
+          </button>
         </div>
       </div>
 

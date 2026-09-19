@@ -9,6 +9,7 @@ interface FeedEpisode {
   duration_seconds: number;
   artwork_url: string | null;
   published_at: string | null;
+  episode_number: number | null;
   already_imported: boolean;
 }
 
@@ -19,6 +20,8 @@ function formatDate(iso: string | null) {
 
 export function PodcastImporter() {
   const [feedUrl, setFeedUrl] = useState("");
+  const [showName, setShowName] = useState("");
+  const [showNameEdited, setShowNameEdited] = useState(false);
   const [episodes, setEpisodes] = useState<FeedEpisode[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [channels, setChannels] = useState<any[]>([]);
@@ -42,7 +45,11 @@ export function PodcastImporter() {
     setError(null);
     setResult(null);
     try {
-      const { episodes: fetched } = await studioApi.fetchPodcastFeed(feedUrl.trim());
+      const { episodes: fetched, show_title } = await studioApi.fetchPodcastFeed(feedUrl.trim());
+      // Prefill from the feed's own title, but never overwrite a name Kizzi
+      // has typed (e.g. when the feed calls the show something different
+      // from what she wants listeners to see).
+      if (!showNameEdited && show_title) setShowName(show_title);
       setEpisodes(fetched);
       setSelected(new Set(fetched.filter((e: FeedEpisode) => !e.already_imported).map((e: FeedEpisode) => e.guid)));
     } catch (err) {
@@ -74,7 +81,7 @@ export function PodcastImporter() {
     setImporting(true);
     setError(null);
     try {
-      const r = await studioApi.importPodcastEpisodes(channelId, toImport);
+      const r = await studioApi.importPodcastEpisodes(channelId, toImport, showName.trim());
       setResult(r);
       // Re-fetch so the list reflects what's now imported.
       await fetchFeed();
@@ -103,7 +110,10 @@ export function PodcastImporter() {
           <label>Feed URL</label>
           <input
             value={feedUrl}
-            onChange={(e) => setFeedUrl(e.target.value)}
+            onChange={(e) => {
+              setFeedUrl(e.target.value);
+              setShowNameEdited(false);
+            }}
             placeholder="https://anchor.fm/s/.../podcast/rss"
           />
         </div>
@@ -125,6 +135,17 @@ export function PodcastImporter() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="form-row" style={{ marginBottom: 0, flex: 1 }}>
+              <label>Show name (shown on episode cards)</label>
+              <input
+                value={showName}
+                onChange={(e) => {
+                  setShowName(e.target.value);
+                  setShowNameEdited(true);
+                }}
+                placeholder="e.g. Kizzi's Friday Game Changers"
+              />
             </div>
             <button className="btn" onClick={selectAllNew}>
               Select all new ({newCount})

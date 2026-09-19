@@ -56,6 +56,14 @@ export function NowPlayingBar() {
   const playingRef = useRef(playing);
   playingRef.current = playing;
 
+  // The landing page's "Vibe Shift" card opens this same control rather
+  // than duplicating it.
+  useEffect(() => {
+    const open = () => setShowVibeShift(true);
+    window.addEventListener("open-vibe-shift", open);
+    return () => window.removeEventListener("open-vibe-shift", open);
+  }, []);
+
   // Poll now-playing for whichever channel is currently active (time-of-day
   // default, or a Vibe Shift override).
   useEffect(() => {

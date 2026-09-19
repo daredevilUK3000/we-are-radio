@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { FavouriteButton } from "../components/FavouriteButton";
 
@@ -9,6 +9,8 @@ export function AlbumDetail() {
   const [tracks, setTracks] = useState<any[]>([]);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [searchParams] = useSearchParams();
+  const autoplayed = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -17,6 +19,16 @@ export function AlbumDetail() {
       setTracks(r.tracks);
     });
   }, [id]);
+
+  // Arriving via the landing page's "Play Album" (?autoplay=1) starts the
+  // album straight away - the click that got us here counts as the user
+  // gesture browsers require before audio may play.
+  useEffect(() => {
+    if (searchParams.get("autoplay") !== "1" || autoplayed.current || tracks.length === 0) return;
+    autoplayed.current = true;
+    playIndex(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracks, searchParams]);
 
   const playIndex = (index: number) => {
     const track = tracks[index];

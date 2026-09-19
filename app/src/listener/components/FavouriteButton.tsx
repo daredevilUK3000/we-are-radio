@@ -7,10 +7,12 @@ export function FavouriteButton({
   itemType,
   itemId,
   label,
+  className = "btn",
 }: {
   itemType: FavouriteItemType;
   itemId: string;
   label?: string;
+  className?: string;
 }) {
   const { status } = useListenerAuth();
   const { isFavourited, toggle } = useFavourites();
@@ -20,7 +22,7 @@ export function FavouriteButton({
     return (
       <button
         type="button"
-        className="btn"
+        className={className}
         title="Sign in on My Radio to save favourites"
         onClick={() => navigate("/my-radio")}
       >
@@ -34,7 +36,7 @@ export function FavouriteButton({
   return (
     <button
       type="button"
-      className="btn"
+      className={className}
       style={favourited ? { color: "var(--accent)", borderColor: "var(--accent)" } : undefined}
       onClick={(e) => {
         e.preventDefault();

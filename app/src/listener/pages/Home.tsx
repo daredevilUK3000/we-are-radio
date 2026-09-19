@@ -4,13 +4,8 @@ import { publicApi } from "../../api/client";
 import { HeroBackdrop } from "../components/HeroBackdrop";
 import { EyebrowPill } from "../components/BrandMark";
 import { useActiveChannel } from "../context/ActiveChannelContext";
-
-const CHANNEL_LABELS: Record<string, string> = {
-  "kizzi-radio": "Kizzi Radio",
-  "we-are-love": "We Are Love",
-  "we-are-50s": "We Are 50s",
-  "we-are-after-dark": "We Are After Dark",
-};
+import { CHANNEL_LABELS } from "../lib/channelLabels";
+import { FeaturedAlbumSection, PodcastShowcase, WaysToListen } from "../components/HomeSections";
 
 // The network was designed from day one with six channels total (see
 // migrations/0001_init.sql) - only `live` ones are ever named to listeners,
@@ -31,11 +26,20 @@ export function Home() {
   const { channelSlug } = useActiveChannel();
   const [nowPlaying, setNowPlaying] = useState<any>(null);
   const [channels, setChannels] = useState<any[]>([]);
+  const [featured, setFeatured] = useState<{ album: any; tracks: any[] } | null>(null);
+  const [podcasts, setPodcasts] = useState<any[]>([]);
 
   useEffect(() => {
     publicApi.nowPlaying(channelSlug).then(setNowPlaying).catch(() => {});
     publicApi.channels().then((r) => setChannels(r.channels)).catch(() => {});
   }, [channelSlug]);
+
+  // Independent of the active channel, so fetched once rather than on every
+  // time-of-day / Vibe Shift change.
+  useEffect(() => {
+    publicApi.featuredAlbum().then(setFeatured).catch(() => {});
+    publicApi.podcasts(4).then((r) => setPodcasts(r.podcasts)).catch(() => {});
+  }, []);
 
   const channelLabel = CHANNEL_LABELS[channelSlug] ?? "We Are Radio";
   const subhead = nowPlaying?.on_air
@@ -102,6 +106,10 @@ export function Home() {
           )}
         </div>
       </section>
+
+      {featured?.album && <FeaturedAlbumSection album={featured.album} tracks={featured.tracks} />}
+      {podcasts.length > 0 && <PodcastShowcase podcasts={podcasts} />}
+      <WaysToListen channels={channels} />
     </div>
   );
 }

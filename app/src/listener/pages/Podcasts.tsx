@@ -34,7 +34,9 @@ export function Podcasts() {
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600 }}>{p.title}</div>
-              <div style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>{formatDate(p.publish_date)}</div>
+              <div style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>
+                {[p.show_name, formatDate(p.publish_date)].filter(Boolean).join(" · ")}
+              </div>
             </div>
             <span className="up-next-duration">
               {p.duration_seconds ? `${Math.round(p.duration_seconds / 60)} min` : ""}

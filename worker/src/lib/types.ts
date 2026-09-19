@@ -66,6 +66,7 @@ export interface Programme {
   description: string | null;
   artwork_url: string | null;
   episode_number: number | null;
+  show_name: string | null;
   status: ProgrammeStatus;
   is_flagship: number;
   publish_date: string | null;
