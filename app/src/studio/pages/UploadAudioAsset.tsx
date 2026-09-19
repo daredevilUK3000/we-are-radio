@@ -31,6 +31,10 @@ export function UploadAudioAsset() {
   const spoken = searchParams.get("kind") === "spoken";
   const TYPES = spoken ? SPOKEN_TYPES : JINGLE_TYPES;
   const [type, setType] = useState(TYPES[0].value);
+  // Jingles, station IDs and promos go live the moment they're uploaded (they
+  // start out as ordinary "sequenced" clips between songs); spoken content
+  // is still reviewed and published by hand.
+  const goesLive = JINGLE_TYPES.some((t) => t.value === type);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -57,7 +61,7 @@ export function UploadAudioAsset() {
         description: description || null,
         duration_seconds: duration,
         audio_url: key,
-        status: "ready",
+        status: goesLive ? "published" : "ready",
       });
 
       // Straight back to the section it was uploaded into.
@@ -95,6 +99,11 @@ export function UploadAudioAsset() {
           <label>Audio file</label>
           <input type="file" accept="audio/*" onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)} required />
         </div>
+        <p style={{ color: "var(--text-dim)", fontSize: "0.85rem" }}>
+          {goesLive
+            ? "This goes live as soon as it's uploaded. You can change how it plays, or take it off air, from the Audio page afterwards."
+            : "This is saved ready for you to review - publish it from the Audio page when you're happy."}
+        </p>
         {error && <p style={{ color: "var(--accent)" }}>{error}</p>}
         <button className="btn primary" type="submit" disabled={busy}>
           {busy ? "Uploading..." : "Upload"}

@@ -38,7 +38,17 @@ audioAssetRoutes.post("/", async (c) => {
     `INSERT INTO audio_assets (id, type, title, audio_url, duration_seconds, description, status, created_at)
      VALUES (?,?,?,?,?,?,?,?)`
   )
-    .bind(id, body.type, body.title, body.audio_url, body.duration_seconds, body.description ?? null, body.status ?? "draft", nowIso())
+    .bind(
+      id,
+      body.type,
+      body.title,
+      body.audio_url,
+      body.duration_seconds,
+      body.description ?? null,
+      // Jingles go live on upload unless a status is given explicitly.
+      body.status ?? (["jingle", "station_id", "promo"].includes(body.type) ? "published" : "draft"),
+      nowIso()
+    )
     .run();
 
   return c.json({ id }, 201);
