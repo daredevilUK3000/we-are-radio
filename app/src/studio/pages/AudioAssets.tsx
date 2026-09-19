@@ -1,21 +1,63 @@
 import { Fragment, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { studioApi, mediaUrl } from "../../api/client";
 import { ChipPicker } from "../components/ChipPicker";
+import { JingleSettings, JinglePreviewButton } from "../components/JingleSettings";
 import { MOOD_OPTIONS } from "../lib/presets";
-import { JingleSettings } from "../components/JingleSettings";
 
-// Only jingles, station IDs and promos are played over music - spoken
-// links, features and interviews are always their own item.
-const isJingle = (a: any) => a.type === "jingle" || a.type === "station_id" || a.type === "promo";
+// The Audio library is split in two so a jingle is never lost among the
+// spoken material: each type belongs to exactly one section, so anything
+// uploaded lands in the right place automatically.
+const JINGLE_TYPES = ["jingle", "station_id", "promo"];
+const SPOKEN_TYPES = ["link", "feature", "interview"];
+
+const TABS = {
+  jingles: {
+    label: "Jingles & Station IDs",
+    types: JINGLE_TYPES,
+    upload: "Upload jingle",
+    blurb:
+      'Jingles, station IDs and promos. Tag them "morning", "afternoon", "evening" or "night" so the right one plays when the main player changes channel, use Preview to hear a jingle against a song, and Playback settings to choose whether it plays as its own clip or over the music.',
+    empty: "No jingles yet - upload one and it will appear here.",
+  },
+  spoken: {
+    label: "Spoken & Features",
+    types: SPOKEN_TYPES,
+    upload: "Upload audio",
+    blurb: "Spoken links, features and interviews - the talking building blocks of a running order.",
+    empty: "No spoken audio yet - upload some and it will appear here.",
+  },
+} as const;
+
+type TabKey = keyof typeof TABS;
+
+const TYPE_LABELS: Record<string, string> = {
+  jingle: "jingle",
+  station_id: "station ID",
+  promo: "promo",
+  link: "link",
+  feature: "feature",
+  interview: "interview",
+};
 
 export function AudioAssets() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: TabKey = searchParams.get("tab") === "spoken" ? "spoken" : "jingles";
+
   const [assets, setAssets] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [search, setSearch] = useState("");
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [editingTagsId, setEditingTagsId] = useState<string | null>(null);
   const [editingPlaybackId, setEditingPlaybackId] = useState<string | null>(null);
 
-  const load = () => studioApi.audioAssets().then((r) => setAssets(r.audio_assets));
+  // Podcast episodes are audio assets too (hundreds of them), but they're
+  // managed on the Podcasts page - only files uploaded here belong in this list.
+  const load = () =>
+    studioApi.audioAssets({ storage: "r2" }).then((r) => {
+      setAssets(r.audio_assets);
+      setLoaded(true);
+    });
   useEffect(() => {
     load();
   }, []);
@@ -32,38 +74,74 @@ export function AudioAssets() {
     load();
   };
 
+  const countFor = (key: TabKey) => assets.filter((a) => (TABS[key].types as readonly string[]).includes(a.type)).length;
+
+  const current = TABS[tab];
+  const query = search.trim().toLowerCase();
+  const visible = assets.filter(
+    (a) =>
+      (current.types as readonly string[]).includes(a.type) &&
+      (!query || a.title.toLowerCase().includes(query) || tagsFor(a).some((t) => t.toLowerCase().includes(query)))
+  );
+
+  const switchTab = (key: TabKey) => {
+    setSearchParams(key === "jingles" ? {} : { tab: key });
+    setSearch("");
+    setPlayingId(null);
+    setEditingTagsId(null);
+    setEditingPlaybackId(null);
+  };
+
+  const showPlaybackColumn = tab === "jingles";
+  const columns = showPlaybackColumn ? 6 : 5;
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1>Voice &amp; Station Audio</h1>
-        <Link to="/studio/audio/upload" className="btn primary">
-          Upload audio
+        <h1>Audio</h1>
+        <Link to={`/studio/audio/upload?kind=${tab}`} className="btn primary">
+          {current.upload}
         </Link>
       </div>
-      <p style={{ color: "var(--text-dim)" }}>
-        Station IDs, jingles, spoken links, features and interviews - the non-song building
-        blocks of a running order. Tag jingles/station IDs with "morning", "afternoon",
-        "evening" or "night" so the right one plays when the main player switches channel
-        (Phase 3's time-of-day flow).
-      </p>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        {(Object.keys(TABS) as TabKey[]).map((key) => (
+          <button key={key} className={`chip${tab === key ? " selected" : ""}`} onClick={() => switchTab(key)}>
+            {TABS[key].label}
+            {loaded ? ` (${countFor(key)})` : ""}
+          </button>
+        ))}
+      </div>
+
+      <p style={{ color: "var(--text-dim)" }}>{current.blurb}</p>
+
+      <div className="form-row" style={{ maxWidth: 320 }}>
+        <input
+          type="search"
+          placeholder={`Search ${current.label.toLowerCase()}...`}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
       <table>
         <thead>
           <tr>
             <th>Title</th>
             <th>Type</th>
             <th>Tags</th>
-            <th>Plays</th>
+            {showPlaybackColumn && <th>Plays</th>}
             <th>Status</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {assets.map((a) => (
+          {visible.map((a) => (
             <Fragment key={a.id}>
               <tr>
                 <td>{a.title}</td>
                 <td>
-                  <span className="badge">{a.type}</span>
+                  <span className="badge">{TYPE_LABELS[a.type] ?? a.type}</span>
                 </td>
                 <td>
                   {tagsFor(a).length > 0 ? (
@@ -76,39 +154,32 @@ export function AudioAssets() {
                     <span style={{ color: "var(--text-dim)" }}>none</span>
                   )}
                 </td>
-                <td>
-                  {isJingle(a) ? (
+                {showPlaybackColumn && (
+                  <td>
                     <span className={`badge${a.play_mode === "duck_over_music" ? " live" : ""}`}>
                       {a.play_mode === "duck_over_music"
                         ? `Over music · ${Math.round((a.duck_level ?? 0.28) * 100)}%`
                         : "Sequenced"}
                     </span>
-                  ) : (
-                    <span style={{ color: "var(--text-dim)" }}>-</span>
-                  )}
-                </td>
+                  </td>
+                )}
                 <td>
                   <span className="badge">{a.status}</span>
                 </td>
-                <td style={{ display: "flex", gap: 8 }}>
-                  <button
-                    className="btn"
-                    onClick={() => setPlayingId(playingId === a.id ? null : a.id)}
-                  >
+                <td style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button className="btn" onClick={() => setPlayingId(playingId === a.id ? null : a.id)}>
                     {playingId === a.id ? "Hide player" : "Play"}
                   </button>
-                  <button
-                    className="btn"
-                    onClick={() => setEditingTagsId(editingTagsId === a.id ? null : a.id)}
-                  >
+                  <button className="btn" onClick={() => setEditingTagsId(editingTagsId === a.id ? null : a.id)}>
                     {editingTagsId === a.id ? "Done" : "Edit tags"}
                   </button>
-                  {isJingle(a) && (
+                  {showPlaybackColumn && <JinglePreviewButton asset={a} />}
+                  {showPlaybackColumn && (
                     <button
                       className="btn"
                       onClick={() => setEditingPlaybackId(editingPlaybackId === a.id ? null : a.id)}
                     >
-                      {editingPlaybackId === a.id ? "Close" : "Playback"}
+                      {editingPlaybackId === a.id ? "Close" : "Playback settings"}
                     </button>
                   )}
                   {a.status !== "published" && (
@@ -120,14 +191,14 @@ export function AudioAssets() {
               </tr>
               {playingId === a.id && (
                 <tr>
-                  <td colSpan={6} style={{ paddingTop: 0 }}>
+                  <td colSpan={columns} style={{ paddingTop: 0 }}>
                     <audio controls autoPlay src={mediaUrl(a.audio_url)} style={{ width: "100%" }} />
                   </td>
                 </tr>
               )}
               {editingPlaybackId === a.id && (
                 <tr>
-                  <td colSpan={6} style={{ paddingTop: 0 }}>
+                  <td colSpan={columns} style={{ paddingTop: 0 }}>
                     <JingleSettings
                       asset={a}
                       onSaved={() => {
@@ -140,17 +211,17 @@ export function AudioAssets() {
               )}
               {editingTagsId === a.id && (
                 <tr>
-                  <td colSpan={6} style={{ paddingTop: 0 }}>
+                  <td colSpan={columns} style={{ paddingTop: 0 }}>
                     <ChipPicker options={MOOD_OPTIONS} value={tagsFor(a)} onChange={(next) => setTags(a.id, next)} />
                   </td>
                 </tr>
               )}
             </Fragment>
           ))}
-          {assets.length === 0 && (
+          {loaded && visible.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ color: "var(--text-dim)" }}>
-                Nothing uploaded yet.
+              <td colSpan={columns} style={{ color: "var(--text-dim)" }}>
+                {query ? "Nothing matches that search." : current.empty}
               </td>
             </tr>
           )}

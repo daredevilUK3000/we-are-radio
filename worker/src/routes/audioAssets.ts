@@ -6,6 +6,7 @@ export const audioAssetRoutes = new Hono<{ Bindings: Env }>();
 
 audioAssetRoutes.get("/", async (c) => {
   const type = c.req.query("type");
+  const storage = c.req.query("storage");
   let sql = `SELECT aa.*,
       (SELECT GROUP_CONCAT(tg.name) FROM audio_asset_tags aat
        JOIN tags tg ON tg.id = aat.tag_id WHERE aat.audio_asset_id = aa.id) as tag_names
@@ -14,6 +15,12 @@ audioAssetRoutes.get("/", async (c) => {
   if (type) {
     sql += " AND type = ?";
     params.push(type);
+  }
+  // 'r2' = files uploaded through the Studio; 'external' = podcast episodes
+  // imported from a feed (they have their own Podcasts page).
+  if (storage === "r2" || storage === "external") {
+    sql += " AND storage = ?";
+    params.push(storage);
   }
   sql += " ORDER BY created_at DESC LIMIT 200";
 

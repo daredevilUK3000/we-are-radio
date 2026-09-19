@@ -22,7 +22,7 @@ export function ProgrammeBuilder() {
     const [p, t, a] = await Promise.all([
       studioApi.programme(id),
       studioApi.tracks(),
-      studioApi.audioAssets(),
+      studioApi.audioAssets({ storage: "r2" }),
     ]);
     setProgramme(p.programme);
     setTracks(t.tracks);

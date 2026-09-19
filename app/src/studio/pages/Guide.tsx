@@ -64,7 +64,7 @@ export function Guide() {
       </Step>
 
       <Step n={2} title="Upload spoken content (optional)">
-        Go to <strong>Voice &amp; Station Audio</strong> to upload station IDs, jingles,
+        Go to <strong>Audio</strong> to upload station IDs, jingles,
         spoken links, features or interviews - the same upload-then-publish pattern as
         tracks. You don't need any of this to build a programme (a programme can be just
         songs), but it's what makes a running order feel like radio instead of a playlist.

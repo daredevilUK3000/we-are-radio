@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { studioApi, uploadFileToR2 } from "../../api/client";
 
 function readAudioDuration(file: File): Promise<number> {
@@ -12,18 +12,25 @@ function readAudioDuration(file: File): Promise<number> {
   });
 }
 
-const TYPES = [
-  { value: "station_id", label: "Station ID" },
+// Each type lives in one section of the Audio library, so the section being
+// uploaded to decides which types are offered.
+const JINGLE_TYPES = [
   { value: "jingle", label: "Jingle" },
+  { value: "station_id", label: "Station ID" },
+  { value: "promo", label: "Promo" },
+];
+const SPOKEN_TYPES = [
   { value: "link", label: "Spoken link" },
   { value: "feature", label: "Feature" },
   { value: "interview", label: "Interview" },
-  { value: "promo", label: "Promo" },
 ];
 
 export function UploadAudioAsset() {
   const navigate = useNavigate();
-  const [type, setType] = useState("station_id");
+  const [searchParams] = useSearchParams();
+  const spoken = searchParams.get("kind") === "spoken";
+  const TYPES = spoken ? SPOKEN_TYPES : JINGLE_TYPES;
+  const [type, setType] = useState(TYPES[0].value);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -53,7 +60,8 @@ export function UploadAudioAsset() {
         status: "ready",
       });
 
-      navigate("/studio/audio");
+      // Straight back to the section it was uploaded into.
+      navigate(spoken ? "/studio/audio?tab=spoken" : "/studio/audio");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -63,7 +71,7 @@ export function UploadAudioAsset() {
 
   return (
     <div style={{ maxWidth: 480 }}>
-      <h1>Upload audio</h1>
+      <h1>{spoken ? "Upload spoken audio" : "Upload jingle"}</h1>
       <form onSubmit={submit}>
         <div className="form-row">
           <label>Type</label>

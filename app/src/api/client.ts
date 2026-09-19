@@ -165,7 +165,8 @@ export const studioApi = {
       body: JSON.stringify({ items }),
     }),
 
-  audioAssets: () => request<{ audio_assets: any[] }>(`${STUDIO_BASE}/audio-assets`),
+  audioAssets: (opts?: { storage?: "r2" | "external" }) =>
+    request<{ audio_assets: any[] }>(`${STUDIO_BASE}/audio-assets${opts?.storage ? `?storage=${opts.storage}` : ""}`),
   createAudioAsset: (data: Record<string, unknown>) =>
     request<{ id: string }>(`${STUDIO_BASE}/audio-assets`, { method: "POST", body: JSON.stringify(data) }),
   updateAudioAsset: (id: string, data: Record<string, unknown>) =>
