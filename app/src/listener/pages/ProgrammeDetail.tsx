@@ -6,6 +6,7 @@ import { EyebrowPill } from "../components/BrandMark";
 import { ProgrammeEqSilhouette } from "../components/HeroBackdrop";
 import { PlayerCard } from "../components/PlayerCard";
 import { plainText, useExclusiveAudio } from "../lib/audioUtils";
+import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 
 export function ProgrammeDetail() {
   const { id } = useParams();
@@ -19,6 +20,7 @@ export function ProgrammeDetail() {
   const autoplayed = useRef(false);
 
   useExclusiveAudio("programme", audioRef);
+  useOverlayJingles(audioRef, playingIndex !== null ? items[playingIndex] : null, !!programme);
 
   useEffect(() => {
     if (!id) return;
@@ -32,6 +34,7 @@ export function ProgrammeDetail() {
     const item = items[index];
     if (!item?.track_audio_url && !item?.audio_asset_audio_url) return;
     setPlayingIndex(index);
+    void unlockAudio(audioRef.current);
     audioRef.current!.src = mediaUrl(item.track_audio_url ?? item.audio_asset_audio_url);
     audioRef.current!.play().catch(() => {});
   };

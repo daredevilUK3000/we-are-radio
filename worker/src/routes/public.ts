@@ -8,6 +8,7 @@ import {
   withPinnedJingles,
   type PinnedJingle,
   type RotationItem,
+  type RotationOverlay,
 } from "../lib/radioBrain";
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
@@ -52,7 +53,15 @@ publicRoutes.get("/albums/:id", async (c) => {
     .bind(album.id as string)
     .all();
 
-  return c.json({ album, tracks });
+  return c.json({
+    album,
+    tracks: await withPinnedOverlays(
+      c.env.DB,
+      tracks as any[],
+      (t) => t.id,
+      (t) => t.duration_seconds
+    ),
+  });
 });
 
 publicRoutes.get("/tracks", async (c) => {
@@ -188,7 +197,15 @@ publicRoutes.get("/programmes/:id", async (c) => {
     .bind(programme.id)
     .all();
 
-  return c.json({ programme, items });
+  return c.json({
+    programme,
+    items: await withPinnedOverlays(
+      c.env.DB,
+      items as any[],
+      (i) => (i.item_type === "song" ? i.track_id : null),
+      (i) => i.track_duration_seconds ?? 0
+    ),
+  });
 });
 
 interface ItemRow {
@@ -439,6 +456,33 @@ async function loadPinnedJingles(db: D1Database): Promise<PinnedJingle[]> {
     )
     .all<PinnedJingle>();
   return results;
+}
+
+/**
+ * Pinned jingles for songs played directly (an album, a programme page), not
+ * only on a station: each row that is a song with pinned jingles comes back
+ * with `overlays`, exactly as station items do, so the player can mix them in.
+ */
+async function withPinnedOverlays<T extends Record<string, any>>(
+  db: D1Database,
+  rows: T[],
+  trackIdOf: (row: T) => string | null,
+  durationOf: (row: T) => number
+): Promise<(T & { overlays?: RotationOverlay[] })[]> {
+  const pins = await loadPinnedJingles(db);
+  if (pins.length === 0) return rows;
+  const pseudo: RotationItem[] = rows.map((row, i) => ({
+    id: String(i),
+    item_type: "song",
+    label: null,
+    track_id: trackIdOf(row),
+    audio_asset_id: null,
+    duration_seconds: durationOf(row),
+    audio_url: null,
+    artwork_url: null,
+  }));
+  const done = withPinnedJingles(pseudo, pins);
+  return rows.map((row, i) => (done[i].overlays ? { ...row, overlays: done[i].overlays } : row));
 }
 
 const SESSION_DURATIONS_MINUTES = [15, 30, 45, 60];

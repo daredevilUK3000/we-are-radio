@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { FavouriteButton } from "../components/FavouriteButton";
 import { useExclusiveAudio } from "../lib/audioUtils";
+import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 
 export function AlbumDetail() {
   const { id } = useParams();
@@ -14,6 +15,8 @@ export function AlbumDetail() {
   const autoplayed = useRef(false);
 
   useExclusiveAudio("album", audioRef, !!album);
+  // Jingles pinned to a song play over it here too, not only on the stations.
+  useOverlayJingles(audioRef, playingIndex !== null ? tracks[playingIndex] : null, !!album);
 
   useEffect(() => {
     if (!id) return;
@@ -37,6 +40,7 @@ export function AlbumDetail() {
     const track = tracks[index];
     if (!track?.audio_url || !audioRef.current) return;
     setPlayingIndex(index);
+    void unlockAudio(audioRef.current);
     audioRef.current.src = mediaUrl(track.audio_url);
     audioRef.current.play().catch(() => {});
     listenerApi.recordPlay("track", track.id).catch(() => {});
@@ -124,7 +128,14 @@ export function AlbumDetail() {
           )}
         </tbody>
       </table>
-      <audio ref={audioRef} onEnded={onEnded} style={{ width: "100%", marginTop: 20 }} controls />
+      <audio
+        ref={audioRef}
+        onEnded={onEnded}
+        // The browser's own play button doesn't go through playIndex, so prepare the jingle player here too.
+        onPlay={() => void unlockAudio(audioRef.current)}
+        style={{ width: "100%", marginTop: 20 }}
+        controls
+      />
     </div>
   );
 }
