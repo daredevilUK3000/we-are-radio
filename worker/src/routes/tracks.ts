@@ -10,25 +10,30 @@ trackRoutes.get("/", async (c) => {
   const albumId = c.req.query("album_id");
   const q = c.req.query("q");
 
-  let sql = "SELECT * FROM tracks WHERE 1=1";
+  // album title and tag names come along so the Studio can list and edit
+  // hundreds of tracks (a bulk import) without a request per row.
+  let sql = `SELECT t.*, a.title AS album_title,
+      (SELECT GROUP_CONCAT(tg.name) FROM track_tags tt
+       JOIN tags tg ON tg.id = tt.tag_id WHERE tt.track_id = t.id) AS tag_names
+    FROM tracks t LEFT JOIN albums a ON a.id = t.album_id WHERE 1=1`;
   const params: unknown[] = [];
   if (status) {
-    sql += " AND status = ?";
+    sql += " AND t.status = ?";
     params.push(status);
   }
   if (albumId) {
-    sql += " AND album_id = ?";
+    sql += " AND t.album_id = ?";
     params.push(albumId);
   }
   if (q) {
-    sql += " AND title LIKE ?";
+    sql += " AND t.title LIKE ?";
     params.push(`%${q}%`);
   }
-  sql += " ORDER BY created_at DESC LIMIT 200";
+  sql += " ORDER BY t.created_at DESC LIMIT 2000";
 
   const { results } = await c.env.DB.prepare(sql)
     .bind(...params)
-    .all<Track>();
+    .all<Track & { album_title: string | null; tag_names: string | null }>();
   return c.json({ tracks: results });
 });
 
@@ -59,14 +64,16 @@ trackRoutes.post("/", async (c) => {
   const ts = nowIso();
   await c.env.DB.prepare(
     `INSERT INTO tracks (
-      id, title, album_id, track_number, duration_seconds, audio_url, artwork_url,
+      id, title, artist, content_hash, album_id, track_number, duration_seconds, audio_url, artwork_url,
       genre, subgenre, energy, tempo_bpm, musical_key, vocal_or_instrumental,
       explicit, description, status, release_date, created_at, updated_at
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   )
     .bind(
       id,
       body.title,
+      body.artist ?? null,
+      body.content_hash ?? null,
       body.album_id ?? null,
       body.track_number ?? null,
       body.duration_seconds,

@@ -103,7 +103,7 @@ export function NowPlayingExpanded({
   const artUrl: string | null = now?.artwork_url ? mediaUrl(now.artwork_url) : null;
   const station = data.channel?.name ?? "We Are Radio";
   const programmeTitle: string | null = data.programme?.id ? data.programme.title : null;
-  const meta = [now?.album_title, programmeTitle].filter(Boolean).join("  ·  ");
+  const meta = [now?.artist, now?.album_title, programmeTitle].filter(Boolean).join("  ·  ");
   const duration: number = now?.duration_seconds ?? 0;
 
   // Focus, Escape to close, and no scrolling of the page behind.

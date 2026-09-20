@@ -25,6 +25,8 @@ import { ProgrammeBuilder } from "./studio/pages/ProgrammeBuilder";
 import { AudioAssets } from "./studio/pages/AudioAssets";
 import { PodcastImporter } from "./studio/pages/PodcastImporter";
 import { PodcastEpisodes } from "./studio/pages/PodcastEpisodes";
+import { BulkImport } from "./studio/pages/BulkImport";
+import { Drafts } from "./studio/pages/Drafts";
 import { UploadAudioAsset } from "./studio/pages/UploadAudioAsset";
 import { Guide } from "./studio/pages/Guide";
 import { Albums as StudioAlbums } from "./studio/pages/Albums";
@@ -67,6 +69,8 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
             Dashboard
           </NavLink>
           <NavLink to="/studio/publish">Publish Music</NavLink>
+          <NavLink to="/studio/bulk-import">Bulk Import</NavLink>
+          <NavLink to="/studio/drafts">Drafts</NavLink>
           <NavLink to="/studio/tracks">Music</NavLink>
           <NavLink to="/studio/albums">Albums</NavLink>
           <NavLink to="/studio/audio">Audio</NavLink>
@@ -96,6 +100,8 @@ function StudioApp() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="publish" element={<PublishWizard />} />
+        <Route path="bulk-import" element={<BulkImport />} />
+        <Route path="drafts" element={<Drafts />} />
         <Route path="tracks" element={<Tracks />} />
         <Route path="tracks/upload" element={<UploadTrack />} />
         <Route path="albums" element={<StudioAlbums />} />

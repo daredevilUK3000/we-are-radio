@@ -44,6 +44,8 @@ export interface Track {
   release_date: string | null;
   created_at: string;
   updated_at: string;
+  artist: string | null;
+  content_hash: string | null;
 }
 
 export interface Channel {

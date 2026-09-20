@@ -2166,3 +2166,129 @@ td {
     opacity: 0.35;
   }
 }
+
+/* ---- Studio: Bulk Import / Drafts ---- */
+
+.bi-page .bi-card {
+  margin-bottom: 16px;
+}
+
+.bi-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.bi-action > label:first-child {
+  width: 110px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.bi-action input:not([type="checkbox"]),
+.bi-action select {
+  min-width: 160px;
+}
+
+.bi-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.bi-gridbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+}
+
+.bi-grid {
+  table-layout: fixed;
+}
+
+.bi-grid th,
+.bi-grid td {
+  padding: 4px 6px;
+  vertical-align: middle;
+}
+
+.bi-grid td input:not([type="checkbox"]),
+.bi-grid td select {
+  width: 100%;
+  min-width: 0;
+}
+
+.bi-row.selected {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.bi-row.playing {
+  background: rgba(225, 29, 46, 0.1);
+}
+
+.bi-num {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: right;
+}
+
+.bi-file {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bi-play {
+  padding: 4px 10px;
+  min-width: 36px;
+}
+
+.bi-status {
+  font-size: 0.8rem;
+}
+
+.bi-progress {
+  display: block;
+  height: 6px;
+  width: 100%;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.bi-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.bi-progress-wide {
+  height: 8px;
+  margin-bottom: 6px;
+}
+
+.bi-upload {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-bottom: 16px;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.bi-save {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.bi-save-error {
+  color: var(--accent);
+}

@@ -120,6 +120,45 @@ export const studioApi = {
   logout: () => request<{ ok: true }>(`${STUDIO_BASE}/auth/logout`, { method: "POST" }),
 
   tracks: () => request<{ tracks: any[] }>(`${STUDIO_BASE}/tracks`),
+  tracksByStatus: (status: string) =>
+    request<{ tracks: any[] }>(`${STUDIO_BASE}/tracks?status=${encodeURIComponent(status)}`),
+  deleteTrack: (id: string) => request<{ ok: true }>(`${STUDIO_BASE}/tracks/${id}`, { method: "DELETE" }),
+
+  // Bulk Import (see worker/src/routes/bulkImport.ts)
+  bulkLookup: (fileKeys: string[]) =>
+    request<{ rows: any[] }>(`${STUDIO_BASE}/bulk-import/rows/lookup`, {
+      method: "POST",
+      body: JSON.stringify({ file_keys: fileKeys }),
+    }),
+  bulkSave: (rows: Record<string, unknown>[]) =>
+    request<{ saved: number }>(`${STUDIO_BASE}/bulk-import/rows/save`, {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+    }),
+  bulkPresign: (files: { filename: string; content_type: string }[]) =>
+    request<{ uploads: { key: string; content_type: string; upload_url: string }[] }>(
+      `${STUDIO_BASE}/bulk-import/presign`,
+      { method: "POST", body: JSON.stringify({ files }) }
+    ),
+  bulkComplete: (data: Record<string, unknown>) =>
+    request<{ track_id: string; already_imported?: boolean }>(`${STUDIO_BASE}/bulk-import/complete`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  bulkDuplicates: (hashes: string[]) =>
+    request<{ matches: { hash: string; track_id: string; title: string; status: string }[] }>(
+      `${STUDIO_BASE}/bulk-import/duplicates`,
+      { method: "POST", body: JSON.stringify({ hashes }) }
+    ),
+  bulkBackfill: () =>
+    request<{ hashed: number; remaining: number }>(`${STUDIO_BASE}/bulk-import/backfill-hashes`, {
+      method: "POST",
+      body: JSON.stringify({ limit: 5 }),
+    }),
+  bulkSummary: () =>
+    request<{ typed_not_uploaded: number; uploaded: number; drafts: number; unfingerprinted: number }>(
+      `${STUDIO_BASE}/bulk-import/summary`
+    ),
   createTrack: (data: Record<string, unknown>) =>
     request<{ id: string }>(`${STUDIO_BASE}/tracks`, { method: "POST", body: JSON.stringify(data) }),
   updateTrack: (id: string, data: Record<string, unknown>) =>

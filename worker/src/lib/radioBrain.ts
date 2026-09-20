@@ -24,6 +24,7 @@ export interface RotationItem {
   artwork_url: string | null;
   overlays?: RotationOverlay[];
   // Filled in when a now-playing response is built (not stored in cached rotations):
+  artist?: string | null;
   album_id?: string | null;
   album_title?: string | null;
 }

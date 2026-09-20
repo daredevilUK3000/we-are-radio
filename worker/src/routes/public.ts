@@ -72,7 +72,7 @@ publicRoutes.get("/tracks", async (c) => {
     sql += " AND title LIKE ?";
     params.push(`%${q}%`);
   }
-  sql += " ORDER BY created_at DESC LIMIT 200";
+  sql += " ORDER BY created_at DESC LIMIT 1000";
   const { results } = await c.env.DB.prepare(sql).bind(...params).all();
   return c.json({ tracks: results });
 });
@@ -413,16 +413,25 @@ async function describePlayback(db: D1Database, items: RotationItem[], currentIn
   const trackIds = Array.from(
     new Set([now, upNext, ...comingUp].map((i) => i?.track_id).filter((id): id is string => !!id))
   );
-  const albumByTrack = new Map<string, { album_id: string | null; album_title: string | null; album_artwork_url: string | null }>();
+  const albumByTrack = new Map<
+    string,
+    { artist: string | null; album_id: string | null; album_title: string | null; album_artwork_url: string | null }
+  >();
   if (trackIds.length > 0) {
     const { results } = await db
       .prepare(
-        `SELECT t.id, t.album_id, a.title AS album_title, a.artwork_url AS album_artwork_url
+        `SELECT t.id, t.artist, t.album_id, a.title AS album_title, a.artwork_url AS album_artwork_url
          FROM tracks t LEFT JOIN albums a ON a.id = t.album_id
          WHERE t.id IN (${trackIds.map(() => "?").join(",")})`
       )
       .bind(...trackIds)
-      .all<{ id: string; album_id: string | null; album_title: string | null; album_artwork_url: string | null }>();
+      .all<{
+        id: string;
+        artist: string | null;
+        album_id: string | null;
+        album_title: string | null;
+        album_artwork_url: string | null;
+      }>();
     for (const row of results) albumByTrack.set(row.id, row);
   }
 
@@ -431,6 +440,7 @@ async function describePlayback(db: D1Database, items: RotationItem[], currentIn
     const album = item.track_id ? albumByTrack.get(item.track_id) : undefined;
     return {
       ...item,
+      artist: album?.artist ?? null,
       album_id: album?.album_id ?? null,
       album_title: album?.album_title ?? null,
       artwork_url: item.artwork_url ?? album?.album_artwork_url ?? null,
