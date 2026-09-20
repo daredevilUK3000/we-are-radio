@@ -5,7 +5,7 @@ import { HeroBackdrop } from "../components/HeroBackdrop";
 import { EyebrowPill } from "../components/BrandMark";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { CHANNEL_LABELS } from "../lib/channelLabels";
-import { FeaturedAlbumSection, PodcastShowcase, WaysToListen } from "../components/HomeSections";
+import { FeaturedAlbumSection, PodcastShowcase, TimeCapsuleBanner, WaysToListen } from "../components/HomeSections";
 
 // The network was designed from day one with six channels total (see
 // migrations/0001_init.sql) - only `live` ones are ever named to listeners,
@@ -136,6 +136,7 @@ export function Home() {
       {featured?.album && <FeaturedAlbumSection album={featured.album} tracks={featured.tracks} />}
       {podcasts && podcasts.recent.length > 0 && <PodcastShowcase shows={podcasts.shows} recent={podcasts.recent} />}
       <WaysToListen channels={channels} />
+      <TimeCapsuleBanner />
     </div>
   );
 }

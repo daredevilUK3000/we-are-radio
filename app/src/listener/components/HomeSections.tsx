@@ -383,3 +383,35 @@ export function WaysToListen({ channels }: { channels: any[] }) {
     </section>
   );
 }
+
+const CapsuleIcon = () => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="5" width="18" height="16" rx="2.5" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+    <line x1="8" y1="3" x2="8" y2="7" />
+    <line x1="16" y1="3" x2="16" y2="7" />
+    <path d="M12 18.2s-3-1.9-3-4a1.7 1.7 0 0 1 3-1 1.7 1.7 0 0 1 3 1c0 2.1-3 4-3 4z" />
+  </svg>
+);
+
+/** Invites listeners to ask for a message from Kizzi on a date that matters. */
+export function TimeCapsuleBanner() {
+  return (
+    <section className="home-section">
+      <Link to="/time-capsule" className="tcb" style={tint("#c084fc", "rgba(192, 132, 252, 0.14)")}>
+        <span className="wl-icon">
+          <CapsuleIcon />
+        </span>
+        <span className="tcb-body">
+          <span className="tcb-eyebrow">Time Capsule</span>
+          <span className="tcb-title">A message on the radio, on the day that matters</span>
+          <span className="tcb-desc">
+            A birthday, a get-well, an anniversary. Tell us who it's for and when, and Kizzi records a short message that goes
+            out on We Are Radio on that date.
+          </span>
+        </span>
+        <span className="tcb-cta">Request a time capsule &rarr;</span>
+      </Link>
+    </section>
+  );
+}

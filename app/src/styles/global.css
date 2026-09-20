@@ -2700,3 +2700,81 @@ td {
   border-radius: 3px;
   margin-right: 5px;
 }
+
+/* ---- Home: Time Capsule banner ---- */
+
+.tcb {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  text-decoration: none;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 22px 26px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.tcb:hover {
+  transform: translateY(-3px);
+  border-color: var(--tint);
+}
+
+.tcb .wl-icon {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+}
+
+.tcb-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tcb-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tint);
+}
+
+.tcb-title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1.25rem;
+}
+
+.tcb-desc {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  max-width: 62ch;
+}
+
+.tcb-cta {
+  flex: none;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--tint);
+  color: var(--tint);
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.tcb:hover .tcb-cta {
+  background: var(--tint-soft);
+}
+
+@media (max-width: 720px) {
+  .tcb {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+}
