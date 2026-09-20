@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { studioApi, uploadFileToR2 } from "../../api/client";
 import { recordingToWav } from "../lib/wav";
 
@@ -45,6 +45,28 @@ export function RecordLink() {
   const [publish, setPublish] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
+
+  // Recording for a Time Capsule request (?capsule=ID): the page is pre-filled
+  // with the request, and the recording is attached to it and, by default,
+  // scheduled for its date - instead of going into the spoken-link bank.
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const capsuleId = searchParams.get("capsule");
+  const [capsule, setCapsule] = useState<any>(null);
+  const [scheduleNow, setScheduleNow] = useState(true);
+  const capsuleRef = useRef<any>(null);
+  capsuleRef.current = capsule;
+  useEffect(() => {
+    if (!capsuleId) return;
+    studioApi
+      .timeCapsules()
+      .then((r) => {
+        const found = r.capsules.find((c: any) => c.id === capsuleId);
+        setCapsule(found ?? null);
+        if (found) setTitle(`Time capsule - ${found.occasion_label}`);
+      })
+      .catch(() => {});
+  }, [capsuleId]);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -120,7 +142,8 @@ export function RecordLink() {
       timerRef.current = window.setInterval(() => {
         const s = (Date.now() - startedAt.current) / 1000;
         setSeconds(s);
-        if (s >= MAX_SECONDS) stopRecording();
+        // A capsule message can run longer than a spoken link.
+        if (s >= (capsuleRef.current ? 120 : MAX_SECONDS)) stopRecording();
       }, 200);
     } catch {
       releaseMic();
@@ -141,15 +164,40 @@ export function RecordLink() {
       const safe = title.trim().replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 40) || "link";
       const presigned = await studioApi.presignUpload(`link-${safe}.wav`, "audio/wav", "audio");
       await uploadFileToR2(presigned.upload_url, new File([wav.blob], `link-${safe}.wav`, { type: "audio/wav" }));
-      const { id } = await studioApi.createAudioAsset({
-        type: "link",
-        link_kind: kind,
-        title: title.trim(),
-        description: said.trim() || null,
-        duration_seconds: Math.max(1, Math.round(wav.seconds)),
-        audio_url: presigned.key,
-        status: publish ? "published" : "ready",
-      });
+      const { id } = await studioApi.createAudioAsset(
+        capsule
+          ? {
+              type: "feature",
+              title: title.trim().slice(0, 140),
+              description: `For ${capsule.recipient_name}`,
+              duration_seconds: Math.max(1, Math.round(wav.seconds)),
+              audio_url: presigned.key,
+              status: "published",
+            }
+          : {
+              type: "link",
+              link_kind: kind,
+              title: title.trim(),
+              description: said.trim() || null,
+              duration_seconds: Math.max(1, Math.round(wav.seconds)),
+              audio_url: presigned.key,
+              status: publish ? "published" : "ready",
+            }
+      );
+      if (capsule) {
+        // Attach it to the request; schedule it if the date hasn't passed and Kizzi wants that.
+        const canSchedule = scheduleNow && capsule.scheduled_date >= new Date().toISOString().slice(0, 10);
+        try {
+          await studioApi.updateTimeCapsule(capsule.id, { audio_asset_id: id, status: canSchedule ? "scheduled" : "recorded" });
+        } catch (err) {
+          // The station's calendar is London time, so the server may consider the date already passed:
+          // keep the recording attached rather than losing it.
+          if (!canSchedule) throw err;
+          await studioApi.updateTimeCapsule(capsule.id, { audio_asset_id: id, status: "recorded" });
+        }
+        navigate("/studio/time-capsules");
+        return;
+      }
       if (needs.length > 0) await studioApi.setAudioAssetTags(id, needs);
       setSavedCount((n) => n + 1);
       setWav(null);
@@ -169,18 +217,36 @@ export function RecordLink() {
   return (
     <div style={{ maxWidth: 720 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <h1 style={{ margin: 0 }}>Record a spoken link</h1>
-        <Link to="/studio/audio?tab=spoken" className="btn">
-          Back to spoken audio
+        <h1 style={{ margin: 0 }}>{capsule ? "Record a time capsule" : "Record a spoken link"}</h1>
+        <Link to={capsule ? "/studio/time-capsules" : "/studio/audio?tab=spoken"} className="btn">
+          {capsule ? "Back to time capsules" : "Back to spoken audio"}
         </Link>
       </div>
+      {capsule ? (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div style={{ color: "var(--text-dim)", fontSize: "0.85rem" }}>
+            Goes out on {new Date(`${capsule.scheduled_date}T12:00:00Z`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}
+          </div>
+          <h3 style={{ margin: "4px 0" }}>{capsule.occasion_label}</h3>
+          <div>
+            For <strong>{capsule.recipient_name}</strong> · requested by {capsule.requester_name}
+          </div>
+          {capsule.message_note && (
+            <blockquote style={{ margin: "10px 0 0", padding: "6px 12px", borderLeft: "3px solid var(--border)", color: "var(--text-dim)", whiteSpace: "pre-wrap" }}>
+              {capsule.message_note}
+            </blockquote>
+          )}
+        </div>
+      ) : (
       <p style={{ color: "var(--text-dim)" }}>
         Short clips in your own voice that the radio drops into a listener's personal programme: an intro, a bridge between
         songs, a fun fact, a goodbye. Record a good batch of each kind and the programmes will sound like you presented them.
         Keep each one short - a few seconds to about half a minute.
       </p>
+      )}
 
       <div className="card" style={{ display: "grid", gap: 14 }}>
+        {!capsule && (
         <div className="form-row" style={{ marginBottom: 0 }}>
           <label>What kind of link is it?</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -192,7 +258,9 @@ export function RecordLink() {
           </div>
           <small style={{ color: "var(--text-dim)" }}>{kindInfo?.hint}</small>
         </div>
+        )}
 
+        {!capsule && (
         <div className="form-row" style={{ marginBottom: 0 }}>
           <label>Which moods is it for?</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -211,15 +279,18 @@ export function RecordLink() {
             Pick the moods it suits. Leave them all off for a link that works with anything.
           </small>
         </div>
+        )}
 
         <div className="form-row" style={{ marginBottom: 0 }}>
           <label>Give it a name (only you see this)</label>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Friday intro - big energy" disabled={busy} />
         </div>
+        {!capsule && (
         <div className="form-row" style={{ marginBottom: 0 }}>
           <label>What you say (optional, to help you find it later)</label>
           <textarea value={said} onChange={(e) => setSaid(e.target.value)} rows={2} disabled={busy} />
         </div>
+        )}
 
         <div>
           {stage === "idle" && (
@@ -246,13 +317,20 @@ export function RecordLink() {
               <span style={{ color: "var(--text-dim)" }}>Recorded {wav.seconds.toFixed(1)} seconds. Have a listen:</span>
               <audio controls src={previewUrl} style={{ width: "100%" }} />
               {wav.seconds > 40 && <span style={{ color: "#f0a12a" }}>That's quite long for a link - shorter ones work better.</span>}
-              <label className="bi-inline">
-                <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.target.checked)} /> add straight to the link bank
-                (live in listeners' programmes)
-              </label>
+              {capsule ? (
+                <label className="bi-inline">
+                  <input type="checkbox" checked={scheduleNow} onChange={(e) => setScheduleNow(e.target.checked)} /> schedule it for its
+                  date straight away
+                </label>
+              ) : (
+                <label className="bi-inline">
+                  <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.target.checked)} /> add straight to the link bank
+                  (live in listeners' programmes)
+                </label>
+              )}
               <div style={{ display: "flex", gap: 10 }}>
                 <button className="btn primary" onClick={save} disabled={saving || !title.trim()}>
-                  {saving ? "Saving..." : "Save link"}
+                  {saving ? "Saving..." : capsule ? "Save time capsule" : "Save link"}
                 </button>
                 <button className="btn" onClick={() => { setWav(null); setStage("idle"); }} disabled={saving}>
                   Re-record

@@ -66,6 +66,11 @@ export const publicApi = {
   search: (q: string) => request<{ tracks: any[]; albums: any[]; programmes: any[] }>(
     `${API_BASE}/search?q=${encodeURIComponent(q)}`
   ),
+  requestTimeCapsule: (data: Record<string, unknown>) =>
+    request<{ ok: true; scheduled_date?: string }>(`${API_BASE}/time-capsules`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   needs: () => request<{ needs: { key: string; label: string; emoji: string; blurb: string }[] }>(`${API_BASE}/needs`),
   radioForYou: (need: string, minutes: number, band?: string) =>
     request<{ programme: any | null; items: any[]; message?: string }>(`${API_BASE}/radio-for-you`, {
@@ -214,6 +219,13 @@ export const studioApi = {
     request<{ audio_assets: any[] }>(`${STUDIO_BASE}/audio-assets${opts?.storage ? `?storage=${opts.storage}` : ""}`),
   createAudioAsset: (data: Record<string, unknown>) =>
     request<{ id: string }>(`${STUDIO_BASE}/audio-assets`, { method: "POST", body: JSON.stringify(data) }),
+  timeCapsules: () => request<{ capsules: any[]; today: string }>(`${STUDIO_BASE}/time-capsules`),
+  createTimeCapsule: (data: Record<string, unknown>) =>
+    request<{ id: string }>(`${STUDIO_BASE}/time-capsules`, { method: "POST", body: JSON.stringify(data) }),
+  updateTimeCapsule: (id: string, data: Record<string, unknown>) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/time-capsules/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteTimeCapsule: (id: string) => request<{ ok: true }>(`${STUDIO_BASE}/time-capsules/${id}`, { method: "DELETE" }),
+
   programmeTitles: () => request<{ titles: any[] }>(`${STUDIO_BASE}/programme-titles`),
   createProgrammeTitle: (data: { need: string; title: string; time_band: string | null }) =>
     request<{ id: string }>(`${STUDIO_BASE}/programme-titles`, { method: "POST", body: JSON.stringify(data) }),

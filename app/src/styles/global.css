@@ -2495,3 +2495,208 @@ td {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Time Capsule: the public request form
+   ========================================================================== */
+
+.tc {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 10px 4px 60px;
+}
+
+.tc-steps {
+  margin: 0 0 24px;
+  padding-left: 22px;
+  color: var(--text-dim);
+  display: grid;
+  gap: 6px;
+}
+
+.tc-steps strong {
+  color: var(--text);
+}
+
+.tc-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 26px;
+  display: grid;
+  gap: 16px;
+}
+
+.tc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.tc-field {
+  display: grid;
+  gap: 6px;
+}
+
+.tc-field > span {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.tc-field small,
+.tc-fine {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.tc-field input,
+.tc-field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+}
+
+.tc-field input:focus,
+.tc-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tc-hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.tc-error {
+  color: #f0a12a;
+  margin: 0;
+}
+
+.tc-actions {
+  display: flex;
+}
+
+.tc-sent-line {
+  font-size: 1.1rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .tc-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Studio: Time Capsules calendar ---- */
+
+.tcal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.tcal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.tcal-dow {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2px 0 4px;
+}
+
+.tcal-cell {
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: 5px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.tcal-blank {
+  border-color: transparent;
+  cursor: default;
+}
+
+.tcal-cell:hover:not(.tcal-blank) {
+  border-color: var(--accent-dim);
+}
+
+.tcal-cell.today {
+  border-color: var(--text-dim);
+}
+
+.tcal-cell.selected {
+  border-color: var(--accent);
+  background: rgba(225, 29, 46, 0.08);
+}
+
+.tcal-day {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.tcal-cell.has .tcal-day {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.tcal-chip {
+  display: block;
+  font-size: 0.66rem;
+  line-height: 1.25;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #0a0a0c;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tcal-more {
+  font-size: 0.66rem;
+  color: var(--text-dim);
+}
+
+.tcal-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.tcal-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 5px;
+}

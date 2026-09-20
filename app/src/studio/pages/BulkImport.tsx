@@ -815,6 +815,25 @@ export function BulkImport() {
     [includeDupes, patchRow]
   );
 
+  // Uploading with no album is easy to do by accident (choosing an album in the
+  // box above does nothing until Apply is pressed), so ask before it happens.
+  const beginUpload = (keys: string[]) => {
+    const wanted = new Set(keys);
+    const noAlbum = rowsRef.current.filter((r) => wanted.has(r.key) && !r.albumId).length;
+    if (noAlbum > 0) {
+      const hint = albumChoice
+        ? `\n\nYou have chosen an album in step 2 but it only applies once you press "Apply to all" or "Apply to selected".`
+        : "";
+      const ok = window.confirm(
+        `${noAlbum} of these ${keys.length} track${keys.length === 1 ? " has" : "s have"} no album, so ${
+          noAlbum === 1 ? "it" : "they"
+        } won't appear on any album page.${hint}\n\nUpload anyway?`
+      );
+      if (!ok) return;
+    }
+    void startUpload(keys);
+  };
+
   const startUpload = useCallback(
     async (keys: string[]) => {
       if (keys.length === 0) return;
@@ -1256,27 +1275,36 @@ export function BulkImport() {
               <button
                 className="btn"
                 disabled={selectedReady.length === 0}
-                onClick={() => startUpload(selectedReady.map((r) => r.key))}
+                onClick={() => beginUpload(selectedReady.map((r) => r.key))}
               >
                 Upload selected ({selectedReady.length})
               </button>
               <button
                 className="btn"
                 disabled={readyRows.length === 0}
-                onClick={() => startUpload(readyRows.slice(0, 50).map((r) => r.key))}
+                onClick={() => beginUpload(readyRows.slice(0, 50).map((r) => r.key))}
               >
                 Upload next {Math.min(50, readyRows.length)}
               </button>
               <button
                 className="btn primary"
                 disabled={readyRows.length === 0}
-                onClick={() => startUpload(readyRows.map((r) => r.key))}
+                onClick={() => beginUpload(readyRows.map((r) => r.key))}
               >
                 Upload all ready ({readyRows.length})
               </button>
             </>
           )}
         </div>
+        {readyRows.length > 0 && !run?.active && readyRows.some((r) => !r.albumId) && (
+          <p style={{ margin: "8px 0 0", fontSize: "0.85rem", color: "#f0a12a" }}>
+            {readyRows.filter((r) => !r.albumId).length} ready row{readyRows.filter((r) => !r.albumId).length === 1 ? " has" : "s have"} no
+            album yet.
+            {albumChoice
+              ? " You've chosen an album in step 2 - press \"Apply to all\" (or \"Apply to selected\") to assign it."
+              : ""}
+          </p>
+        )}
         {rows.length > 0 && readyRows.length === 0 && !run?.active && (
           <p style={{ margin: "8px 0 0", fontSize: "0.85rem", color: "#f0a12a" }}>
             Nothing is ready to upload yet:{" "}

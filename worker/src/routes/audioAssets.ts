@@ -10,7 +10,8 @@ audioAssetRoutes.get("/", async (c) => {
   let sql = `SELECT aa.*,
       (SELECT GROUP_CONCAT(tg.name) FROM audio_asset_tags aat
        JOIN tags tg ON tg.id = aat.tag_id WHERE aat.audio_asset_id = aa.id) as tag_names,
-      (SELECT COUNT(*) FROM track_jingles tj WHERE tj.audio_asset_id = aa.id) as pin_count
+      (SELECT COUNT(*) FROM track_jingles tj WHERE tj.audio_asset_id = aa.id) as pin_count,
+      (SELECT COUNT(*) FROM time_capsules tc WHERE tc.audio_asset_id = aa.id) as capsule_count
     FROM audio_assets aa WHERE 1=1`;
   const params: unknown[] = [];
   if (type) {
@@ -25,7 +26,7 @@ audioAssetRoutes.get("/", async (c) => {
   }
   sql += " ORDER BY created_at DESC LIMIT 200";
 
-  const { results } = await c.env.DB.prepare(sql).bind(...params).all<AudioAsset & { tag_names: string | null; pin_count: number }>();
+  const { results } = await c.env.DB.prepare(sql).bind(...params).all<AudioAsset & { tag_names: string | null; pin_count: number; capsule_count: number }>();
   return c.json({ audio_assets: results });
 });
 

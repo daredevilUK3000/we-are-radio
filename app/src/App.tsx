@@ -9,6 +9,7 @@ import { Podcasts } from "./listener/pages/Podcasts";
 import { Search } from "./listener/pages/Search";
 import { MyRadio } from "./listener/pages/MyRadio";
 import { RadioForYou } from "./listener/pages/RadioForYou";
+import { TimeCapsule } from "./listener/pages/TimeCapsule";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
 import { ListenerAuthProvider } from "./listener/auth/ListenerAuthContext";
 import { FavouritesProvider } from "./listener/favourites/FavouritesContext";
@@ -29,6 +30,7 @@ import { BulkImport } from "./studio/pages/BulkImport";
 import { Drafts } from "./studio/pages/Drafts";
 import { RecordLink } from "./studio/pages/RecordLink";
 import { ProgrammeTitles } from "./studio/pages/ProgrammeTitles";
+import { TimeCapsules } from "./studio/pages/TimeCapsules";
 import { UploadAudioAsset } from "./studio/pages/UploadAudioAsset";
 import { Guide } from "./studio/pages/Guide";
 import { Albums as StudioAlbums } from "./studio/pages/Albums";
@@ -77,6 +79,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/studio/albums">Albums</NavLink>
           <NavLink to="/studio/audio">Audio</NavLink>
           <NavLink to="/studio/record-link">Record a Link</NavLink>
+          <NavLink to="/studio/time-capsules">Time Capsules</NavLink>
           <NavLink to="/studio/channels">Channels</NavLink>
           <NavLink to="/studio/programmes">Programmes</NavLink>
           <NavLink to="/studio/programme-titles">Programme Titles</NavLink>
@@ -107,6 +110,7 @@ function StudioApp() {
         <Route path="bulk-import" element={<BulkImport />} />
         <Route path="drafts" element={<Drafts />} />
         <Route path="record-link" element={<RecordLink />} />
+        <Route path="time-capsules" element={<TimeCapsules />} />
         <Route path="programme-titles" element={<ProgrammeTitles />} />
         <Route path="tracks" element={<Tracks />} />
         <Route path="tracks/upload" element={<UploadTrack />} />
@@ -154,6 +158,7 @@ export default function App() {
                     <Route path="search" element={<Search />} />
                     <Route path="my-radio" element={<MyRadio />} />
                     <Route path="my-mood" element={<RadioForYou />} />
+                    <Route path="time-capsule" element={<TimeCapsule />} />
                   </Routes>
                 </ListenerLayout>
               </ActiveChannelProvider>

@@ -57,7 +57,8 @@ export function AudioAssets() {
   // managed on the Podcasts page - only files uploaded here belong in this list.
   const load = () =>
     studioApi.audioAssets({ storage: "r2" }).then((r) => {
-      setAssets(r.audio_assets);
+      // Recordings made for a Time Capsule are managed on that page, not here.
+      setAssets(r.audio_assets.filter((a: any) => !a.capsule_count));
       setLoaded(true);
     });
   useEffect(() => {

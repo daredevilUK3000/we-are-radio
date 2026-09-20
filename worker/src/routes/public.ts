@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import type { Env, Programme, Channel, Track, AudioAsset } from "../lib/types";
 import { findNeed, NEEDS, NEED_KEYS } from "../lib/needs";
+import { addDays, loadTodaysCapsules, parseCapsuleFields, stationToday, withCapsules } from "../lib/capsules";
+import { newId, nowIso } from "../lib/id";
 import {
   buildRotation,
   buildSession,
@@ -303,9 +305,14 @@ publicRoutes.get("/now-playing", async (c) => {
     artwork_url: row.track_artwork_url,
   }));
   // Pinned jingles play over their song here too, not just on autopilot channels.
-  const items = withPinnedJingles(baseItems, await loadPinnedJingles(c.env.DB));
+  // Time capsules due today are dropped into the loop like station IDs.
+  const items = withCapsules(
+    withPinnedJingles(baseItems, await loadPinnedJingles(c.env.DB)),
+    await loadTodaysCapsules(c.env.DB)
+  );
+  const loopSeconds = items.reduce((sum, i) => sum + i.duration_seconds, 0) || programme.duration_seconds;
   const publishedAt = programme.publish_date ? new Date(programme.publish_date).getTime() : Date.now();
-  const elapsed = Math.floor(((Date.now() - publishedAt) / 1000) % programme.duration_seconds);
+  const elapsed = Math.floor(((Date.now() - publishedAt) / 1000) % loopSeconds);
   const { currentIndex, position_seconds } = locateInLoop(items, elapsed);
 
   return c.json({
@@ -372,11 +379,14 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
     .map((p) => `${p.track_id}>${p.asset_id}@${p.start_offset_seconds}:${p.duck_level}:${p.duck_fade_ms}`)
     .sort()
     .join(",");
-  const cacheKey = `radio-brain:${channel.id}:${hashSeed(fingerprint + "|" + playbackConfig + "|" + pinsConfig)}`;
+  // Today's time capsules are part of the rotation, so which ones are due is part of the key too.
+  const capsules = await loadTodaysCapsules(db);
+  const capsuleConfig = capsules.map((cp) => cp.id).join(",");
+  const cacheKey = `radio-brain:${channel.id}:${hashSeed(fingerprint + "|" + playbackConfig + "|" + pinsConfig + "|" + capsuleConfig)}`;
 
   let items = await kv.get<RotationItem[]>(cacheKey, "json");
   if (!items) {
-    items = buildRotation(seedKey, tracks, stationIds, pins);
+    items = withCapsules(buildRotation(seedKey, tracks, stationIds, pins), capsules);
     await kv.put(cacheKey, JSON.stringify(items), { expirationTtl: 60 * 60 * 24 * 30 });
   }
 
@@ -646,6 +656,63 @@ publicRoutes.post("/radio-for-you", async (c) => {
     },
     items: built.items,
   });
+});
+
+/**
+ * Time Capsules: the public request form. No login, and deliberately NOT an
+ * upload: a listener describes what they'd like said and on which date, and
+ * Kizzi records or approves the audio in the Studio before anything is
+ * scheduled - so nothing unreviewed can ever go out on air.
+ *
+ * Open, unauthenticated writes need guarding: a hidden field bots fill in,
+ * a small per-visitor rate limit, hard length limits (see parseCapsuleFields),
+ * and a ceiling on how many unanswered requests can pile up.
+ */
+publicRoutes.post("/time-capsules", async (c) => {
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+
+  // A real person never sees this field; a form-filling bot does. Pretend it worked.
+  if (String(body.website ?? "").trim() !== "") return c.json({ ok: true });
+
+  const today = stationToday();
+  const parsed = parseCapsuleFields(body, { earliest: addDays(today, 1), latest: addDays(today, 730) });
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+
+  // Per-visitor limit (a hash of the address, never the address itself).
+  const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`capsule:${ip}`));
+  const who = Array.from(new Uint8Array(digest).slice(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
+  const hourKey = `capsule-rate:${who}:h:${new Date().toISOString().slice(0, 13)}`;
+  const dayKey = `capsule-rate:${who}:d:${new Date().toISOString().slice(0, 10)}`;
+  const [hourCount, dayCount] = await Promise.all([c.env.CONFIG.get(hourKey), c.env.CONFIG.get(dayKey)]);
+  if (Number(hourCount ?? 0) >= 3 || Number(dayCount ?? 0) >= 8) {
+    return c.json({ error: "You've sent a few requests already - please try again a little later." }, 429);
+  }
+
+  const { results: open } = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM time_capsules WHERE status = 'requested'"
+  ).all<{ n: number }>();
+  if ((open[0]?.n ?? 0) >= 400) {
+    return c.json({ error: "Time capsules are very busy right now - please try again soon." }, 503);
+  }
+
+  const v = parsed.value;
+  const id = newId("cap");
+  const ts = nowIso();
+  await c.env.DB.prepare(
+    `INSERT INTO time_capsules (id, requester_name, recipient_name, occasion_label, message_note, notify_email,
+                                scheduled_date, status, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?, 'requested', ?, ?)`
+  )
+    .bind(id, v.requester_name, v.recipient_name, v.occasion_label, v.message_note, v.notify_email, v.scheduled_date, ts, ts)
+    .run();
+
+  await Promise.all([
+    c.env.CONFIG.put(hourKey, String(Number(hourCount ?? 0) + 1), { expirationTtl: 60 * 60 * 2 }),
+    c.env.CONFIG.put(dayKey, String(Number(dayCount ?? 0) + 1), { expirationTtl: 60 * 60 * 26 }),
+  ]);
+
+  return c.json({ ok: true, scheduled_date: v.scheduled_date });
 });
 
 /**

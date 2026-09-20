@@ -20,6 +20,7 @@ import { historyRoutes } from "./routes/history";
 import { podcastImportRoutes } from "./routes/podcastImport";
 import { bulkImportRoutes } from "./routes/bulkImport";
 import { programmeTitleRoutes } from "./routes/programmeTitles";
+import { timeCapsuleRoutes } from "./routes/timeCapsules";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -60,6 +61,7 @@ studio.route("/ai", aiRoutes);
 studio.route("/podcast-import", podcastImportRoutes);
 studio.route("/bulk-import", bulkImportRoutes);
 studio.route("/programme-titles", programmeTitleRoutes);
+studio.route("/time-capsules", timeCapsuleRoutes);
 app.route("/studio/api", studio);
 
 // Streams audio straight out of R2 - not gated on Studio auth, since
