@@ -227,8 +227,12 @@ export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => 
     }
   };
 
-  const unpinned = tracks.filter((t) => !pins.some((p) => p.track_id === t.id));
-  const pinChoiceId = unpinned.some((t) => t.id === pinChoice) ? pinChoice : (unpinned[0]?.id ?? "");
+  // Alphabetical, and no song is pre-selected: the list is newest-first, so a
+  // default would silently pin the most recently added song.
+  const unpinned = tracks
+    .filter((t) => !pins.some((p) => p.track_id === t.id))
+    .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
+  const pinChoiceId = unpinned.some((t) => t.id === pinChoice) ? pinChoice : "";
 
   const save = async () => {
     setSaving(true);
@@ -366,9 +370,10 @@ export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => 
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <select value={pinChoiceId} onChange={(e) => setPinChoice(e.target.value)} style={{ flex: 1, minWidth: 180 }} aria-label="Song to pin this jingle to">
+            <option value="">Choose a song to pin to...</option>
             {unpinned.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.title}
+                {t.album_title ? `${t.title} (${t.album_title})` : t.title}
               </option>
             ))}
           </select>

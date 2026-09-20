@@ -33,6 +33,14 @@ const TABS = {
 
 type TabKey = keyof typeof TABS;
 
+// "Cry baby", or "Cry baby, Special +2 more" - which songs a jingle is pinned to, by name.
+function pinnedSummary(titles: string | null | undefined, count: number) {
+  const names = (titles ?? "").split("|").filter(Boolean);
+  if (names.length === 0) return `${count} song${count === 1 ? "" : "s"}`;
+  const shown = names.slice(0, 2).join(", ");
+  return names.length > 2 ? `${shown} +${names.length - 2} more` : shown;
+}
+
 const TYPE_LABELS: Record<string, string> = {
   jingle: "jingle",
   station_id: "station ID",
@@ -197,8 +205,8 @@ export function AudioAssets() {
                         : "Sequenced"}
                     </span>
                     {a.pin_count > 0 && (
-                      <span className="badge live" style={{ marginLeft: 4 }}>
-                        Pinned to {a.pin_count} song{a.pin_count === 1 ? "" : "s"}
+                      <span className="badge live" style={{ marginLeft: 4 }} title={(a.pin_titles ?? "").split("|").join(", ")}>
+                        Pinned to: {pinnedSummary(a.pin_titles, a.pin_count)}
                       </span>
                     )}
                   </td>
