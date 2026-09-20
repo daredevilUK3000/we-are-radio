@@ -479,21 +479,16 @@ export function buildProgramme(opts: {
   const wanted = new Set([opts.needKey, ...opts.matchTags]);
   const used = new Set<string>();
   const pick = (kinds: string[]): LinkClip | null => {
-    // A link made for this need beats a generic (untagged) one; anything else is left out.
-    for (const specific of [true, false]) {
-      const candidates = opts.links.filter(
-        (l) =>
-          kinds.includes(l.link_kind) &&
-          !used.has(l.id) &&
-          (specific ? l.tags.some((t) => wanted.has(t)) : l.tags.length === 0)
-      );
-      if (candidates.length > 0) {
-        const chosen = candidates[Math.floor(rand() * candidates.length)];
-        used.add(chosen.id);
-        return chosen;
-      }
-    }
-    return null;
+    // A link made for this need and a generic (untagged, "suits any mood") one are equally
+    // welcome, so recordings made for any mood actually get played; links made for other
+    // needs are left out.
+    const candidates = opts.links.filter(
+      (l) => kinds.includes(l.link_kind) && !used.has(l.id) && (l.tags.length === 0 || l.tags.some((t) => wanted.has(t)))
+    );
+    if (candidates.length === 0) return null;
+    const chosen = candidates[Math.floor(rand() * candidates.length)];
+    used.add(chosen.id);
+    return chosen;
   };
   const budget = targetSeconds * LINK_BUDGET_SHARE;
   let linkSeconds = 0;
