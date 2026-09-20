@@ -8,7 +8,7 @@ import { ProgrammeDetail } from "./listener/pages/ProgrammeDetail";
 import { Podcasts } from "./listener/pages/Podcasts";
 import { Search } from "./listener/pages/Search";
 import { MyRadio } from "./listener/pages/MyRadio";
-import { SessionBuilder } from "./listener/pages/SessionBuilder";
+import { RadioForYou } from "./listener/pages/RadioForYou";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
 import { ListenerAuthProvider } from "./listener/auth/ListenerAuthContext";
 import { FavouritesProvider } from "./listener/favourites/FavouritesContext";
@@ -27,6 +27,8 @@ import { PodcastImporter } from "./studio/pages/PodcastImporter";
 import { PodcastEpisodes } from "./studio/pages/PodcastEpisodes";
 import { BulkImport } from "./studio/pages/BulkImport";
 import { Drafts } from "./studio/pages/Drafts";
+import { RecordLink } from "./studio/pages/RecordLink";
+import { ProgrammeTitles } from "./studio/pages/ProgrammeTitles";
 import { UploadAudioAsset } from "./studio/pages/UploadAudioAsset";
 import { Guide } from "./studio/pages/Guide";
 import { Albums as StudioAlbums } from "./studio/pages/Albums";
@@ -76,6 +78,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/studio/audio">Audio</NavLink>
           <NavLink to="/studio/channels">Channels</NavLink>
           <NavLink to="/studio/programmes">Programmes</NavLink>
+          <NavLink to="/studio/programme-titles">Programme Titles</NavLink>
           <NavLink to="/studio/podcasts">Podcasts</NavLink>
           <NavLink to="/studio/podcast-import">Podcast Import</NavLink>
           <NavLink to="/studio/guide">Guide</NavLink>
@@ -102,6 +105,8 @@ function StudioApp() {
         <Route path="publish" element={<PublishWizard />} />
         <Route path="bulk-import" element={<BulkImport />} />
         <Route path="drafts" element={<Drafts />} />
+        <Route path="record-link" element={<RecordLink />} />
+        <Route path="programme-titles" element={<ProgrammeTitles />} />
         <Route path="tracks" element={<Tracks />} />
         <Route path="tracks/upload" element={<UploadTrack />} />
         <Route path="albums" element={<StudioAlbums />} />
@@ -147,7 +152,7 @@ export default function App() {
                     <Route path="podcasts" element={<Podcasts />} />
                     <Route path="search" element={<Search />} />
                     <Route path="my-radio" element={<MyRadio />} />
-                    <Route path="my-mood" element={<SessionBuilder />} />
+                    <Route path="my-mood" element={<RadioForYou />} />
                   </Routes>
                 </ListenerLayout>
               </ActiveChannelProvider>

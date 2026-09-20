@@ -2292,3 +2292,196 @@ td {
 .bi-save-error {
   color: var(--accent);
 }
+
+/* ==========================================================================
+   Radio That Knows You (the My Mood page)
+   ========================================================================== */
+
+.rfy {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 10px 4px 60px;
+}
+
+.rfy-eyebrow {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.rfy-h1 {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: clamp(2rem, 6vw, 3.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.005em;
+  margin: 8px 0 10px;
+}
+
+.rfy-lede {
+  color: var(--text-dim);
+  margin: 0 0 26px;
+}
+
+.rfy-message {
+  color: #f0a12a;
+  margin: 0 0 18px;
+}
+
+.rfy-needs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.rfy-need {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  padding: 24px;
+  border-radius: 20px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rfy-need:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 12px 40px rgba(225, 29, 46, 0.18);
+}
+
+.rfy-need-emoji {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.rfy-need-label {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+}
+
+.rfy-need-blurb {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.rfy-length {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0 8px;
+  color: var(--text-dim);
+}
+
+.rfy-classic {
+  margin-top: 36px;
+  color: var(--text-dim);
+}
+
+.rfy-classic summary {
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+
+.rfy-beat {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 18px;
+  animation: npFade 0.5s ease;
+}
+
+.rfy-wave {
+  width: min(480px, 90%);
+  height: 90px;
+}
+
+.rfy-beat-title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: clamp(1.6rem, 5vw, 2.6rem);
+  letter-spacing: 0.04em;
+}
+
+.rfy-order {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.rfy-item {
+  display: grid;
+  grid-template-columns: 26px 1fr auto 60px;
+  gap: 10px;
+  align-items: baseline;
+  padding: 12px 6px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.rfy-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rfy-item.now {
+  background: rgba(225, 29, 46, 0.1);
+  border-bottom-color: var(--accent);
+}
+
+.rfy-item-icon {
+  color: var(--accent);
+  text-align: center;
+}
+
+.rfy-item-link .rfy-item-title,
+.rfy-item-station_id .rfy-item-title {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.rfy-item-kind {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rfy-item-time {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.rfy-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 26px;
+}
+
+@media (max-width: 600px) {
+  .rfy-needs {
+    grid-template-columns: 1fr;
+  }
+  .rfy-item {
+    grid-template-columns: 26px 1fr 50px;
+  }
+  .rfy-item-kind {
+    display: none;
+  }
+}

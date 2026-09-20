@@ -8,7 +8,7 @@ import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 
 const DURATIONS = [15, 30, 45, 60];
 
-export function SessionBuilder() {
+export function SessionBuilder({ embedded = false }: { embedded?: boolean }) {
   const [mood, setMood] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [session, setSession] = useState<{
@@ -67,11 +67,15 @@ export function SessionBuilder() {
 
   return (
     <div>
-      <h1>My Mood</h1>
-      <p style={{ color: "var(--text-dim)" }}>
-        Pick a mood and how long you've got - we'll put a running order together from the catalogue
-        instantly. No account needed, and every build is a fresh mix.
-      </p>
+      {!embedded && (
+        <>
+          <h1>My Mood</h1>
+          <p style={{ color: "var(--text-dim)" }}>
+            Pick a mood and how long you've got - we'll put a running order together from the catalogue
+            instantly. No account needed, and every build is a fresh mix.
+          </p>
+        </>
+      )}
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h3 style={{ marginTop: 0, marginBottom: 8 }}>Mood</h3>

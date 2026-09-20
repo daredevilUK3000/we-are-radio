@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { studioApi, uploadFileToR2 } from "../../api/client";
+import { LINK_KINDS, NEED_TAGS } from "./RecordLink";
 
 function readAudioDuration(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -35,6 +36,10 @@ export function UploadAudioAsset() {
   // start out as ordinary "sequenced" clips between songs); spoken content
   // is still reviewed and published by hand.
   const goesLive = JINGLE_TYPES.some((t) => t.value === type);
+  // A spoken link also says what it is FOR and which moods it suits, so the
+  // radio can place it in a listener's programme.
+  const [linkKind, setLinkKind] = useState("transition");
+  const [linkNeeds, setLinkNeeds] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -55,8 +60,9 @@ export function UploadAudioAsset() {
       const { upload_url, key } = await studioApi.presignUpload(audioFile.name, audioFile.type, "audio");
       await uploadFileToR2(upload_url, audioFile);
 
-      await studioApi.createAudioAsset({
+      const created = await studioApi.createAudioAsset({
         type,
+        link_kind: type === "link" ? linkKind : null,
         title,
         description: description || null,
         duration_seconds: duration,
@@ -64,6 +70,7 @@ export function UploadAudioAsset() {
         status: goesLive ? "published" : "ready",
       });
 
+      if (type === "link" && linkNeeds.length > 0) await studioApi.setAudioAssetTags(created.id, linkNeeds);
       // Straight back to the section it was uploaded into.
       navigate(spoken ? "/studio/audio?tab=spoken" : "/studio/audio");
     } catch (err) {
@@ -87,6 +94,35 @@ export function UploadAudioAsset() {
             ))}
           </select>
         </div>
+        {type === "link" && (
+          <>
+            <div className="form-row">
+              <label>What is this link for?</label>
+              <select value={linkKind} onChange={(e) => setLinkKind(e.target.value)}>
+                {LINK_KINDS.map((k) => (
+                  <option key={k.value} value={k.value}>
+                    {k.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-row">
+              <label>Which moods is it for? (none = works with anything)</label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {NEED_TAGS.map((n) => (
+                  <button
+                    key={n.key}
+                    type="button"
+                    className={`chip${linkNeeds.includes(n.key) ? " selected" : ""}`}
+                    onClick={() => setLinkNeeds((p) => (p.includes(n.key) ? p.filter((x) => x !== n.key) : [...p, n.key]))}
+                  >
+                    {n.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         <div className="form-row">
           <label>Title</label>
           <input value={title} onChange={(e) => setTitle(e.target.value)} required />

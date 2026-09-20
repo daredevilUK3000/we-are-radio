@@ -66,6 +66,12 @@ export const publicApi = {
   search: (q: string) => request<{ tracks: any[]; albums: any[]; programmes: any[] }>(
     `${API_BASE}/search?q=${encodeURIComponent(q)}`
   ),
+  needs: () => request<{ needs: { key: string; label: string; emoji: string; blurb: string }[] }>(`${API_BASE}/needs`),
+  radioForYou: (need: string, minutes: number, band?: string) =>
+    request<{ programme: any | null; items: any[]; message?: string }>(`${API_BASE}/radio-for-you`, {
+      method: "POST",
+      body: JSON.stringify({ need, minutes, band }),
+    }),
   buildSession: (mood: string, durationMinutes: number) =>
     request<{ session: { mood: string; duration_minutes: number; total_duration_seconds: number; items: any[] } | null; message?: string }>(
       `${API_BASE}/sessions`,
@@ -208,6 +214,14 @@ export const studioApi = {
     request<{ audio_assets: any[] }>(`${STUDIO_BASE}/audio-assets${opts?.storage ? `?storage=${opts.storage}` : ""}`),
   createAudioAsset: (data: Record<string, unknown>) =>
     request<{ id: string }>(`${STUDIO_BASE}/audio-assets`, { method: "POST", body: JSON.stringify(data) }),
+  programmeTitles: () => request<{ titles: any[] }>(`${STUDIO_BASE}/programme-titles`),
+  createProgrammeTitle: (data: { need: string; title: string; time_band: string | null }) =>
+    request<{ id: string }>(`${STUDIO_BASE}/programme-titles`, { method: "POST", body: JSON.stringify(data) }),
+  updateProgrammeTitle: (id: string, data: Record<string, unknown>) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/programme-titles/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteProgrammeTitle: (id: string) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/programme-titles/${id}`, { method: "DELETE" }),
+
   audioAssetPins: (id: string) =>
     request<{ pins: { track_id: string; title: string; start_offset_seconds: number }[] }>(
       `${STUDIO_BASE}/audio-assets/${id}/pins`

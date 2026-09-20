@@ -29,15 +29,20 @@ audioAssetRoutes.get("/", async (c) => {
   return c.json({ audio_assets: results });
 });
 
+const LINK_KINDS = ["intro", "transition", "fun_fact", "observation", "outro"];
+
 audioAssetRoutes.post("/", async (c) => {
   const body = await c.req.json<Partial<AudioAsset>>();
+  if (body.link_kind && !LINK_KINDS.includes(body.link_kind)) {
+    return c.json({ error: `link_kind must be one of ${LINK_KINDS.join(", ")}` }, 400);
+  }
   if (!body.type || !body.title || !body.audio_url || body.duration_seconds == null) {
     return c.json({ error: "type, title, audio_url and duration_seconds are required" }, 400);
   }
   const id = newId("aa");
   await c.env.DB.prepare(
-    `INSERT INTO audio_assets (id, type, title, audio_url, duration_seconds, description, status, created_at)
-     VALUES (?,?,?,?,?,?,?,?)`
+    `INSERT INTO audio_assets (id, type, title, audio_url, duration_seconds, description, status, link_kind, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`
   )
     .bind(
       id,
@@ -48,6 +53,7 @@ audioAssetRoutes.post("/", async (c) => {
       body.description ?? null,
       // Jingles go live on upload unless a status is given explicitly.
       body.status ?? (["jingle", "station_id", "promo"].includes(body.type) ? "published" : "draft"),
+      body.type === "link" ? body.link_kind ?? null : null,
       nowIso()
     )
     .run();
@@ -92,6 +98,9 @@ audioAssetRoutes.patch("/:id", async (c) => {
   // duck level would mute the music, a huge fade would never finish).
   if ("play_mode" in body && body.play_mode !== "sequenced" && body.play_mode !== "duck_over_music") {
     return c.json({ error: "play_mode must be 'sequenced' or 'duck_over_music'" }, 400);
+  }
+  if ("link_kind" in body && body.link_kind !== null && !LINK_KINDS.includes(String(body.link_kind))) {
+    return c.json({ error: `link_kind must be one of ${LINK_KINDS.join(", ")}` }, 400);
   }
   if ("duck_level" in body) {
     const v = Number(body.duck_level);

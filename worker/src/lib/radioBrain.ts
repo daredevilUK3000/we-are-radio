@@ -105,7 +105,7 @@ export function locateInLoop(items: RotationItem[], elapsedSeconds: number) {
 // must arrive at the identical running order, with no shared state or
 // per-play database writes (brief: "zero per-play AI calls", extended here
 // to zero per-play *anything* - this is pure arithmetic on a cached list).
-function mulberry32(seed: number) {
+export function mulberry32(seed: number) {
   return function random() {
     seed |= 0;
     seed = (seed + 0x6d2b79f5) | 0;
@@ -123,7 +123,7 @@ export function hashSeed(key: string): number {
   return h;
 }
 
-function seededShuffle<T>(arr: T[], seed: number): T[] {
+export function seededShuffle<T>(arr: T[], seed: number): T[] {
   const rand = mulberry32(seed);
   const out = [...arr];
   for (let i = out.length - 1; i > 0; i--) {
@@ -201,7 +201,7 @@ export function buildRotation(
 // swap the second one for the next track down the list that doesn't
 // collide. Bounded and best-effort - a pool dominated by one album simply
 // can't avoid every collision, and that's fine.
-function spaceOutAlbums(tracks: Track[]): Track[] {
+export function spaceOutAlbums(tracks: Track[]): Track[] {
   const out = [...tracks];
   for (let i = 1; i < out.length; i++) {
     if (!out[i].album_id || out[i].album_id !== out[i - 1].album_id) continue;
@@ -241,7 +241,7 @@ function alternateEnergy(tracks: Track[]): Track[] {
   return out;
 }
 
-function insertStationIds(
+export function insertStationIds(
   items: RotationItem[],
   stationIds: AudioAsset[],
   seed: number,
@@ -381,4 +381,178 @@ export function buildSession(
   }));
 
   return insertStationIds(withPinnedJingles(songItems, pins), stationIds, hashSeed(seedKey + ":ids"), { leading: true });
+}
+
+// --------------------------------------------------------------------------
+// "Radio That Knows You": a short produced programme for one listener.
+//
+// Everything here is a rule over the catalogue - no AI, no per-listener cost:
+//   * songs come from the tags the chosen need maps to, never repeating;
+//   * roughly one slot in five is a WILDCARD - a song from a looser tag match
+//     (shares the mood, not the genre) instead of the obvious pick;
+//   * Kizzi's pre-recorded spoken links are chosen from the link bank by kind
+//     and mood: an intro, links between songs, an outro;
+//   * a station ID opens it (and pinned/ducked jingles work as everywhere else);
+//   * the name is picked from the title bank.
+// Seeded, so the same seed always builds the same programme.
+// --------------------------------------------------------------------------
+
+export interface LinkClip {
+  id: string;
+  title: string;
+  audio_url: string;
+  duration_seconds: number;
+  link_kind: string; // intro | transition | fun_fact | observation | outro
+  tags: string[]; // moods it suits; none = suits anything
+}
+
+export interface ProgrammeTitle {
+  title: string;
+  time_band: string | null;
+}
+
+const PROGRAMME_MIN_SECONDS = 10 * 60;
+const PROGRAMME_MAX_SECONDS = 20 * 60;
+const LINK_BUDGET_SHARE = 0.2; // spoken links never take more than ~20% of the programme
+
+function uniqueByTitle(tracks: Track[], exclude: Set<string> = new Set()): Track[] {
+  const seen = new Set(exclude);
+  return tracks.filter((t) => {
+    const key = t.title.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function buildProgramme(opts: {
+  seedKey: string;
+  needKey: string;
+  matchTags: string[]; // tags a link must carry (any) to count as made for this need
+  mainTracks: Track[];
+  wildcardTracks: Track[];
+  links: LinkClip[];
+  stationIds: AudioAsset[];
+  pins: PinnedJingle[];
+  titles: ProgrammeTitle[];
+  targetSeconds: number;
+  band?: string | null;
+}): {
+  title: string;
+  items: RotationItem[];
+  total_duration_seconds: number;
+  wildcard_count: number;
+  link_count: number;
+} {
+  const { seedKey, targetSeconds } = opts;
+  const rand = mulberry32(hashSeed(seedKey));
+
+  // ---- songs
+  const main = spaceOutAlbums(seededShuffle(uniqueByTitle(opts.mainTracks), hashSeed(seedKey + ":main")));
+  const mainTitles = new Set(main.map((t) => t.title.trim().toLowerCase()));
+  const wild = seededShuffle(uniqueByTitle(opts.wildcardTracks, mainTitles), hashSeed(seedKey + ":wild"));
+
+  // A programme runs 10-20 minutes, and lands as close to the asked length as
+  // the songs allow: below the minimum keep adding, above it only add a song if
+  // that gets nearer the target (and never past the maximum).
+  const songs: { track: Track; wildcard: boolean }[] = [];
+  let songSeconds = 0;
+  while (main.length > 0 || wild.length > 0) {
+    const slot = songs.length;
+    let useWild = slot >= 1 && wild.length > 0 && rand() < 0.2;
+    // Short programmes might never roll a wildcard; make sure a longer one has one.
+    if (!useWild && slot === 3 && wild.length > 0 && !songs.some((s) => s.wildcard)) useWild = true;
+    const next = useWild ? wild[0] : (main[0] ?? wild[0]);
+    if (songSeconds >= PROGRAMME_MIN_SECONDS) {
+      const overshoot = songSeconds + next.duration_seconds - targetSeconds;
+      const undershoot = targetSeconds - songSeconds;
+      if (songSeconds >= targetSeconds || songSeconds + next.duration_seconds > PROGRAMME_MAX_SECONDS || overshoot > undershoot) break;
+    }
+    if (useWild) wild.shift();
+    else if (main.length > 0) main.shift();
+    else wild.shift();
+    songs.push({ track: next, wildcard: useWild });
+    songSeconds += next.duration_seconds;
+  }
+
+  // ---- spoken links
+  const wanted = new Set([opts.needKey, ...opts.matchTags]);
+  const used = new Set<string>();
+  const pick = (kinds: string[]): LinkClip | null => {
+    // A link made for this need beats a generic (untagged) one; anything else is left out.
+    for (const specific of [true, false]) {
+      const candidates = opts.links.filter(
+        (l) =>
+          kinds.includes(l.link_kind) &&
+          !used.has(l.id) &&
+          (specific ? l.tags.some((t) => wanted.has(t)) : l.tags.length === 0)
+      );
+      if (candidates.length > 0) {
+        const chosen = candidates[Math.floor(rand() * candidates.length)];
+        used.add(chosen.id);
+        return chosen;
+      }
+    }
+    return null;
+  };
+  const budget = targetSeconds * LINK_BUDGET_SHARE;
+  let linkSeconds = 0;
+  let linkCount = 0;
+
+  const items: RotationItem[] = [];
+  const addLink = (clip: LinkClip | null) => {
+    if (!clip || linkSeconds + clip.duration_seconds > budget) return;
+    linkSeconds += clip.duration_seconds;
+    linkCount++;
+    items.push({
+      id: `${clip.id}-${items.length}`,
+      item_type: "link",
+      label: clip.title,
+      track_id: null,
+      audio_asset_id: clip.id,
+      duration_seconds: clip.duration_seconds,
+      audio_url: clip.audio_url,
+      artwork_url: null,
+    });
+  };
+
+  addLink(pick(["intro"]));
+  songs.forEach(({ track }, i) => {
+    items.push({
+      id: `${track.id}-${items.length}`,
+      item_type: "song",
+      label: track.title,
+      track_id: track.id,
+      audio_asset_id: null,
+      duration_seconds: track.duration_seconds,
+      audio_url: track.audio_url,
+      artwork_url: track.artwork_url,
+    });
+    if (i < songs.length - 1 && rand() < 0.75) {
+      addLink(pick(i % 2 === 0 ? ["transition", "observation"] : ["fun_fact", "observation", "transition"]));
+    }
+  });
+  addLink(pick(["outro"]));
+
+  const withJingles = insertStationIds(withPinnedJingles(items, opts.pins), opts.stationIds, hashSeed(seedKey + ":ids"), {
+    leading: true,
+  });
+
+  // ---- the name
+  const { titles, band } = opts;
+  const byBand = band ? titles.filter((t) => t.time_band === band) : [];
+  const anyTime = titles.filter((t) => !t.time_band);
+  // Titles for this time of day and the all-day ones are both fair game, so a need
+  // that has one late-night title doesn't repeat it every night.
+  const timed = [...byBand, ...anyTime];
+  const pool = timed.length > 0 ? timed : titles;
+  const title = pool.length > 0 ? pool[Math.floor(rand() * pool.length)].title : "Your Radio";
+
+  return {
+    title,
+    items: withJingles,
+    total_duration_seconds: withJingles.reduce((sum, i) => sum + i.duration_seconds, 0),
+    wildcard_count: songs.filter((s) => s.wildcard).length,
+    link_count: linkCount,
+  };
 }

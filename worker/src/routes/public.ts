@@ -1,11 +1,15 @@
 import { Hono } from "hono";
 import type { Env, Programme, Channel, Track, AudioAsset } from "../lib/types";
+import { findNeed, NEEDS, NEED_KEYS } from "../lib/needs";
 import {
   buildRotation,
   buildSession,
   hashSeed,
   locateInLoop,
   withPinnedJingles,
+  buildProgramme,
+  type LinkClip,
+  type ProgrammeTitle,
   type PinnedJingle,
   type RotationItem,
   type RotationOverlay,
@@ -548,6 +552,99 @@ publicRoutes.post("/sessions", async (c) => {
   return c.json({
     session: { mood, duration_minutes: durationMinutes, total_duration_seconds: totalDurationSeconds, items },
     message,
+  });
+});
+
+/**
+ * "Radio That Knows You": what a listener can ask for, and the programme built
+ * for one request. Stateless and rule-based (see buildProgramme) - nothing is
+ * written per request and no AI is involved. The programme comes back in the
+ * same shape as a Studio programme (a title plus ordered items, where spoken
+ * links are item_type "link"), so the player treats it like any other.
+ */
+publicRoutes.get("/needs", (c) =>
+  c.json({ needs: NEEDS.map((n) => ({ key: n.key, label: n.label, emoji: n.emoji, blurb: n.blurb })) })
+);
+
+publicRoutes.post("/radio-for-you", async (c) => {
+  const body = await c.req
+    .json<{ need?: string; minutes?: number; band?: string }>()
+    .catch(() => ({}) as { need?: string; minutes?: number; band?: string });
+  const need = findNeed(body.need);
+  if (!need) return c.json({ error: `need must be one of ${NEED_KEYS.join(", ")}` }, 400);
+  const minutes = Math.min(Math.max(Math.round(Number(body.minutes) || 15), 10), 20);
+  const band = ["morning", "afternoon", "evening", "night"].includes(String(body.band)) ? String(body.band) : null;
+
+  const tracksWithTag = async (tags: string[]) =>
+    (
+      await c.env.DB.prepare(
+        `SELECT DISTINCT t.* FROM tracks t
+         JOIN track_tags tt ON tt.track_id = t.id
+         JOIN tags tg ON tg.id = tt.tag_id
+         WHERE t.status = 'published' AND tg.name IN (${tags.map(() => "?").join(",")})`
+      )
+        .bind(...tags)
+        .all<Track>()
+    ).results;
+
+  const mainTracks = await tracksWithTag(need.tags_any);
+  if (mainTracks.length === 0) {
+    return c.json({ programme: null, message: "There isn't any music tagged for that yet - check back soon." });
+  }
+  const mainIds = new Set(mainTracks.map((t) => t.id));
+  const wildcardTracks = (await tracksWithTag(need.wildcard_tags)).filter((t) => !mainIds.has(t.id));
+
+  const { results: linkRows } = await c.env.DB.prepare(
+    `SELECT aa.id, aa.title, aa.audio_url, aa.duration_seconds, aa.link_kind,
+            (SELECT GROUP_CONCAT(tg.name) FROM audio_asset_tags aat
+             JOIN tags tg ON tg.id = aat.tag_id WHERE aat.audio_asset_id = aa.id) AS tag_names
+     FROM audio_assets aa
+     WHERE aa.type = 'link' AND aa.status = 'published' AND aa.link_kind IS NOT NULL`
+  ).all<Omit<LinkClip, "tags"> & { tag_names: string | null }>();
+  const links: LinkClip[] = linkRows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    audio_url: r.audio_url,
+    duration_seconds: r.duration_seconds,
+    link_kind: r.link_kind,
+    tags: r.tag_names ? r.tag_names.split(",") : [],
+  }));
+
+  const { results: stationIds } = await c.env.DB.prepare(
+    "SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle','promo')"
+  ).all<AudioAsset>();
+  const { results: titles } = await c.env.DB.prepare(
+    "SELECT title, time_band FROM programme_titles WHERE need = ?"
+  )
+    .bind(need.key)
+    .all<ProgrammeTitle>();
+
+  const built = buildProgramme({
+    seedKey: `radio:${need.key}:${Date.now()}:${Math.random()}`,
+    needKey: need.key,
+    matchTags: [...need.tags_any, ...need.link_tags],
+    mainTracks,
+    wildcardTracks,
+    links,
+    stationIds,
+    pins: await loadPinnedJingles(c.env.DB),
+    titles,
+    targetSeconds: minutes * 60,
+    band,
+  });
+
+  return c.json({
+    programme: {
+      title: built.title,
+      need: need.key,
+      need_label: need.label,
+      description: `${need.blurb} - about ${minutes} minutes`,
+      minutes,
+      total_duration_seconds: built.total_duration_seconds,
+      wildcard_count: built.wildcard_count,
+      link_count: built.link_count,
+    },
+    items: built.items,
   });
 });
 

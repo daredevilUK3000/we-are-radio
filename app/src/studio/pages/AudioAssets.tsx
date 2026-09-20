@@ -4,6 +4,7 @@ import { studioApi, mediaUrl } from "../../api/client";
 import { ChipPicker } from "../components/ChipPicker";
 import { JingleSettings, JinglePreviewButton, PreviewSongPicker } from "../components/JingleSettings";
 import { MOOD_OPTIONS } from "../lib/presets";
+import { LINK_KINDS } from "./RecordLink";
 
 // The Audio library is split in two so a jingle is never lost among the
 // spoken material: each type belongs to exactly one section, so anything
@@ -24,7 +25,8 @@ const TABS = {
     label: "Spoken & Features",
     types: SPOKEN_TYPES,
     upload: "Upload audio",
-    blurb: "Spoken links, features and interviews - the talking building blocks of a running order.",
+    blurb:
+      "Spoken links, features and interviews - the talking building blocks of a running order. Links you record in your own voice (an intro, a bridge between songs, a fun fact, an outro) are what make each listener's personal programme sound presented: set what each one is for, and tag the moods it suits.",
     empty: "No spoken audio yet - upload some and it will appear here.",
   },
 } as const;
@@ -93,15 +95,22 @@ export function AudioAssets() {
   };
 
   const showPlaybackColumn = tab === "jingles";
-  const columns = showPlaybackColumn ? 7 : 5;
+  const columns = showPlaybackColumn ? 7 : 6;
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1>Audio</h1>
-        <Link to={`/studio/audio/upload?kind=${tab}`} className="btn primary">
-          {current.upload}
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          {tab === "spoken" && (
+            <Link to="/studio/record-link" className="btn primary">
+              ● Record a link
+            </Link>
+          )}
+          <Link to={`/studio/audio/upload?kind=${tab}`} className={tab === "spoken" ? "btn" : "btn primary"}>
+            {current.upload}
+          </Link>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -130,6 +139,7 @@ export function AudioAssets() {
             <th>Title</th>
             <th>Type</th>
             <th>Tags</th>
+            {!showPlaybackColumn && <th>Used as</th>}
             {showPlaybackColumn && <th>Plays</th>}
             {showPlaybackColumn && <th>Preview over</th>}
             <th>Status</th>
@@ -155,6 +165,29 @@ export function AudioAssets() {
                     <span style={{ color: "var(--text-dim)" }}>none</span>
                   )}
                 </td>
+                {!showPlaybackColumn && (
+                  <td>
+                    {a.type === "link" ? (
+                      <select
+                        value={a.link_kind ?? ""}
+                        aria-label="What this link is for"
+                        onChange={async (e) => {
+                          await studioApi.updateAudioAsset(a.id, { link_kind: e.target.value || null });
+                          load();
+                        }}
+                      >
+                        <option value="">(not used in programmes)</option>
+                        {LINK_KINDS.map((k) => (
+                          <option key={k.value} value={k.value}>
+                            {k.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ color: "var(--text-dim)" }}>-</span>
+                    )}
+                  </td>
+                )}
                 {showPlaybackColumn && (
                   <td>
                     <span className={`badge${a.play_mode === "duck_over_music" ? " live" : ""}`}>
