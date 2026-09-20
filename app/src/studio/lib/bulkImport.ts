@@ -92,3 +92,36 @@ export function humanSize(bytes: number): string {
   if (bytes > 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
 }
+
+const SMALL_WORDS = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "in", "of", "on", "or", "the", "to"]);
+
+/**
+ * A title suggested by a file's name, for when the names ARE the titles:
+ * drops the extension, wrapping quotes and a browser's " (1)" copy suffix, and
+ * turns a trailing "_" (what a "?" becomes in a file name) back into "?".
+ * ALL-CAPS names can optionally be tidied into ordinary capitals. Only ever a
+ * suggestion - it lands in the Title box, where it can be edited.
+ */
+export function titleFromFilename(filename: string, tidyCaps: boolean): string {
+  let t = filename.replace(/\.[a-z0-9]{2,5}$/i, "");
+  t = t.replace(/^[\u201c\u201d"\u2018]+|[\u201c\u201d"\u2019]+$/g, "");
+  t = t.replace(/\s*\(\d+\)$/, "");
+  t = t.replace(/([^.])\.$/, "$1"); // a stray full stop left inside removed quotes
+  t = t.replace(/_+$/, "?").replace(/_/g, " ");
+  t = t.replace(/[\u2019\u2018]/g, "'").replace(/\s+/g, " ").trim();
+  if (tidyCaps && t === t.toUpperCase() && /[A-Z]/.test(t)) {
+    let first = true;
+    t = t
+      .toLowerCase()
+      .split(/(\s+)/)
+      .map((part) => {
+        if (/^\s+$/.test(part) || part === "") return part;
+        const small = SMALL_WORDS.has(part.replace(/[^a-z]/g, ""));
+        const out = !first && small ? part : part.replace(/(^|[-(])([a-z])/g, (_m, a, b) => a + b.toUpperCase());
+        first = false;
+        return out;
+      })
+      .join("");
+  }
+  return t;
+}

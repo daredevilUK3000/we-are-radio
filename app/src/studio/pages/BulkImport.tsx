@@ -10,6 +10,7 @@ import {
   readDuration,
   runPool,
   sha256Hex,
+  titleFromFilename,
   uploadWithProgress,
 } from "../lib/bulkImport";
 
@@ -49,10 +50,11 @@ interface Settings {
   autoplay: boolean;
   playFrom: "start" | "quarter" | "middle";
   snippet: boolean;
+  tidyCaps: boolean;
 }
 
 const SETTINGS_KEY = "we-are-radio:bulk-import-settings";
-const DEFAULT_SETTINGS: Settings = { artist: "", autoplay: true, playFrom: "quarter", snippet: true };
+const DEFAULT_SETTINGS: Settings = { artist: "", autoplay: true, playFrom: "quarter", snippet: true, tidyCaps: true };
 const UPLOAD_WAVE = 25; // files per batch of presigned URLs
 const UPLOAD_LANES = 5; // uploads in flight at once
 const SNIPPET_SECONDS = 20;
@@ -219,7 +221,7 @@ const RowView = memo(function RowView({
           </span>
         )}
         {!uploaded && row.upload === "idle" && !dupNote && !row.title.trim() && (
-          <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>needs a title</span>
+          <span style={{ color: "#f0a12a", fontSize: "0.8rem" }}>needs a title</span>
         )}
         {!uploaded && row.upload === "idle" && !dupNote && row.title.trim() && (
           <span style={{ color: "var(--text-dim)", fontSize: "0.8rem" }}>ready</span>
@@ -701,6 +703,29 @@ export function BulkImport() {
     []
   );
 
+  // For folders whose file names ARE the titles: copy them into the blank
+  // Title boxes (selected rows if any are selected, otherwise every row).
+  const useFileNames = () => {
+    const scope = selectedRef.current.size > 0 ? selectedRef.current : null;
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.title.trim() || r.upload === "done" || (scope && !scope.has(r.key))) return r;
+        const title = titleFromFilename(r.filename, settingsRef.current.tidyCaps);
+        if (!title) return r;
+        return { ...r, title, rev: r.rev + 1, dirty: true };
+      })
+    );
+    // Count from the current rows for the message (the updater above runs later).
+    const would = rowsRef.current.filter(
+      (r) => !r.title.trim() && r.upload !== "done" && (!scope || scope.has(r.key))
+    ).length;
+    setNotice(
+      would > 0
+        ? `Filled ${would} title${would === 1 ? "" : "s"} from the file names${settingsRef.current.tidyCaps ? " (ALL CAPS tidied)" : ""}. Have a look and correct any before uploading.`
+        : "Every row already has a title."
+    );
+  };
+
   const onPasteTitles = useCallback((key: string, text: string) => applyLines(key, text) > 0, [applyLines]);
 
   // -------------------------------------------------------------- bulk edits
@@ -848,8 +873,8 @@ export function BulkImport() {
         </Link>
       </div>
       <p style={{ color: "var(--text-dim)" }}>
-        For a whole folder of music. Nothing is guessed from the files - you listen and type each title - so the page is
-        built to make that quick: press <strong>▶</strong> to hear a row, type its title and press <strong>Enter</strong>{" "}
+        For a whole folder of music. Titles are never guessed for you - you listen and type each one (or, if your file
+        names are the titles, copy them in with one click) - so the page is built to make that quick: press <strong>▶</strong> to hear a row, type its title and press <strong>Enter</strong>{" "}
         to jump to the next row and play it. Everything you type is saved as you go and comes back when you choose the
         same folder again. Uploaded tracks become <strong>drafts</strong> you can keep editing until you publish them.
       </p>
@@ -1044,6 +1069,22 @@ export function BulkImport() {
           </button>
         </div>
 
+        <div className="bi-action">
+          <label>File names</label>
+          <span style={{ color: "var(--text-dim)" }}>if your file names are the song titles:</span>
+          <button className="btn" onClick={useFileNames} disabled={rows.length === 0}>
+            Use file names as titles{selectedCount > 0 ? " (selected rows)" : ""}
+          </button>
+          <label className="bi-inline">
+            <input
+              type="checkbox"
+              checked={settings.tidyCaps}
+              onChange={(e) => setSettings((s) => ({ ...s, tidyCaps: e.target.checked }))}
+            />{" "}
+            tidy ALL CAPS names
+          </label>
+        </div>
+
         <div className="bi-action" style={{ alignItems: "flex-start" }}>
           <label>Paste titles</label>
           {!showPaste ? (
@@ -1236,6 +1277,22 @@ export function BulkImport() {
             </>
           )}
         </div>
+        {rows.length > 0 && readyRows.length === 0 && !run?.active && (
+          <p style={{ margin: "8px 0 0", fontSize: "0.85rem", color: "#f0a12a" }}>
+            Nothing is ready to upload yet:{" "}
+            {untitledCount > 0
+              ? `${untitledCount} row${untitledCount === 1 ? " needs" : "s need"} a title (type them, paste them, or use the file names). `
+              : ""}
+            {counts.dupes > 0
+              ? `${counts.dupes} look like duplicates (tick "include possible duplicates" to upload them anyway). `
+              : ""}
+            {untitledCount > 0 && (
+              <button className="btn" onClick={useFileNames}>
+                Use file names as titles
+              </button>
+            )}
+          </p>
+        )}
         {run && (
           <div style={{ marginTop: 8 }}>
             <div className="bi-progress bi-progress-wide">
