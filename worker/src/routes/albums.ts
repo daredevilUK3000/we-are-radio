@@ -17,8 +17,12 @@ albumRoutes.get("/:id", async (c) => {
     .first();
   if (!album) return c.json({ error: "not found" }, 404);
 
+  // Tag names ride along so the Studio can show and edit each track's tags.
   const { results: tracks } = await c.env.DB.prepare(
-    "SELECT * FROM tracks WHERE album_id = ? ORDER BY track_number ASC"
+    `SELECT t.*,
+       (SELECT GROUP_CONCAT(tg.name) FROM track_tags tt
+        JOIN tags tg ON tg.id = tt.tag_id WHERE tt.track_id = t.id) AS tag_names
+     FROM tracks t WHERE t.album_id = ? ORDER BY t.track_number ASC`
   )
     .bind(album.id as string)
     .all();
