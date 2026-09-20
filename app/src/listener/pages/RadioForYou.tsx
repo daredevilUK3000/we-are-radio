@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { PlayerCard } from "../components/PlayerCard";
 import { useExclusiveAudio } from "../lib/audioUtils";
@@ -160,6 +161,20 @@ export function RadioForYou() {
     },
     [minutes, band, playIndex]
   );
+
+  // A mood tapped on the homepage arrives as router state: start straight away
+  // instead of asking again, then clear it so a refresh doesn't rebuild.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    const key = (location.state as { need?: string } | null)?.need;
+    if (!key || autoStarted.current) return;
+    autoStarted.current = true;
+    navigate(location.pathname, { replace: true, state: null });
+    const chosen = FALLBACK_NEEDS.find((n) => n.key === key);
+    if (chosen) request(chosen);
+  }, [location, navigate, request]);
 
   const restart = () => {
     audioRef.current?.pause();

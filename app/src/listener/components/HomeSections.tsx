@@ -1,10 +1,10 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { mediaUrl } from "../../api/client";
 import { FavouriteButton } from "./FavouriteButton";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { CHANNEL_LABELS } from "../lib/channelLabels";
 
-// The three sections below the channel grid on the landing page
+// The sections below the channel grid on the landing page
 // (handoff_landing_page_lower_half.md). The hero above them is deliberately
 // untouched.
 
@@ -280,20 +280,101 @@ export function PodcastShowcase({ shows, recent }: { shows: any[]; recent: any[]
   );
 }
 
-// ---------------------------------------------------------------- Three ways to listen
+// ---------------------------------------------------------------- Radio That Knows You
 
 function tint(hex: string, soft: string) {
   return { ["--tint" as string]: hex, ["--tint-soft" as string]: soft } as React.CSSProperties;
 }
 
-const MoodIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-    <circle cx="12" cy="12" r="9" />
-    <path d="M8 14.5c1 1.6 2.4 2.5 4 2.5s3-.9 4-2.5" />
-    <circle cx="9" cy="10" r="0.6" fill="currentColor" />
-    <circle cx="15" cy="10" r="0.6" fill="currentColor" />
-  </svg>
-);
+// The same four needs the /my-mood page offers (worker/src/lib/needs.ts), fixed
+// here so the buttons are on screen instantly rather than after a fetch.
+// Tapping one hands its key to /my-mood, which runs the "Building your radio..."
+// beat and plays the programme.
+const KYU_NEEDS: { key: string; label: string; icon: React.ReactNode }[] = [
+  {
+    key: "energy",
+    label: "I need energy",
+    icon: <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />,
+  },
+  {
+    key: "love",
+    label: "I want to fall in love",
+    icon: <path d="M12 20s-7.5-4.6-10-9.2C.5 7.4 2.2 4 5.8 4c2 0 3.6 1.1 4.2 2.7C10.6 5.1 12.2 4 14.2 4c3.6 0 5.3 3.4 3.8 6.8C15.5 15.4 12 20 12 20z" />,
+  },
+  {
+    key: "switch-off",
+    label: "I want to switch off",
+    icon: <path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z" />,
+  },
+  {
+    key: "fun",
+    label: "I want to have fun",
+    icon: <path d="M12 3l2.2 5.3L20 10l-4.4 3.6L17 19l-5-3.2L7 19l1.4-5.4L4 10l5.8-1.7z" />,
+  },
+];
+
+/** The flagship: pick a need on the homepage and the programme is built on /my-mood. */
+export function RadioThatKnowsYou() {
+  const navigate = useNavigate();
+
+  return (
+    <section className="home-section">
+      <div className="kyu">
+        <div className="kyu-shine" aria-hidden="true" />
+
+        <div className="kyu-head">
+          <span className="kyu-eyebrow">
+            <span className="kyu-dot" />
+            Radio That Knows You
+          </span>
+          <h2 className="kyu-tagline">Tell us what you need. We'll create the radio.</h2>
+          <p className="kyu-context">
+            Not a playlist. A produced radio programme, built for this moment, with your voice bridging every track.
+          </p>
+        </div>
+
+        <div className="kyu-stage">
+          <div className="kyu-wave" aria-hidden="true">
+            <EqBars count={64} seed={3} />
+          </div>
+          <div className="kyu-needs">
+            {KYU_NEEDS.map((n) => (
+              <button
+                key={n.key}
+                type="button"
+                className="kyu-need"
+                onClick={() => navigate("/my-mood", { state: { need: n.key } })}
+              >
+                <span className="kyu-need-icon">
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    {n.icon}
+                  </svg>
+                </span>
+                <span className="kyu-need-label">{n.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Link to="/my-mood" className="kyu-classic">
+          Prefer to choose an exact mood and length? &rarr;
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------- Two other ways to listen
 
 const RadioIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
@@ -325,24 +406,10 @@ export function WaysToListen({ channels }: { channels: any[] }) {
   return (
     <section className="home-section">
       <div className="channels-heading-row">
-        <h2>Three Ways to Listen</h2>
+        <h2>Two Other Ways to Listen</h2>
       </div>
 
       <div className="wl-grid">
-        <Link to="/my-mood" className="wl-card" style={tint("#e11d2e", "rgba(225, 29, 46, 0.14)")}>
-          <span className="wl-icon">
-            <MoodIcon />
-          </span>
-          <span className="wl-new">NEW</span>
-          <h3 className="wl-title">My Mood</h3>
-          <p className="wl-desc">Pick a mood and how long you've got - a produced running order, instantly. No account needed.</p>
-          <div className="wl-detail">
-            <span className="wl-chip">romantic</span>
-            <span className="wl-chip">relaxing</span>
-            <span className="wl-chip">upbeat</span>
-          </div>
-        </Link>
-
         <Link to="/my-radio" className="wl-card" style={tint("#f0a12a", "rgba(240, 161, 42, 0.14)")}>
           <span className="wl-icon">
             <RadioIcon />

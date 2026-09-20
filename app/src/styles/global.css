@@ -2072,11 +2072,11 @@ td {
 
 .wl-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 720px) {
   .wl-grid {
     grid-template-columns: 1fr;
   }
@@ -2776,5 +2776,210 @@ td {
     flex-direction: column;
     align-items: flex-start;
     gap: 14px;
+  }
+}
+
+/* ---- Home: Radio That Knows You (the flagship section) ---- */
+
+.kyu {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  padding: 56px 60px 44px;
+  background: radial-gradient(circle at 12% 15%, rgba(225, 29, 46, 0.18), transparent 52%),
+    radial-gradient(circle at 90% 85%, rgba(225, 29, 46, 0.1), transparent 50%), var(--bg-raised);
+  border: 1px solid rgba(225, 29, 46, 0.28);
+}
+
+.kyu-shine {
+  position: absolute;
+  top: -40%;
+  left: -12%;
+  width: 160px;
+  height: 220%;
+  background: linear-gradient(90deg, transparent, rgba(225, 29, 46, 0.1), transparent);
+  pointer-events: none;
+  animation: kyuShine 8s ease-in-out infinite;
+}
+
+@keyframes kyuShine {
+  0% {
+    transform: translateX(-120%) rotate(8deg);
+  }
+  100% {
+    transform: translateX(760%) rotate(8deg);
+  }
+}
+
+.kyu-head {
+  position: relative;
+  max-width: 780px;
+}
+
+.kyu-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(225, 29, 46, 0.14);
+  border: 1px solid rgba(225, 29, 46, 0.45);
+  color: #ff7a87;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.kyu-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dotPulse 1.6s ease-in-out infinite;
+}
+
+.kyu-tagline {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: clamp(2.2rem, 5.6vw, 3.8rem);
+  line-height: 1.02;
+  letter-spacing: -0.005em;
+  margin: 22px 0 16px;
+}
+
+.kyu-context {
+  margin: 0;
+  max-width: 560px;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+/* The moving waveform sits behind the mood buttons - a preview of the
+   "Building your radio..." beat that follows a tap. */
+.kyu-stage {
+  position: relative;
+  margin-top: 40px;
+}
+
+.kyu-wave {
+  position: absolute;
+  inset: -22px -12px -6px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none;
+  opacity: 0.32;
+}
+
+.kyu-wave span {
+  flex: 1;
+  height: 100%;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(180deg, #ff4b5a, var(--accent));
+  transform-origin: bottom;
+  animation: eqPulse 1.2s ease-in-out infinite;
+}
+
+.kyu-wave span:nth-child(3n + 1) {
+  height: 78%;
+}
+
+.kyu-wave span:nth-child(5n + 2) {
+  height: 58%;
+}
+
+.kyu-needs {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.kyu-need {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  text-align: left;
+  padding: 22px 20px;
+  border-radius: 18px;
+  background: rgba(16, 16, 19, 0.74);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kyu-need:hover,
+.kyu-need:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 12px 40px rgba(225, 29, 46, 0.22);
+}
+
+.kyu-need-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff7a87;
+  background: rgba(225, 29, 46, 0.14);
+}
+
+.kyu-need-label {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1.3rem;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+}
+
+.kyu-classic {
+  position: relative;
+  display: inline-block;
+  margin-top: 26px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.kyu-classic:hover {
+  color: var(--text);
+}
+
+@media (max-width: 860px) {
+  .kyu {
+    padding: 36px 24px 32px;
+    border-radius: 22px;
+  }
+  .kyu-needs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .kyu-needs {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kyu-shine {
+    display: none;
+  }
+  .kyu-dot,
+  .kyu-wave span {
+    animation: none;
+  }
+  .kyu-wave span {
+    transform: scaleY(0.5);
   }
 }
