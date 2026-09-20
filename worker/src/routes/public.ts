@@ -578,11 +578,13 @@ publicRoutes.get("/needs", (c) =>
 
 publicRoutes.post("/radio-for-you", async (c) => {
   const body = await c.req
-    .json<{ need?: string; minutes?: number; band?: string }>()
-    .catch(() => ({}) as { need?: string; minutes?: number; band?: string });
+    .json<{ need?: string; songs?: number; band?: string }>()
+    .catch(() => ({}) as { need?: string; songs?: number; band?: string });
   const need = findNeed(body.need);
   if (!need) return c.json({ error: `need must be one of ${NEED_KEYS.join(", ")}` }, 400);
-  const minutes = Math.min(Math.max(Math.round(Number(body.minutes) || 15), 10), 20);
+  // 4 songs unless asked otherwise (a page from before this was song-based sends
+  // `minutes` instead, which is ignored and so gets the default too).
+  const songCount = Math.min(Math.max(Math.round(Number(body.songs) || 4), 3), 6);
   const band = ["morning", "afternoon", "evening", "night"].includes(String(body.band)) ? String(body.band) : null;
 
   const tracksWithTag = async (tags: string[]) =>
@@ -639,7 +641,7 @@ publicRoutes.post("/radio-for-you", async (c) => {
     stationIds,
     pins: await loadPinnedJingles(c.env.DB),
     titles,
-    targetSeconds: minutes * 60,
+    songCount,
     band,
   });
 
@@ -648,8 +650,8 @@ publicRoutes.post("/radio-for-you", async (c) => {
       title: built.title,
       need: need.key,
       need_label: need.label,
-      description: `${need.blurb} - about ${minutes} minutes`,
-      minutes,
+      description: `${need.blurb} - ${songCount} songs`,
+      song_count: songCount,
       total_duration_seconds: built.total_duration_seconds,
       wildcard_count: built.wildcard_count,
       link_count: built.link_count,

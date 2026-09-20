@@ -72,10 +72,10 @@ export const publicApi = {
       body: JSON.stringify(data),
     }),
   needs: () => request<{ needs: { key: string; label: string; emoji: string; blurb: string }[] }>(`${API_BASE}/needs`),
-  radioForYou: (need: string, minutes: number, band?: string) =>
+  radioForYou: (need: string, songs: number, band?: string) =>
     request<{ programme: any | null; items: any[]; message?: string }>(`${API_BASE}/radio-for-you`, {
       method: "POST",
-      body: JSON.stringify({ need, minutes, band }),
+      body: JSON.stringify({ need, songs, band }),
     }),
   buildSession: (mood: string, durationMinutes: number) =>
     request<{ session: { mood: string; duration_minutes: number; total_duration_seconds: number; items: any[] } | null; message?: string }>(

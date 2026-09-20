@@ -411,9 +411,7 @@ export interface ProgrammeTitle {
   time_band: string | null;
 }
 
-const PROGRAMME_MIN_SECONDS = 10 * 60;
-const PROGRAMME_MAX_SECONDS = 20 * 60;
-const LINK_BUDGET_SHARE = 0.2; // spoken links never take more than ~20% of the programme
+const LINK_BUDGET_SHARE = 0.2; // spoken links never take more than ~20% of the song time
 
 function uniqueByTitle(tracks: Track[], exclude: Set<string> = new Set()): Track[] {
   const seen = new Set(exclude);
@@ -435,7 +433,7 @@ export function buildProgramme(opts: {
   stationIds: AudioAsset[];
   pins: PinnedJingle[];
   titles: ProgrammeTitle[];
-  targetSeconds: number;
+  songCount: number; // how many songs the programme has (fewer only if the catalogue runs out)
   band?: string | null;
 }): {
   title: string;
@@ -444,7 +442,7 @@ export function buildProgramme(opts: {
   wildcard_count: number;
   link_count: number;
 } {
-  const { seedKey, targetSeconds } = opts;
+  const { seedKey, songCount } = opts;
   const rand = mulberry32(hashSeed(seedKey));
 
   // ---- songs
@@ -452,22 +450,17 @@ export function buildProgramme(opts: {
   const mainTitles = new Set(main.map((t) => t.title.trim().toLowerCase()));
   const wild = seededShuffle(uniqueByTitle(opts.wildcardTracks, mainTitles), hashSeed(seedKey + ":wild"));
 
-  // A programme runs 10-20 minutes, and lands as close to the asked length as
-  // the songs allow: below the minimum keep adding, above it only add a song if
-  // that gets nearer the target (and never past the maximum).
+  // A programme is a set number of songs (this catalogue's songs run about 6 minutes
+  // each, so the length in minutes follows from the count rather than the other way
+  // round - asking for minutes gave 2 songs, which doesn't feel like a programme).
   const songs: { track: Track; wildcard: boolean }[] = [];
   let songSeconds = 0;
-  while (main.length > 0 || wild.length > 0) {
+  while (songs.length < songCount && (main.length > 0 || wild.length > 0)) {
     const slot = songs.length;
     let useWild = slot >= 1 && wild.length > 0 && rand() < 0.2;
-    // Short programmes might never roll a wildcard; make sure a longer one has one.
+    // A programme might never roll a wildcard; make sure a longer one has one.
     if (!useWild && slot === 3 && wild.length > 0 && !songs.some((s) => s.wildcard)) useWild = true;
     const next = useWild ? wild[0] : (main[0] ?? wild[0]);
-    if (songSeconds >= PROGRAMME_MIN_SECONDS) {
-      const overshoot = songSeconds + next.duration_seconds - targetSeconds;
-      const undershoot = targetSeconds - songSeconds;
-      if (songSeconds >= targetSeconds || songSeconds + next.duration_seconds > PROGRAMME_MAX_SECONDS || overshoot > undershoot) break;
-    }
     if (useWild) wild.shift();
     else if (main.length > 0) main.shift();
     else wild.shift();
@@ -490,7 +483,7 @@ export function buildProgramme(opts: {
     used.add(chosen.id);
     return chosen;
   };
-  const budget = targetSeconds * LINK_BUDGET_SHARE;
+  const budget = songSeconds * LINK_BUDGET_SHARE;
   let linkSeconds = 0;
   let linkCount = 0;
 

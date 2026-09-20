@@ -33,7 +33,7 @@ const FALLBACK_NEEDS: Need[] = [
 ];
 
 const BEAT_MS = 3200; // the anticipation beat: never shorter than this
-const LENGTHS = [10, 15, 20];
+const SONG_COUNTS = [4, 5];
 
 // A short silent clip, played inside the tap so the browser lets the programme
 // start by itself a few seconds later (an audio element is unlocked by a tap).
@@ -63,7 +63,7 @@ type Phase = "ask" | "beat" | "programme";
 export function RadioForYou() {
   const { band } = useActiveChannel();
   const [needs, setNeeds] = useState<Need[]>(FALLBACK_NEEDS);
-  const [minutes, setMinutes] = useState(15);
+  const [songsWanted, setSongsWanted] = useState(4);
   const [phase, setPhase] = useState<Phase>("ask");
   const [need, setNeed] = useState<Need | null>(null);
   const [beatStage, setBeatStage] = useState<"building" | "ready">("building");
@@ -132,7 +132,7 @@ export function RadioForYou() {
       let result = null as { programme: any; items: any[]; message?: string } | null;
       let failed = false;
       try {
-        result = await publicApi.radioForYou(chosen.key, minutes, band);
+        result = await publicApi.radioForYou(chosen.key, songsWanted, band);
       } catch {
         failed = true;
       }
@@ -159,7 +159,7 @@ export function RadioForYou() {
       setPhase("programme");
       playIndex(0);
     },
-    [minutes, band, playIndex]
+    [songsWanted, band, playIndex]
   );
 
   // A mood tapped on the homepage arrives as router state: start straight away
@@ -211,10 +211,10 @@ export function RadioForYou() {
           </div>
 
           <div className="rfy-length">
-            <span>About</span>
-            {LENGTHS.map((m) => (
-              <button key={m} className={`chip${minutes === m ? " selected" : ""}`} onClick={() => setMinutes(m)}>
-                {m} min
+            <span>Make it</span>
+            {SONG_COUNTS.map((n) => (
+              <button key={n} className={`chip${songsWanted === n ? " selected" : ""}`} onClick={() => setSongsWanted(n)}>
+                {n} songs
               </button>
             ))}
           </div>
