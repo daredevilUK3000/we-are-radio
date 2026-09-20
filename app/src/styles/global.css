@@ -93,6 +93,16 @@ button {
   display: none;
 }
 
+/* The Studio has too many sections to scroll out of sight: let its menu wrap
+   onto a second line instead, so every link is always visible. */
+.top-nav nav.studio-nav {
+  flex: 1;
+  flex-wrap: wrap;
+  overflow-x: visible;
+  white-space: normal;
+  row-gap: 4px;
+}
+
 .top-nav nav a.active {
   color: var(--text);
 }

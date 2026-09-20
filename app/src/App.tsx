@@ -66,7 +66,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <header className="top-nav">
         <span className="brand">🎛️ We Are Radio Studio</span>
-        <nav>
+        <nav className="studio-nav">
           <NavLink to="/studio" end>
             Dashboard
           </NavLink>
@@ -76,6 +76,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/studio/tracks">Music</NavLink>
           <NavLink to="/studio/albums">Albums</NavLink>
           <NavLink to="/studio/audio">Audio</NavLink>
+          <NavLink to="/studio/record-link">Record a Link</NavLink>
           <NavLink to="/studio/channels">Channels</NavLink>
           <NavLink to="/studio/programmes">Programmes</NavLink>
           <NavLink to="/studio/programme-titles">Programme Titles</NavLink>
