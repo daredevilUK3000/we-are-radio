@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { studioApi, mediaUrl, uploadFileToR2 } from "../../api/client";
 import { ChipPicker } from "../components/ChipPicker";
@@ -26,6 +26,13 @@ export function AlbumDetail() {
   const [tagMessage, setTagMessage] = useState<string | null>(null);
   const [editingTagsId, setEditingTagsId] = useState<string | null>(null);
   const [channelHints, setChannelHints] = useState<Map<string, string[]>>(new Map());
+
+  // Adding tracks: tick as many as you like from the list, then add them in one go.
+  const [addSearch, setAddSearch] = useState("");
+  const [onlyNoAlbum, setOnlyNoAlbum] = useState(true);
+  const [addPick, setAddPick] = useState<Set<string>>(new Set());
+  const [addBusy, setAddBusy] = useState(false);
+  const [addMessage, setAddMessage] = useState<string | null>(null);
 
   // Which channel each tag feeds, so tagging is a choice about where a track plays.
   useEffect(() => {
@@ -71,6 +78,17 @@ export function AlbumDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Every track that isn't already on this album (newest first, as the API sends them).
+  const addable = useMemo(() => {
+    const q = addSearch.trim().toLowerCase();
+    return allTracks.filter(
+      (t) =>
+        t.album_id !== id &&
+        (!onlyNoAlbum || !t.album_id) &&
+        (!q || t.title.toLowerCase().includes(q) || (t.artist ?? "").toLowerCase().includes(q))
+    );
+  }, [allTracks, id, addSearch, onlyNoAlbum]);
+
   if (loadError) {
     return (
       <p style={{ color: "var(--accent)" }}>
@@ -82,9 +100,52 @@ export function AlbumDetail() {
     );
   }
 
-  const addTrack = async (trackId: string) => {
-    if (!id || !trackId) return;
-    await studioApi.updateTrack(trackId, { album_id: id });
+  const toggleAddPick = (trackId: string) =>
+    setAddPick((prev) => {
+      const next = new Set(prev);
+      if (next.has(trackId)) next.delete(trackId);
+      else next.add(trackId);
+      return next;
+    });
+
+  const addPicked = async () => {
+    if (!id) return;
+    const targets = allTracks.filter((t) => addPick.has(t.id));
+    if (targets.length === 0) return;
+    // Tracks already on a different album would be moved off it - say so first.
+    const moving = targets.filter((t) => t.album_id && t.album_id !== id).length;
+    if (moving > 0) {
+      const who =
+        moving === targets.length
+          ? moving === 1
+            ? "This track is"
+            : `All ${moving} of these tracks are`
+          : `${moving} of these ${targets.length} tracks ${moving === 1 ? "is" : "are"}`;
+      const them = moving === 1 ? "it" : "them";
+      if (!window.confirm(`${who} on another album. Adding ${them} here will take ${them} off that album.\n\nContinue?`)) {
+        return;
+      }
+    }
+    setAddBusy(true);
+    setAddMessage(null);
+    let failed = 0;
+    const done = new Set<string>();
+    await runPool(targets, 4, async (t) => {
+      try {
+        await studioApi.updateTrack(t.id, { album_id: id });
+        done.add(t.id);
+      } catch {
+        failed++;
+      }
+    });
+    setAddBusy(false);
+    // Anything that failed stays ticked, so pressing the button again retries just those.
+    setAddPick(new Set(targets.filter((t) => !done.has(t.id)).map((t) => t.id)));
+    setAddMessage(
+      `Added ${done.size} track${done.size === 1 ? "" : "s"} to ${album?.title ?? "this album"}${
+        failed ? ` (${failed} failed - press the button again to retry those)` : ""
+      }.`
+    );
     load();
   };
 
@@ -195,8 +256,6 @@ export function AlbumDetail() {
   const untaggedCount = albumTracks.filter((t) => tagsOf(t).length === 0).length;
 
   if (!album) return <p>Loading...</p>;
-
-  const availableTracks = allTracks.filter((t) => t.album_id !== album.id);
 
   return (
     <div>
@@ -416,15 +475,76 @@ export function AlbumDetail() {
       </table>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h4 style={{ marginTop: 0 }}>Add a track</h4>
-        <select onChange={(e) => e.target.value && addTrack(e.target.value)} value="">
-          <option value="">+ Add track to this album...</option>
-          {availableTracks.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.title}
-            </option>
+        <h4 style={{ marginTop: 0 }}>Add tracks to this album</h4>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+          <input
+            type="search"
+            placeholder="Search title or artist..."
+            value={addSearch}
+            onChange={(e) => setAddSearch(e.target.value)}
+            style={{ maxWidth: 240 }}
+          />
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: "0.9rem" }}>
+            <input type="checkbox" checked={onlyNoAlbum} onChange={(e) => setOnlyNoAlbum(e.target.checked)} />
+            Only tracks with no album
+          </label>
+          <span style={{ flex: 1 }} />
+          <span style={{ color: "var(--text-dim)", fontSize: "0.85rem" }}>
+            {addPick.size} ticked · {addable.length} shown
+          </span>
+          <button
+            className="btn"
+            onClick={() => setAddPick((prev) => new Set([...prev, ...addable.map((t) => t.id)]))}
+            disabled={addable.length === 0}
+          >
+            Tick all shown
+          </button>
+          <button className="btn" onClick={() => setAddPick(new Set())} disabled={addPick.size === 0}>
+            Clear
+          </button>
+        </div>
+
+        <div style={{ maxHeight: 340, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
+          {addable.map((t) => (
+            <label
+              key={t.id}
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                padding: "6px 10px",
+                cursor: "pointer",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              <input type="checkbox" checked={addPick.has(t.id)} onChange={() => toggleAddPick(t.id)} />
+              <span style={{ flex: 1 }}>
+                {t.title}
+                {t.artist ? <span style={{ color: "var(--text-dim)" }}> - {t.artist}</span> : null}
+              </span>
+              <span style={{ color: "var(--text-dim)", fontSize: "0.8rem" }}>{t.album_title ?? "no album"}</span>
+              {t.status !== "published" && <span className="badge">{t.status}</span>}
+            </label>
           ))}
-        </select>
+          {addable.length === 0 && (
+            <p style={{ color: "var(--text-dim)", margin: 0, padding: 12 }}>
+              {onlyNoAlbum
+                ? "No tracks without an album match. Untick \"Only tracks with no album\" to see tracks on other albums."
+                : "No other tracks match."}
+            </p>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+          <button className="btn primary" onClick={addPicked} disabled={addBusy || addPick.size === 0}>
+            {addBusy
+              ? "Adding..."
+              : addPick.size === 0
+                ? "Tick tracks to add them"
+                : `Add ${addPick.size} track${addPick.size === 1 ? "" : "s"} to this album`}
+          </button>
+          {addMessage && <span style={{ fontSize: "0.85rem" }}>{addMessage}</span>}
+        </div>
       </div>
     </div>
   );
