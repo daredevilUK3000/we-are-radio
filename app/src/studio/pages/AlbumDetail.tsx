@@ -27,6 +27,12 @@ export function AlbumDetail() {
   const [editingTagsId, setEditingTagsId] = useState<string | null>(null);
   const [channelHints, setChannelHints] = useState<Map<string, string[]>>(new Map());
 
+  // Album title: click Rename, fix it, Save.
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [titleBusy, setTitleBusy] = useState(false);
+  const [titleError, setTitleError] = useState<string | null>(null);
+
   // Adding tracks: tick as many as you like from the list, then add them in one go.
   const [addSearch, setAddSearch] = useState("");
   const [onlyNoAlbum, setOnlyNoAlbum] = useState(true);
@@ -147,6 +153,30 @@ export function AlbumDetail() {
       }.`
     );
     load();
+  };
+
+  const startRename = () => {
+    setTitleDraft(album?.title ?? "");
+    setTitleError(null);
+    setEditingTitle(true);
+  };
+
+  const saveTitle = async () => {
+    if (!id || titleBusy) return;
+    const title = titleDraft.trim();
+    if (!title) return setTitleError("The album needs a title.");
+    if (title === album.title) return setEditingTitle(false);
+    setTitleBusy(true);
+    setTitleError(null);
+    try {
+      await studioApi.updateAlbum(id, { title });
+      setEditingTitle(false);
+      await load();
+    } catch (err) {
+      setTitleError(err instanceof Error ? err.message : "Couldn't save the new title - please try again.");
+    } finally {
+      setTitleBusy(false);
+    }
   };
 
   const toggleFeatured = async () => {
@@ -323,7 +353,37 @@ export function AlbumDetail() {
           )}
         </div>
         <div>
-          <h1 style={{ marginTop: 0, marginBottom: 4 }}>{album.title}</h1>
+          {editingTitle ? (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  autoFocus
+                  value={titleDraft}
+                  aria-label="Album title"
+                  style={{ fontSize: "1.4rem", minWidth: 280 }}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void saveTitle();
+                    if (e.key === "Escape") setEditingTitle(false);
+                  }}
+                />
+                <button className="btn primary" onClick={saveTitle} disabled={titleBusy || !titleDraft.trim()}>
+                  {titleBusy ? "Saving..." : "Save title"}
+                </button>
+                <button className="btn" onClick={() => setEditingTitle(false)} disabled={titleBusy}>
+                  Cancel
+                </button>
+              </div>
+              {titleError && <p style={{ color: "var(--accent)", margin: "6px 0 0", fontSize: "0.85rem" }}>{titleError}</p>}
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
+              <h1 style={{ marginTop: 0, marginBottom: 0 }}>{album.title}</h1>
+              <button className="btn" onClick={startRename} title="Change this album's title">
+                Rename
+              </button>
+            </div>
+          )}
           <p style={{ color: "var(--text-dim)" }}>{album.description}</p>
           <button className={album.is_featured ? "btn primary" : "btn"} onClick={toggleFeatured}>
             {album.is_featured ? "★ Featured on landing page - click to remove" : "Feature on landing page"}

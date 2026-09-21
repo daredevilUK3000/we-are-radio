@@ -267,6 +267,9 @@ export function BulkImport() {
   rowsRef.current = rows;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // Files added after an album is chosen start on that album (see chooseAlbum).
+  const albumChoiceRef = useRef(albumChoice);
+  albumChoiceRef.current = albumChoice;
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
@@ -464,7 +467,7 @@ export function BulkImport() {
           path: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
           title: "",
           artist: settingsRef.current.artist,
-          albumId: "",
+          albumId: albumChoiceRef.current,
           trackNumber: "",
           tags: [],
           upload: "idle",
@@ -493,7 +496,8 @@ export function BulkImport() {
           const hadContent = !!(s.title || s.track_id);
           row.title = s.title ?? "";
           row.artist = s.artist ?? row.artist;
-          row.albumId = s.album_id ?? "";
+          // An uploaded track keeps exactly the album it has; a saved row with no album takes the chosen one.
+          row.albumId = s.track_id ? (s.album_id ?? "") : (s.album_id ?? row.albumId);
           row.trackNumber = s.track_number ? String(s.track_number) : "";
           row.tags = parseTags(s.tags);
           row.hash = s.content_hash || undefined;
@@ -738,6 +742,27 @@ export function BulkImport() {
     patchMany(targetKeys(scope), (r) => (onlyBlank && r.artist.trim() ? {} : { artist }));
   };
 
+  // Choosing (or creating) an album puts it on every row that has none yet, so
+  // it can't be forgotten. Rows that already have an album, and tracks already
+  // uploaded, are left alone - "Apply to all / selected" is for changing those.
+  const chooseAlbum = (id: string, createdTitle?: string) => {
+    setAlbumChoice(id);
+    if (!id) return;
+    const blanks = new Set(rowsRef.current.filter((r) => !r.albumId && r.upload !== "done").map((r) => r.key));
+    if (blanks.size > 0) patchMany(blanks, () => ({ albumId: id }));
+    const title = createdTitle ?? albums.find((a) => a.id === id)?.title ?? "that album";
+    const n = blanks.size;
+    if (createdTitle) {
+      setNotice(
+        n > 0
+          ? `Created the album "${title}" and put ${n} track${n === 1 ? "" : "s"} on it.`
+          : `Created the album "${title}". Files you add will go on it.`
+      );
+    } else if (n > 0) {
+      setNotice(`Put ${n} track${n === 1 ? "" : "s"} on "${title}" (rows that already had an album were left as they were).`);
+    }
+  };
+
   const applyAlbum = (scope: "selected" | "all") => {
     if (!albumChoice) return;
     patchMany(targetKeys(scope), () => ({ albumId: albumChoice }));
@@ -767,9 +792,8 @@ export function BulkImport() {
       const { id } = await studioApi.createAlbum({ title });
       const list = await studioApi.albums();
       setAlbums(list.albums);
-      setAlbumChoice(id);
+      chooseAlbum(id, title);
       setNewAlbumTitle("");
-      setNotice(`Created the album "${title}" - choose Apply to assign it.`);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Could not create that album");
     } finally {
@@ -822,8 +846,8 @@ export function BulkImport() {
     const noAlbum = rowsRef.current.filter((r) => wanted.has(r.key) && !r.albumId).length;
     if (noAlbum > 0) {
       const hint = albumChoice
-        ? `\n\nYou have chosen an album in step 2 but it only applies once you press "Apply to all" or "Apply to selected".`
-        : "";
+        ? `\n\nAn album is chosen in step 2, but these rows were set to "(no album)" by hand - "Apply to all" or "Apply to selected" would put it on them.`
+        : `\n\nChoose or create an album in step 2 first to put it on all of them.`;
       const ok = window.confirm(
         `${noAlbum} of these ${keys.length} track${keys.length === 1 ? " has" : "s have"} no album, so ${
           noAlbum === 1 ? "it" : "they"
@@ -968,7 +992,7 @@ export function BulkImport() {
 
         <div className="bi-action">
           <label>Album</label>
-          <select value={albumChoice} onChange={(e) => setAlbumChoice(e.target.value)}>
+          <select value={albumChoice} onChange={(e) => chooseAlbum(e.target.value)}>
             <option value="">Choose an album...</option>
             {albums.map((a) => (
               <option key={a.id} value={a.id}>
@@ -997,6 +1021,10 @@ export function BulkImport() {
             {creatingAlbum ? "Creating..." : "Create"}
           </button>
         </div>
+        <p style={{ margin: "-4px 0 10px", fontSize: "0.8rem", color: "var(--text-dim)" }}>
+          Choosing or creating an album puts it on every row that has no album yet, and on files you add afterwards. "Apply to
+          all" is only needed to change rows that already have a different album.
+        </p>
 
         <div className="bi-action">
           <label>Track numbers</label>
@@ -1301,8 +1329,8 @@ export function BulkImport() {
             {readyRows.filter((r) => !r.albumId).length} ready row{readyRows.filter((r) => !r.albumId).length === 1 ? " has" : "s have"} no
             album yet.
             {albumChoice
-              ? " You've chosen an album in step 2 - press \"Apply to all\" (or \"Apply to selected\") to assign it."
-              : ""}
+              ? " These were set to \"(no album)\" by hand - press \"Apply to all\" (or \"Apply to selected\") in step 2 to put the chosen album on them."
+              : " Choose or create an album in step 2 to put it on all of them."}
           </p>
         )}
         {rows.length > 0 && readyRows.length === 0 && !run?.active && (
