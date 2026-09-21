@@ -4,6 +4,7 @@ import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { FavouriteButton } from "../components/FavouriteButton";
 import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
+import { usePlaySlot } from "../../shared/analytics";
 
 export function AlbumDetail() {
   const { id } = useParams();
@@ -13,6 +14,7 @@ export function AlbumDetail() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [searchParams] = useSearchParams();
   const autoplayed = useRef(false);
+  const plays = usePlaySlot();
 
   useExclusiveAudio("album", audioRef, !!album);
   // Jingles pinned to a song play over it here too, not only on the stations.
@@ -44,11 +46,13 @@ export function AlbumDetail() {
     audioRef.current.src = mediaUrl(track.audio_url);
     audioRef.current.play().catch(() => {});
     listenerApi.recordPlay("track", track.id).catch(() => {});
+    plays.start({ contentType: "track", contentId: track.id, source: "album" }, audioRef.current);
   };
 
   const playAlbum = () => playIndex(0);
 
   const onEnded = () => {
+    plays.complete();
     if (playingIndex === null) return;
     if (playingIndex + 1 < tracks.length) {
       playIndex(playingIndex + 1);

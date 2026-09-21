@@ -5,6 +5,7 @@ import { HeroBackdrop } from "../components/HeroBackdrop";
 import { EyebrowPill } from "../components/BrandMark";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { CHANNEL_LABELS } from "../lib/channelLabels";
+import { trackListenNow } from "../../shared/analytics";
 import {
   FeaturedAlbumSection,
   PodcastShowcase,
@@ -84,7 +85,7 @@ export function Home() {
         </h1>
         <p className="hero-subhead">{subhead}</p>
         <div className="hero-actions">
-          <Link to={`/listen?channel=${channelSlug}`} className="pill-btn pill-btn-solid">
+          <Link to={`/listen?channel=${channelSlug}`} className="pill-btn pill-btn-solid" onClick={trackListenNow}>
             <span className="play-triangle" />
             Listen Now
           </Link>

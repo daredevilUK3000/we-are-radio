@@ -1,4 +1,6 @@
-import { Link, NavLink, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { trackVisit } from "./shared/analytics";
 import { Home } from "./listener/pages/Home";
 import { Listen } from "./listener/pages/Listen";
 import { Albums } from "./listener/pages/Albums";
@@ -33,11 +35,17 @@ import { ProgrammeTitles } from "./studio/pages/ProgrammeTitles";
 import { TimeCapsules } from "./studio/pages/TimeCapsules";
 import { UploadAudioAsset } from "./studio/pages/UploadAudioAsset";
 import { Guide } from "./studio/pages/Guide";
+import { Analytics } from "./studio/pages/Analytics";
 import { Albums as StudioAlbums } from "./studio/pages/Albums";
 import { AlbumDetail as StudioAlbumDetail } from "./studio/pages/AlbumDetail";
 import { PublishWizard } from "./studio/pages/PublishWizard";
 
 function ListenerLayout({ children }: { children: React.ReactNode }) {
+  // One "visit" per browser tab session, with where it came from (a YouTube link, a newsletter...).
+  useEffect(() => {
+    trackVisit();
+  }, []);
+
   return (
     <div className="app-shell listener-shell">
       <header className="top-nav">
@@ -64,6 +72,8 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
 
 function StudioLayout({ children }: { children: React.ReactNode }) {
   const { logout } = useStudioAuth();
+  // Analytics is a section of its own and uses the whole width of the screen.
+  const wide = useLocation().pathname.startsWith("/studio/analytics");
   return (
     <div className="app-shell">
       <header className="top-nav">
@@ -72,6 +82,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/studio" end>
             Dashboard
           </NavLink>
+          <NavLink to="/studio/analytics">Analytics</NavLink>
           <NavLink to="/studio/publish">Publish Music</NavLink>
           <NavLink to="/studio/bulk-import">Bulk Import</NavLink>
           <NavLink to="/studio/drafts">Drafts</NavLink>
@@ -91,7 +102,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
           Sign out
         </button>
       </header>
-      <main>{children}</main>
+      <main className={wide ? "studio-wide" : undefined}>{children}</main>
     </div>
   );
 }
@@ -106,6 +117,7 @@ function StudioApp() {
     <StudioLayout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="analytics" element={<Analytics />} />
         <Route path="publish" element={<PublishWizard />} />
         <Route path="bulk-import" element={<BulkImport />} />
         <Route path="drafts" element={<Drafts />} />

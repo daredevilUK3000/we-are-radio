@@ -7,6 +7,7 @@ import { ProgrammeEqSilhouette } from "../components/HeroBackdrop";
 import { PlayerCard } from "../components/PlayerCard";
 import { plainText, useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
+import { trackListenNow, usePlaySlot } from "../../shared/analytics";
 
 export function ProgrammeDetail() {
   const { id } = useParams();
@@ -18,6 +19,9 @@ export function ProgrammeDetail() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [searchParams] = useSearchParams();
   const autoplayed = useRef(false);
+  // The whole programme (or podcast episode), and whichever song inside it is playing.
+  const programmePlay = usePlaySlot();
+  const songPlay = usePlaySlot();
 
   useExclusiveAudio("programme", audioRef);
   useOverlayJingles(audioRef, playingIndex !== null ? items[playingIndex] : null, !!programme);
@@ -37,12 +41,18 @@ export function ProgrammeDetail() {
     void unlockAudio(audioRef.current);
     audioRef.current!.src = mediaUrl(item.track_audio_url ?? item.audio_asset_audio_url);
     audioRef.current!.play().catch(() => {});
+    // Songs are logged as songs; spoken links and podcast audio belong to the programme's own play.
+    if (item.track_id) songPlay.start({ contentType: "track", contentId: item.track_id, source: "programme" }, audioRef.current);
+    else songPlay.abandon();
   };
 
   // Start the programme from the top and log it to listening history.
   const startProgramme = () => {
     playIndex(0);
-    if (programme) listenerApi.recordPlay("programme", programme.id).catch(() => {});
+    if (programme) {
+      listenerApi.recordPlay("programme", programme.id).catch(() => {});
+      programmePlay.start({ contentType: "programme", contentId: programme.id, source: "programme" });
+    }
   };
 
   // Arriving via a landing-page play button (?autoplay=1) starts the episode
@@ -56,10 +66,12 @@ export function ProgrammeDetail() {
   }, [items, programme, searchParams]);
 
   const onEnded = () => {
+    songPlay.complete();
     if (playingIndex === null) return;
     if (playingIndex + 1 < items.length) {
       playIndex(playingIndex + 1);
     } else {
+      programmePlay.complete();
       setPlayingIndex(null);
     }
   };
@@ -101,7 +113,13 @@ export function ProgrammeDetail() {
           </button>
         ) : (
           <>
-            <button className="pill-btn pill-btn-solid" onClick={() => navigate("/listen")}>
+            <button
+              className="pill-btn pill-btn-solid"
+              onClick={() => {
+                trackListenNow();
+                navigate("/listen");
+              }}
+            >
               <span className="play-triangle" />
               Listen Now
             </button>

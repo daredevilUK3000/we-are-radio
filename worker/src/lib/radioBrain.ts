@@ -23,6 +23,9 @@ export interface RotationItem {
   audio_url: string | null;
   artwork_url: string | null;
   overlays?: RotationOverlay[];
+  // Radio That Knows You only: true for the occasional surprise pick, so listening
+  // analytics can tell whether the wildcard is what makes people leave.
+  wildcard?: boolean;
   // Filled in when a now-playing response is built (not stored in cached rotations):
   artist?: string | null;
   album_id?: string | null;
@@ -505,7 +508,7 @@ export function buildProgramme(opts: {
   };
 
   addLink(pick(["intro"]));
-  songs.forEach(({ track }, i) => {
+  songs.forEach(({ track, wildcard }, i) => {
     items.push({
       id: `${track.id}-${items.length}`,
       item_type: "song",
@@ -515,6 +518,7 @@ export function buildProgramme(opts: {
       duration_seconds: track.duration_seconds,
       audio_url: track.audio_url,
       artwork_url: track.artwork_url,
+      wildcard,
     });
     if (i < songs.length - 1 && rand() < 0.75) {
       addLink(pick(i % 2 === 0 ? ["transition", "observation"] : ["fun_fact", "observation", "transition"]));

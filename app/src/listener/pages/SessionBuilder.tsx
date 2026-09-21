@@ -5,6 +5,7 @@ import { MOOD_OPTIONS } from "../../shared/moods";
 import { PlayerCard } from "../components/PlayerCard";
 import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
+import { usePlaySlot } from "../../shared/analytics";
 
 const DURATIONS = [15, 30, 45, 60];
 
@@ -21,6 +22,7 @@ export function SessionBuilder({ embedded = false }: { embedded?: boolean }) {
   const [building, setBuilding] = useState(false);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const plays = usePlaySlot();
 
   useExclusiveAudio("session", audioRef, !!session);
   useOverlayJingles(audioRef, playingIndex !== null ? session?.items[playingIndex] : null, !!session);
@@ -54,9 +56,13 @@ export function SessionBuilder({ embedded = false }: { embedded?: boolean }) {
     audioRef.current.src = mediaUrl(item.audio_url);
     audioRef.current.play().catch(() => {});
     if (item.track_id) listenerApi.recordPlay("track", item.track_id).catch(() => {});
+    // My Mood picks a free-form tag, not one of the four Radio That Knows You needs, so no mood is recorded.
+    if (item.track_id) plays.start({ contentType: "track", contentId: item.track_id, source: "my-mood" }, audioRef.current);
+    else plays.abandon();
   };
 
   const onEnded = () => {
+    plays.complete();
     if (playingIndex === null || !session) return;
     if (playingIndex + 1 < session.items.length) {
       playIndex(playingIndex + 1);

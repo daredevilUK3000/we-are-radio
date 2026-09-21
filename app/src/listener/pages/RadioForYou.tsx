@@ -6,6 +6,7 @@ import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { SessionBuilder } from "./SessionBuilder";
+import { usePlaySlot } from "../../shared/analytics";
 
 /**
  * Radio That Knows You: the listener says what they need, and gets a produced
@@ -76,6 +77,11 @@ export function RadioForYou() {
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const requestId = useRef(0);
+  // The mood picked, the whole programme, and whichever song is playing - so the
+  // Studio can show, mood by mood, where listeners stay and where they bail out.
+  const moodRef = useRef<string | null>(null);
+  const programmePlay = usePlaySlot();
+  const songPlay = usePlaySlot();
 
   useExclusiveAudio("radio-for-you", audioRef);
   useOverlayJingles(audioRef, playingIndex !== null ? items[playingIndex] : null);
@@ -99,13 +105,25 @@ export function RadioForYou() {
     audio.play().catch(() => {
       // The browser refused to start it by itself: the player shows Paused with a Play button.
     });
-    if (item.item_type === "song" && item.track_id) listenerApi.recordPlay("track", item.track_id).catch(() => {});
+    if (item.item_type === "song" && item.track_id) {
+      listenerApi.recordPlay("track", item.track_id).catch(() => {});
+      songPlay.start(
+        { contentType: "track", contentId: item.track_id, mood: moodRef.current, source: "radio-for-you", wildcard: !!item.wildcard },
+        audio
+      );
+    } else {
+      // Moving on to a spoken link or station ID ends whichever song was playing.
+      songPlay.abandon();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onEnded = () => {
+    songPlay.complete();
     if (playingIndex === null) return;
     if (playingIndex + 1 < items.length) playIndex(playingIndex + 1);
     else {
+      programmePlay.complete();
       setPlayingIndex(null);
       setFinished(true);
     }
@@ -120,6 +138,10 @@ export function RadioForYou() {
         audio.play().catch(() => {});
         void unlockAudio(audio);
       }
+      // Asking again ("another one", or a different mood) ends the programme that was playing.
+      programmePlay.abandon();
+      songPlay.abandon();
+      moodRef.current = chosen.key;
       const id = ++requestId.current;
       setNeed(chosen);
       setMessage(null);
@@ -158,7 +180,9 @@ export function RadioForYou() {
       itemsRef.current = result.items;
       setPhase("programme");
       playIndex(0);
+      programmePlay.start({ contentType: "programme", mood: chosen.key, source: "radio-for-you" });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [songsWanted, band, playIndex]
   );
 
@@ -177,6 +201,8 @@ export function RadioForYou() {
   }, [location, navigate, request]);
 
   const restart = () => {
+    programmePlay.abandon();
+    songPlay.abandon();
     audioRef.current?.pause();
     requestId.current++;
     setPlayingIndex(null);

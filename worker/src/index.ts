@@ -21,6 +21,7 @@ import { podcastImportRoutes } from "./routes/podcastImport";
 import { bulkImportRoutes } from "./routes/bulkImport";
 import { programmeTitleRoutes } from "./routes/programmeTitles";
 import { timeCapsuleRoutes } from "./routes/timeCapsules";
+import { analyticsPublicRoutes, analyticsStudioRoutes } from "./routes/analytics";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -31,6 +32,9 @@ app.get("/health", (c) => c.json({ ok: true }));
 // Public, listener-facing API - read-only, no auth. See routes/public.ts:
 // it only ever selects published/live rows, independently of the Studio CRUD routers.
 app.route("/api", publicRoutes);
+
+// The listener app logs plays and visits here (aggregate only, no identity).
+app.route("/api/analytics", analyticsPublicRoutes);
 
 // Listener auth (login/logout/session are unauthenticated by nature).
 app.route("/api/auth", listenerAuthRoutes);
@@ -62,6 +66,7 @@ studio.route("/podcast-import", podcastImportRoutes);
 studio.route("/bulk-import", bulkImportRoutes);
 studio.route("/programme-titles", programmeTitleRoutes);
 studio.route("/time-capsules", timeCapsuleRoutes);
+studio.route("/analytics", analyticsStudioRoutes);
 app.route("/studio/api", studio);
 
 // Streams audio straight out of R2 - not gated on Studio auth, since

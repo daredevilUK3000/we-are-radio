@@ -5,6 +5,7 @@ import { useActiveChannel } from "../context/ActiveChannelContext";
 import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { NowPlayingExpanded } from "./NowPlayingExpanded";
+import { useChannelLog } from "../../shared/analytics";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -67,6 +68,9 @@ export function NowPlayingBar() {
   useEffect(() => {
     setExpanded(false);
   }, [location.pathname]);
+
+  // Tune-ins and song plays on this channel, for the Studio's Analytics.
+  useChannelLog(audioRef, data, playing);
 
   // If a podcast/album page starts playing, this player steps aside (and its
   // button must show "play" again rather than a stale "pause").

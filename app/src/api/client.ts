@@ -135,6 +135,10 @@ export const studioApi = {
     request<{ tracks: any[] }>(`${STUDIO_BASE}/tracks?status=${encodeURIComponent(status)}`),
   deleteTrack: (id: string) => request<{ ok: true }>(`${STUDIO_BASE}/tracks/${id}`, { method: "DELETE" }),
 
+  // Listening + visit analytics (days: 1, 7, 30, 90, 365, or 0 for all time).
+  analytics: (days: number, group?: string) =>
+    request<any>(`${STUDIO_BASE}/analytics?days=${days}${group ? `&group=${group}` : ""}`),
+
   // Bulk Import (see worker/src/routes/bulkImport.ts)
   bulkLookup: (fileKeys: string[]) =>
     request<{ rows: any[] }>(`${STUDIO_BASE}/bulk-import/rows/lookup`, {
