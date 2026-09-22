@@ -1,10 +1,36 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { publicApi, mediaUrl } from "../../api/client";
-import { useExclusiveAudio } from "../lib/audioUtils";
+import { useExclusiveAudio, formatClock } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "../components/ShareButton";
+import { FlagshipPlayer } from "../components/FlagshipPlayer";
+import { StudioConsole } from "../components/StudioConsole";
+import { channelAccent } from "../lib/channelAccent";
+
+const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark"]);
+
+function QueueCard({ item, accent, next }: { item: any; accent: string; next: boolean }) {
+  return (
+    <div className={`lp-queue-card${next ? " is-next" : ""}`} style={next ? { background: `${accent}14`, borderColor: `${accent}4d` } : undefined}>
+      {item.artwork_url ? (
+        <img className="lp-queue-art" src={mediaUrl(item.artwork_url)} alt="" />
+      ) : (
+        <div className="lp-queue-art" style={{ background: `linear-gradient(135deg, ${accent}55, ${accent}11 70%)` }} />
+      )}
+      <div className="lp-queue-info">
+        {next && (
+          <div className="lp-queue-next" style={{ color: accent }}>
+            Next
+          </div>
+        )}
+        <div className="lp-queue-title">{item.label ?? "We Are Radio"}</div>
+        {!next && item.duration_seconds ? <div className="lp-queue-dur">{formatClock(item.duration_seconds)}</div> : null}
+      </div>
+    </div>
+  );
+}
 
 export function Listen() {
   // /channel/:slug is the shareable form; /listen?channel= is the one used
@@ -64,57 +90,110 @@ export function Listen() {
   if (!data) return <p>Tuning in...</p>;
   if (!data.on_air) return <p>{data.channel?.name ?? "This channel"} isn't broadcasting anything published yet.</p>;
 
+  const accent = channelAccent(channelSlug);
+  const now = data.now_playing;
+  const isSong = now?.item_type === "song";
+  const artUrl: string | null = now?.artwork_url ? mediaUrl(now.artwork_url) : null;
+  const category = data.channel?.description || data.programme?.title || null;
+  const queue: any[] = data.coming_up ?? (data.up_next ? [data.up_next] : []);
+
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-        <span className="on-air-badge">
-          <span className="on-air-dot" /> ON AIR &middot; {data.channel.name}
+    <div className={`lp-page${playing ? " is-playing" : ""}`}>
+      <div className="lp-glow" aria-hidden="true">
+        <div className="lp-glow-warm" />
+        <div className="lp-glow-accent" style={{ background: `radial-gradient(circle, ${accent}1f 0%, transparent 70%)` }} />
+      </div>
+
+      <div className="lp-top">
+        <span className="on-air-badge lp-eyebrow">
+          <span className="on-air-dot" /> On Air &middot; {data.channel.name}
         </span>
         <ShareButton
           path={`/channel/${channelSlug}`}
           title={`${data.channel.name} - We Are Radio`}
-          text={
-            data.now_playing?.label
-              ? `Listening to ${data.now_playing.label} on ${data.channel.name}`
-              : `Live on ${data.channel.name}`
-          }
+          text={now?.label ? `Listening to ${now.label} on ${data.channel.name}` : `Live on ${data.channel.name}`}
+          className="lp-icon-btn"
+          iconOnly
         />
       </div>
-      <h1 style={{ marginBottom: 4 }}>{data.programme?.title}</h1>
-      <p style={{ color: "var(--text-dim)" }}>{data.programme?.description}</p>
 
-      <div className="card" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
-        {data.now_playing?.artwork_url ? (
-          <img
-            src={mediaUrl(data.now_playing.artwork_url)}
-            alt=""
-            width={56}
-            height={56}
-            style={{ objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
-          />
-        ) : (
-          <div style={{ width: 56, height: 56, borderRadius: 8, background: "var(--bg)", flexShrink: 0 }} />
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginBottom: 4 }}>NOW PLAYING</div>
-          <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>{data.now_playing?.label}</div>
+      <div className="lp-hero">
+        <div className="lp-art-col">
+          <div className="lp-rings" aria-hidden="true">
+            <span style={{ animationDelay: "0s" }} />
+            <span style={{ animationDelay: "1.5s" }} />
+            <span style={{ animationDelay: "3s" }} />
+          </div>
+          <div className="lp-art">
+            {artUrl ? (
+              <img key={artUrl} src={artUrl} alt="" />
+            ) : HAS_CHANNEL_VIDEO.has(channelSlug) ? (
+              <video
+                src={`/channels/channel-${channelSlug}.mp4`}
+                poster={`/channels/channel-${channelSlug}.jpg`}
+                autoPlay
+                muted
+                loop
+                playsInline
+                aria-hidden="true"
+              />
+            ) : (
+              <div className="lp-art-placeholder" />
+            )}
+            <svg className="lp-art-spin" width="90%" height="90%" viewBox="0 0 410 410" aria-hidden="true">
+              <circle cx="205" cy="205" r="150" fill="none" stroke="#FFFFFF" strokeWidth="1" strokeDasharray="2 11" />
+              <circle cx="205" cy="205" r="112" fill="none" stroke="#FFFFFF" strokeWidth="1" strokeDasharray="2 9" />
+            </svg>
+            <div className="lp-art-shine" aria-hidden="true" />
+            <button className="lp-art-play" style={{ background: accent, boxShadow: `0 12px 36px ${accent}8c` }} onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
+              {playing ? (
+                <span className="pl-pause-icon">
+                  <span />
+                  <span />
+                </span>
+              ) : (
+                <span className="play-triangle" />
+              )}
+            </button>
+          </div>
         </div>
-        <button className="mp-play-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
-          {playing ? (
-            <span className="mp-pause-icon">
-              <span />
-              <span />
+
+        <div className="lp-info">
+          {category && <div className="lp-category" style={{ color: `${accent}` }}>{category}</div>}
+          <h1 className="lp-channel-name">{data.channel.name}</h1>
+
+          <div className="lp-nowplaying-row">
+            <span className="lp-nowplaying-label" style={{ color: accent }}>
+              {isSong ? "Now Playing" : "On Air Now"}
             </span>
-          ) : (
-            <span className="play-triangle" />
-          )}
-        </button>
+            <span className="lp-eq" aria-hidden="true">
+              <span style={{ background: accent }} />
+              <span style={{ background: accent }} />
+              <span style={{ background: accent }} />
+            </span>
+          </div>
+          <div className="lp-track-title">{now?.label ?? "We Are Radio"}</div>
+
+          <FlagshipPlayer
+            audioRef={audioRef}
+            accent={accent}
+            seed={`${now?.id ?? ""}${now?.label ?? ""}`}
+            playing={playing}
+            onTogglePlay={togglePlay}
+          />
+        </div>
       </div>
 
-      {data.up_next && (
-        <div className="card">
-          <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginBottom: 4 }}>UP NEXT</div>
-          <div>{data.up_next.label}</div>
+      <StudioConsole accent={accent} seed={channelSlug} />
+
+      {queue.length > 0 && (
+        <div className="lp-queue">
+          <div className="lp-queue-label">Up Next on {data.channel.name}</div>
+          <div className="lp-queue-row">
+            {queue.slice(0, 4).map((item, i) => (
+              <QueueCard key={item.id ?? i} item={item} accent={accent} next={i === 0} />
+            ))}
+          </div>
         </div>
       )}
 

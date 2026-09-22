@@ -424,14 +424,15 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
  * things on air (so the listener sees the flow of the station, not one track),
  * and for songs the album they belong to and its artwork as a fallback.
  * Station IDs are left out of the queue - listeners care about the songs and
- * talk, not that a jingle is coming.
+ * talk, not that a jingle is coming. Four deep so the flagship Now Playing
+ * page's "Up Next" rail (four queue cards) has real items to show.
  */
 async function describePlayback(db: D1Database, items: RotationItem[], currentIndex: number) {
   const now = items[currentIndex];
   const upNext = items[currentIndex + 1] ?? null;
 
   const comingUp: RotationItem[] = [];
-  for (let step = 1; step < items.length && comingUp.length < 3; step++) {
+  for (let step = 1; step < items.length && comingUp.length < 4; step++) {
     const item = items[(currentIndex + step) % items.length];
     if (item.item_type !== "station_id" && item.id !== now.id) comingUp.push(item);
   }
