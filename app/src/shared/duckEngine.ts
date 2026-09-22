@@ -103,6 +103,12 @@ export function playOverlay(music: HTMLAudioElement, overlay: Overlay): Promise<
   return new Promise((resolve) => {
     const jingle = jingleElements.get(music) ?? new Audio();
     jingleElements.set(music, jingle);
+    // duck_level is set in the Studio as "music plays at N% while the jingle
+    // talks" - a fraction of whatever the listener has it set to, not a fixed
+    // floor. Capturing it here (rather than assuming full volume) is what
+    // makes a volume control - like the shared track page's - duck correctly
+    // instead of ducking to, or restoring at, the wrong level.
+    const restoreVolume = music.volume;
 
     let done = false;
     const onMusicPause = () => jingle.pause();
@@ -117,7 +123,7 @@ export function playOverlay(music: HTMLAudioElement, overlay: Overlay): Promise<
       music.removeEventListener("play", onMusicPlay);
       cancelers.delete(music);
       jingle.pause();
-      rampVolume(music, 1, overlay.duck_fade_ms);
+      rampVolume(music, restoreVolume, overlay.duck_fade_ms);
       resolve();
     };
     // If the jingle never ends (a load error that doesn't fire, say), the
@@ -133,7 +139,7 @@ export function playOverlay(music: HTMLAudioElement, overlay: Overlay): Promise<
 
     jingle.src = mediaUrl(overlay.audio_url);
     jingle.currentTime = 0;
-    rampVolume(music, overlay.duck_level, overlay.duck_fade_ms);
+    rampVolume(music, restoreVolume * overlay.duck_level, overlay.duck_fade_ms);
     jingle.play().catch(finish);
   });
 }

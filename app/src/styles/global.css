@@ -1526,9 +1526,37 @@ td {
   text-align: right;
 }
 
+.now-playing-card-bare {
+  padding: 18px 22px;
+}
+
+.pl-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.pl-volume input[type="range"] {
+  width: 80px;
+  accent-color: var(--accent);
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .pl-volume input[type="range"] {
+    width: 56px;
+  }
+}
+
 @media (max-width: 560px) {
   .now-playing-card {
     flex-wrap: wrap;
+  }
+  .pl-volume {
+    display: none;
   }
   .now-playing-card .live-waveform {
     display: none;
@@ -3558,5 +3586,156 @@ main.studio-wide {
   .an-hrow {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+}
+
+/* ---- Listener: shared track page ---- */
+/* Artwork motion (.fa-ring / .fa-art / .fa-shine / .fa-art-placeholder) is the
+   Featured Album section's own classes, reused as-is - same spin/shine, just
+   a bigger frame (.td-art-wrap overrides the max-width only). */
+
+.td-hero {
+  display: flex;
+  gap: 40px;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.td-art-wrap {
+  max-width: 360px;
+  flex-shrink: 0;
+}
+
+.td-play-btn {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 10px 32px rgba(225, 29, 46, 0.55);
+  transition: transform 0.15s ease;
+  z-index: 1;
+}
+
+.td-play-btn:hover {
+  transform: scale(1.06);
+}
+
+.td-play-btn .play-triangle {
+  border-top-width: 11px;
+  border-bottom-width: 11px;
+  border-left-width: 16px;
+  margin-left: 4px;
+}
+
+.td-info {
+  min-width: 0;
+}
+
+.td-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(2.1rem, 4vw, 3.1rem);
+  line-height: 1.03;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
+
+.td-artist {
+  font-size: 1.05rem;
+  color: var(--text-dim);
+  margin: 0 0 6px;
+}
+
+.td-album-link {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.td-album-link:hover {
+  color: var(--text);
+}
+
+.td-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 26px;
+}
+
+.td-icon-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.td-icon-btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--text-muted);
+}
+
+.td-player {
+  margin-bottom: 28px;
+}
+
+.td-airing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 28px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--accent-dim) 0%, var(--bg-raised) 70%);
+  border: 1px solid var(--accent-dim);
+}
+
+.td-airing-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.td-airing-body {
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .td-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .td-art-wrap {
+    max-width: 280px;
+    margin: 0 auto;
+  }
+  .td-airing {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

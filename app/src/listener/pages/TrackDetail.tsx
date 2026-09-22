@@ -3,14 +3,23 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { FavouriteButton } from "../components/FavouriteButton";
 import { ShareButton } from "../components/ShareButton";
+import { PlayerCard } from "../components/PlayerCard";
 import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { usePlaySlot } from "../../shared/analytics";
 
 /**
- * A single track's own shareable page (handoff: shareable links). Opening a
- * fresh page load is never a user gesture, so true autoplay is usually
- * blocked - a clear Play button is the fallback the handoff asks for.
+ * A single track's own shareable page (handoff: shareable links, then the
+ * redesign that followed it). Built on the site's own pieces rather than a
+ * one-off: the artwork panel reuses the Featured Album section's spin-ring
+ * and shine-sweep classes (.fa-*), the player is the same PlayerCard used on
+ * the programme/session/Radio That Knows You pages (not a bare native
+ * <audio>), and /api/tracks/:id now goes through withPinnedOverlays like
+ * every other direct-play route - a track pinned a jingle to plays it here
+ * too, and a track with no artwork of its own falls back to its album's.
+ *
+ * Opening a fresh page load is never a user gesture, so true autoplay is
+ * usually blocked - a clear Play button is the fallback either way asks for.
  * Analytics-wise this is logged the same as playing a track from its album
  * (source: "album") rather than a fifth source, since it's the same kind of
  * play - one song, no rotation - just reached by a direct link instead of
@@ -21,43 +30,59 @@ export function TrackDetail() {
   const [searchParams] = useSearchParams();
   const [track, setTrack] = useState<any>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
+  const [paused, setPaused] = useState(true);
   const audioRef = useRef<HTMLAudioElement>(null);
   const plays = usePlaySlot();
   const autoplayed = useRef(false);
+  const hasStarted = useRef(false);
 
-  useExclusiveAudio("track", audioRef, !!track, () => setPlaying(false));
+  useExclusiveAudio("track", audioRef, !!track, () => setPaused(true));
   useOverlayJingles(audioRef, track, !!track);
 
   useEffect(() => {
     if (!id) return;
     setLoadError(null);
     setTrack(null);
+    hasStarted.current = false;
     publicApi
       .track(id)
       .then((r) => setTrack(r.track))
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load track"));
   }, [id]);
 
-  const play = () => {
+  // Ready to play the moment the track loads, so the big button and
+  // PlayerCard's own play button both just toggle from here on.
+  useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track?.audio_url) return;
-    void unlockAudio(audio);
     audio.src = mediaUrl(track.audio_url);
-    audio.play().then(
-      () => setPlaying(true),
-      () => setPlaying(false) // the browser refused to start it by itself - the Play button stays visible
-    );
-    listenerApi.recordPlay("track", track.id).catch(() => {});
-    plays.start({ contentType: "track", contentId: track.id, source: "album" }, audio);
+  }, [track]);
+
+  const togglePlayPause = () => {
+    const audio = audioRef.current;
+    if (!audio || !track?.audio_url) return;
+    if (audio.paused) {
+      void unlockAudio(audio);
+      if (!hasStarted.current) {
+        hasStarted.current = true;
+        listenerApi.recordPlay("track", track.id).catch(() => {});
+        plays.start({ contentType: "track", contentId: track.id, source: "album" }, audio);
+      }
+      audio.play().then(
+        () => setPaused(false),
+        () => setPaused(true) // the browser refused to start it by itself - the Play button stays visible
+      );
+    } else {
+      audio.pause();
+    }
   };
 
-  // A link with ?autoplay=1 (e.g. followed straight from a share) tries to start right away,
-  // same as the album and programme pages - it still needs a user gesture to actually play.
+  // A link with ?autoplay=1 (e.g. followed straight from a share) tries to start right away -
+  // it still needs a user gesture to actually play, same as the album and programme pages.
   useEffect(() => {
     if (searchParams.get("autoplay") !== "1" || autoplayed.current || !track) return;
     autoplayed.current = true;
-    play();
+    togglePlayPause();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track, searchParams]);
 
@@ -70,64 +95,84 @@ export function TrackDetail() {
   }
   if (!track) return <p>Loading...</p>;
 
+  const artworkUrl = track.artwork_url ?? track.album_artwork_url;
   const shareText = `Listen to "${track.title}" on We Are Radio`;
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", marginBottom: 20 }}>
-        {track.artwork_url ? (
-          <img
-            src={mediaUrl(track.artwork_url)}
-            alt=""
-            width={160}
-            height={160}
-            style={{ objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
-          />
-        ) : (
-          <div
-            style={{
-              width: 160,
-              height: 160,
-              borderRadius: 8,
-              background: "var(--bg-raised)",
-              border: "1px solid var(--border)",
-              flexShrink: 0,
-            }}
-          />
-        )}
-        <div>
-          <h1 style={{ marginTop: 0, marginBottom: 4 }}>{track.title}</h1>
-          {track.artist && <p style={{ color: "var(--text-dim)", margin: "0 0 4px" }}>{track.artist}</p>}
-          {track.album_id && (
-            <p style={{ margin: "0 0 12px" }}>
-              <Link to={`/albums/${track.album_id}`} style={{ color: "var(--text-dim)" }}>
-                From the album
-              </Link>
-            </p>
-          )}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button className="btn primary" onClick={play}>
-              {playing ? "Playing" : "Play"}
+      <div className="td-hero">
+        <div className="fa-art-wrap td-art-wrap">
+          <div className="fa-ring" aria-hidden="true" />
+          <div className="fa-art">
+            {artworkUrl ? (
+              <img src={mediaUrl(artworkUrl)} alt="" />
+            ) : (
+              <div className="fa-art-placeholder" />
+            )}
+            <div className="fa-shine" aria-hidden="true" />
+            <button className="td-play-btn" onClick={togglePlayPause} aria-label={paused ? "Play" : "Pause"}>
+              {paused ? (
+                <span className="play-triangle" />
+              ) : (
+                <span className="pl-pause-icon">
+                  <span />
+                  <span />
+                </span>
+              )}
             </button>
-            <FavouriteButton itemType="track" itemId={track.id} />
-            <ShareButton path={`/track/${track.id}`} title={`${track.title} - We Are Radio`} text={shareText} />
           </div>
         </div>
+
+        <div className="td-info">
+          <h1 className="td-title">{track.title}</h1>
+          {track.artist && <p className="td-artist">{track.artist}</p>}
+          {track.album_id && (
+            <Link to={`/albums/${track.album_id}`} className="td-album-link">
+              From the album{track.album_title ? ` — ${track.album_title}` : ""} &rarr;
+            </Link>
+          )}
+
+          <div className="td-actions">
+            <button className="pill-btn pill-btn-solid" onClick={togglePlayPause}>
+              {paused ? <span className="play-triangle" /> : <span className="pl-pause-icon"><span /><span /></span>}
+              {paused ? "Play" : "Pause"}
+            </button>
+            <FavouriteButton itemType="track" itemId={track.id} className="td-icon-btn" />
+            <ShareButton path={`/track/${track.id}`} title={`${track.title} - We Are Radio`} text={shareText} className="td-icon-btn" iconOnly />
+          </div>
+        </div>
+      </div>
+
+      <div className="td-player">
+        <PlayerCard audioRef={audioRef} title={track.title} fallbackDuration={track.duration_seconds} hideInfo showVolume />
+      </div>
+
+      <div className="td-airing">
+        <div>
+          <div className="td-airing-eyebrow">
+            <span className="mp-onair-dot" />
+            Currently airing on Kizzi Radio
+          </div>
+          <p className="td-airing-body">This track is one of hundreds on We Are Radio — a station that never stops.</p>
+        </div>
+        <Link to="/channel/kizzi-radio" className="pill-btn pill-btn-solid">
+          Listen Live
+        </Link>
       </div>
 
       <audio
         ref={audioRef}
         onEnded={() => {
           plays.complete();
-          setPlaying(false);
+          hasStarted.current = false;
+          setPaused(true);
         }}
         onPlay={() => {
           void unlockAudio(audioRef.current);
-          setPlaying(true);
+          setPaused(false);
         }}
-        onPause={() => setPlaying(false)}
-        style={{ width: "100%" }}
-        controls
+        onPause={() => setPaused(true)}
+        style={{ display: "none" }}
       />
     </div>
   );

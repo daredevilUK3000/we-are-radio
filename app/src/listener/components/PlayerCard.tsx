@@ -42,11 +42,27 @@ function NextIcon() {
   );
 }
 
+function VolumeIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+      <path d="M4 9v6h4l5 4V5L8 9H4z" strokeLinejoin="round" />
+      <path d="M17 8.5c1.4 1.4 1.4 5.6 0 7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /**
  * "Now playing" card with full transport controls - play/pause, back 15s,
  * forward 30s, a seekable slider with times, and playback speed - driving an
  * <audio> element that the page owns (and that stays hidden). Pass onPrev /
  * onNext when the page plays a list, to add previous/next track buttons.
+ *
+ * `hideInfo` drops the built-in artwork thumbnail and title/subtitle, for a
+ * page that already shows a bigger version of its own above the player (the
+ * shared track page). `showVolume` adds a volume slider - opt-in because
+ * most players here are one voice among several on the page (the mini-player,
+ * a jingle) where a per-player volume wouldn't mean much; the standalone
+ * track page is the one place a listener's own overall level makes sense.
  */
 export function PlayerCard({
   audioRef,
@@ -56,6 +72,8 @@ export function PlayerCard({
   onPrev,
   onNext,
   subtitle,
+  hideInfo = false,
+  showVolume = false,
 }: {
   audioRef: RefObject<HTMLAudioElement>;
   title: string;
@@ -64,11 +82,14 @@ export function PlayerCard({
   onPrev?: () => void;
   onNext?: () => void;
   subtitle?: string;
+  hideInfo?: boolean;
+  showVolume?: boolean;
 }) {
   const [paused, setPaused] = useState(() => audioRef.current?.paused ?? true);
   const [currentTime, setCurrentTime] = useState(() => audioRef.current?.currentTime ?? 0);
   const [duration, setDuration] = useState(0);
   const [rate, setRate] = useState(() => audioRef.current?.playbackRate ?? 1);
+  const [volume, setVolume] = useState(() => audioRef.current?.volume ?? 1);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -81,8 +102,20 @@ export function PlayerCard({
     const events = ["play", "pause", "timeupdate", "loadedmetadata", "durationchange", "emptied"];
     events.forEach((e) => audio.addEventListener(e, sync));
     sync();
+    // Volume changes too, but separately - a pinned jingle ducks it (and
+    // restores it) while it talks, and the slider should track that live
+    // rather than freeze at whatever the listener last dragged it to.
+    if (showVolume) {
+      const onVolume = () => setVolume(audio.volume);
+      audio.addEventListener("volumechange", onVolume);
+      onVolume();
+      return () => {
+        events.forEach((e) => audio.removeEventListener(e, sync));
+        audio.removeEventListener("volumechange", onVolume);
+      };
+    }
     return () => events.forEach((e) => audio.removeEventListener(e, sync));
-  }, [audioRef]);
+  }, [audioRef, showVolume]);
 
   const togglePause = () => {
     const audio = audioRef.current;
@@ -118,20 +151,34 @@ export function PlayerCard({
     }
   };
 
+  const onVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
+    setVolume(v);
+    if (audioRef.current) audioRef.current.volume = v;
+  };
+
   const total = duration || fallbackDuration || 0;
   const max = Math.max(total, 1);
 
   return (
-    <div className={`now-playing-card${paused ? " is-paused" : ""}`}>
-      {artUrl ? (
-        <img className="now-playing-card-art" src={mediaUrl(artUrl)} alt="" />
-      ) : (
-        <div className="now-playing-card-art" />
-      )}
+    <div
+      className={`now-playing-card${paused ? " is-paused" : ""}${hideInfo ? " now-playing-card-bare" : ""}`}
+      aria-label={hideInfo ? title : undefined}
+    >
+      {!hideInfo &&
+        (artUrl ? (
+          <img className="now-playing-card-art" src={mediaUrl(artUrl)} alt="" />
+        ) : (
+          <div className="now-playing-card-art" />
+        ))}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="now-playing-card-label">{paused ? "Paused" : "Now Playing"}</div>
-        <div className="now-playing-card-title">{title}</div>
-        {subtitle && <div className="now-playing-card-sub">{subtitle}</div>}
+        {!hideInfo && (
+          <>
+            <div className="now-playing-card-label">{paused ? "Paused" : "Now Playing"}</div>
+            <div className="now-playing-card-title">{title}</div>
+            {subtitle && <div className="now-playing-card-sub">{subtitle}</div>}
+          </>
+        )}
 
         <div className="pl-controls">
           {onPrev && (
@@ -185,6 +232,20 @@ export function PlayerCard({
         <span style={{ animationDelay: "0.3s" }} />
         <span style={{ animationDelay: "0.45s" }} />
       </div>
+      {showVolume && (
+        <div className="pl-volume">
+          <VolumeIcon />
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={volume}
+            onChange={onVolumeChange}
+            aria-label="Volume"
+          />
+        </div>
+      )}
     </div>
   );
 }

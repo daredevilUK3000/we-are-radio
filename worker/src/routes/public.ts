@@ -84,9 +84,16 @@ publicRoutes.get("/tracks", async (c) => {
 });
 
 publicRoutes.get("/tracks/:id", async (c) => {
-  const track = await c.env.DB.prepare("SELECT * FROM tracks WHERE id = ? AND status = 'published'")
+  // Same album fallback as the album listing itself uses: a track with no
+  // artwork of its own (common - most tracks are shipped as part of an
+  // album, not individually) shows the album's cover instead of nothing.
+  const track = await c.env.DB.prepare(
+    `SELECT t.*, a.title AS album_title, a.artwork_url AS album_artwork_url
+     FROM tracks t LEFT JOIN albums a ON a.id = t.album_id
+     WHERE t.id = ? AND t.status = 'published'`
+  )
     .bind(c.req.param("id"))
-    .first();
+    .first<Track & { album_title: string | null; album_artwork_url: string | null }>();
   if (!track) return c.json({ error: "not found" }, 404);
 
   const { results: tags } = await c.env.DB.prepare(
@@ -94,10 +101,15 @@ publicRoutes.get("/tracks/:id", async (c) => {
      JOIN track_tags tt ON tt.tag_id = tg.id
      WHERE tt.track_id = ?`
   )
-    .bind(track.id as string)
+    .bind(track.id)
     .all();
 
-  return c.json({ track, tags });
+  // A track played on its own shareable page still needs whatever jingle is
+  // pinned to it - the same withPinnedOverlays every other direct-play route
+  // (an album, a programme) already goes through, not a bare audio file.
+  const [withOverlay] = await withPinnedOverlays(c.env.DB, [track], (t) => t.id, (t) => t.duration_seconds);
+
+  return c.json({ track: withOverlay, tags });
 });
 
 publicRoutes.get("/programmes", async (c) => {
