@@ -89,11 +89,14 @@ function firstTime(step: string): boolean {
   }
 }
 
-// Where a visit came from: ?utm_source=youtube on the link if there is one,
-// otherwise the site that referred them, otherwise direct.
+// Where a visit came from: a ?ref=share link (see shared/share.ts) first,
+// then ?utm_source=youtube on the link if there is one, otherwise the site
+// that referred them, otherwise direct.
 function visitSource(): string {
   try {
-    const utm = new URLSearchParams(location.search).get("utm_source");
+    const params = new URLSearchParams(location.search);
+    if (params.get("ref") === "share") return "shared link";
+    const utm = params.get("utm_source");
     if (utm) return utm;
     if (document.referrer) {
       const host = new URL(document.referrer).hostname.replace(/^www\./, "");

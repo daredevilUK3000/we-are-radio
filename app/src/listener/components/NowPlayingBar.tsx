@@ -6,6 +6,7 @@ import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { NowPlayingExpanded } from "./NowPlayingExpanded";
 import { useChannelLog } from "../../shared/analytics";
+import { ShareButton } from "./ShareButton";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -240,6 +241,13 @@ export function NowPlayingBar() {
           )}
         </div>
 
+        <ShareButton
+          path={`/channel/${channelSlug}`}
+          title={`${station} - We Are Radio`}
+          text={data.now_playing?.label ? `Listening to ${data.now_playing.label} on ${station}` : `Live on ${station}`}
+          className="btn"
+          iconOnly
+        />
         <button className="mp-play-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
           {playing ? <PauseIcon /> : <PlayIcon />}
         </button>

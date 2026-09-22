@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { PlayerCard } from "../components/PlayerCard";
 import { useExclusiveAudio } from "../lib/audioUtils";
@@ -7,6 +7,7 @@ import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { SessionBuilder } from "./SessionBuilder";
 import { usePlaySlot } from "../../shared/analytics";
+import { ShareButton } from "../components/ShareButton";
 
 /**
  * Radio That Knows You: the listener says what they need, and gets a produced
@@ -186,19 +187,22 @@ export function RadioForYou() {
     [songsWanted, band, playIndex]
   );
 
-  // A mood tapped on the homepage arrives as router state: start straight away
-  // instead of asking again, then clear it so a refresh doesn't rebuild.
+  // A mood tapped on the homepage arrives as router state; a shared mood link
+  // (?mood=energy, see the Share button below) arrives as a query param instead
+  // - either way, start straight away rather than asking again, then clear it
+  // so a refresh doesn't rebuild.
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const autoStarted = useRef(false);
   useEffect(() => {
-    const key = (location.state as { need?: string } | null)?.need;
+    const key = (location.state as { need?: string } | null)?.need ?? searchParams.get("mood");
     if (!key || autoStarted.current) return;
     autoStarted.current = true;
     navigate(location.pathname, { replace: true, state: null });
     const chosen = FALLBACK_NEEDS.find((n) => n.key === key);
     if (chosen) request(chosen);
-  }, [location, navigate, request]);
+  }, [location, navigate, request, searchParams]);
 
   const restart = () => {
     programmePlay.abandon();
@@ -226,13 +230,23 @@ export function RadioForYou() {
 
           <div className="rfy-needs">
             {needs.map((n) => (
-              <button key={n.key} className="rfy-need" onClick={() => request(n)}>
-                <span className="rfy-need-emoji" aria-hidden="true">
-                  {n.emoji}
-                </span>
-                <span className="rfy-need-label">{n.label}</span>
-                <span className="rfy-need-blurb">{n.blurb}</span>
-              </button>
+              <div key={n.key} className="rfy-need">
+                <button className="rfy-need-tap" onClick={() => request(n)}>
+                  <span className="rfy-need-emoji" aria-hidden="true">
+                    {n.emoji}
+                  </span>
+                  <span className="rfy-need-label">{n.label}</span>
+                  <span className="rfy-need-blurb">{n.blurb}</span>
+                </button>
+                <ShareButton
+                  path={`/my-mood?mood=${n.key}`}
+                  title={`${n.label} - Radio That Knows You - We Are Radio`}
+                  text={`${n.blurb} - try "${n.label}" on We Are Radio`}
+                  className="rfy-need-share"
+                  style={{ position: "absolute" }}
+                  iconOnly
+                />
+              </div>
             ))}
           </div>
 

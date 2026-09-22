@@ -5,6 +5,7 @@ import { Home } from "./listener/pages/Home";
 import { Listen } from "./listener/pages/Listen";
 import { Albums } from "./listener/pages/Albums";
 import { AlbumDetail } from "./listener/pages/AlbumDetail";
+import { TrackDetail } from "./listener/pages/TrackDetail";
 import { Programmes } from "./listener/pages/Programmes";
 import { ProgrammeDetail } from "./listener/pages/ProgrammeDetail";
 import { Podcasts } from "./listener/pages/Podcasts";
@@ -162,6 +163,8 @@ export default function App() {
                   <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="listen" element={<Listen />} />
+                    <Route path="channel/:slug" element={<Listen />} />
+                    <Route path="track/:id" element={<TrackDetail />} />
                     <Route path="albums" element={<Albums />} />
                     <Route path="albums/:id" element={<AlbumDetail />} />
                     <Route path="programmes" element={<Programmes />} />

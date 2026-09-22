@@ -47,6 +47,7 @@ export const publicApi = {
   channel: (slug: string) => request<{ channel: any }>(`${API_BASE}/channels/${slug}`),
   albums: () => request<{ albums: any[] }>(`${API_BASE}/albums`),
   album: (id: string) => request<{ album: any; tracks: any[] }>(`${API_BASE}/albums/${id}`),
+  track: (id: string) => request<{ track: any; tags: any[] }>(`${API_BASE}/tracks/${id}`),
   tracks: (q?: string) => request<{ tracks: any[] }>(`${API_BASE}/tracks${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   programmes: (params?: { channel_id?: string; is_flagship?: boolean }) => {
     const qs = new URLSearchParams();

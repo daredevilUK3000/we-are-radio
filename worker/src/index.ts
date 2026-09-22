@@ -22,6 +22,7 @@ import { bulkImportRoutes } from "./routes/bulkImport";
 import { programmeTitleRoutes } from "./routes/programmeTitles";
 import { timeCapsuleRoutes } from "./routes/timeCapsules";
 import { analyticsPublicRoutes, analyticsStudioRoutes } from "./routes/analytics";
+import { shareLinkRoutes } from "./routes/shareLinks";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -74,6 +75,12 @@ app.route("/studio/api", studio);
 // content isn't linked anywhere in the listener app, but the R2 key itself
 // isn't a secret either way.
 app.route("/media", mediaRoutes);
+
+// Shareable pages (track/album/channel/mood) get the SPA shell with Open
+// Graph tags filled in server-side - see routes/shareLinks.ts. Must come
+// before the plain catch-all below, which has no tags of its own beyond
+// index.html's static defaults.
+app.route("/", shareLinkRoutes);
 
 // Everything else is the SPA (listener app + Studio shell). Exact static
 // files (JS/CSS/etc) are served automatically before the Worker even runs;

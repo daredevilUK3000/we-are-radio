@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router-dom";
 import { mediaUrl } from "../../api/client";
 import { FavouriteButton } from "./FavouriteButton";
+import { ShareButton } from "./ShareButton";
 import { formatClock } from "../lib/audioUtils";
 
 // The Vibe Shift choices, as atmospheres rather than pages. Today they map to
@@ -95,7 +96,6 @@ export function NowPlayingExpanded({
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const [elapsed, setElapsed] = useState<number>(data?.position_seconds ?? 0);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const now = data.now_playing;
   const comingUp: any[] = data.coming_up ?? (data.up_next ? [data.up_next] : []);
@@ -133,21 +133,7 @@ export function NowPlayingExpanded({
     return () => audio.removeEventListener("timeupdate", onTime);
   }, [audioRef, now?.id, data?.position_seconds]);
 
-  const share = async () => {
-    const url = `${window.location.origin}/listen?channel=${channelSlug}`;
-    const text = `Listening to ${station} on We Are Radio${isSong ? ` - ${now.label}` : ""}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: "We Are Radio", text, url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      setNotice("Link copied");
-    } catch {
-      // cancelling the share sheet lands here too - nothing to report
-    }
-    window.setTimeout(() => setNotice(null), 2500);
-  };
+  const shareText = `Listening to ${station} on We Are Radio${isSong ? ` - ${now.label}` : ""}`;
 
   const progress = duration > 0 ? Math.min(100, (elapsed / duration) * 100) : 0;
 
@@ -242,9 +228,7 @@ export function NowPlayingExpanded({
               {isSong && now.track_id && (
                 <FavouriteButton itemType="track" itemId={now.track_id} label="Favourite" className="np-chip" />
               )}
-              <button className="np-chip" onClick={share}>
-                ↗ Share
-              </button>
+              <ShareButton path={`/channel/${channelSlug}`} title={`${station} - We Are Radio`} text={shareText} className="np-chip" />
               {now?.album_id && (
                 <Link className="np-chip" to={`/albums/${now.album_id}`}>
                   View album
@@ -255,7 +239,6 @@ export function NowPlayingExpanded({
                   View programme
                 </Link>
               )}
-              {notice && <span className="np-notice">{notice}</span>}
             </div>
           </div>
         </div>

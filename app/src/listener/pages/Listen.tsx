@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { publicApi, mediaUrl } from "../../api/client";
 import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { useChannelLog } from "../../shared/analytics";
+import { ShareButton } from "../components/ShareButton";
 
 export function Listen() {
+  // /channel/:slug is the shareable form; /listen?channel= is the one used
+  // throughout the rest of the app (nav links, Vibe Shift, ...) - both land here.
+  const { slug: pathSlug } = useParams();
   const [searchParams] = useSearchParams();
-  const channelSlug = searchParams.get("channel") ?? "kizzi-radio";
+  const channelSlug = pathSlug ?? searchParams.get("channel") ?? "kizzi-radio";
   const [data, setData] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -62,9 +66,20 @@ export function Listen() {
 
   return (
     <div>
-      <span className="on-air-badge">
-        <span className="on-air-dot" /> ON AIR &middot; {data.channel.name}
-      </span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <span className="on-air-badge">
+          <span className="on-air-dot" /> ON AIR &middot; {data.channel.name}
+        </span>
+        <ShareButton
+          path={`/channel/${channelSlug}`}
+          title={`${data.channel.name} - We Are Radio`}
+          text={
+            data.now_playing?.label
+              ? `Listening to ${data.now_playing.label} on ${data.channel.name}`
+              : `Live on ${data.channel.name}`
+          }
+        />
+      </div>
       <h1 style={{ marginBottom: 4 }}>{data.programme?.title}</h1>
       <p style={{ color: "var(--text-dim)" }}>{data.programme?.description}</p>
 

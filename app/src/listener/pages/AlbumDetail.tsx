@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { FavouriteButton } from "../components/FavouriteButton";
+import { ShareButton } from "../components/ShareButton";
 import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { usePlaySlot } from "../../shared/analytics";
@@ -94,6 +95,7 @@ export function AlbumDetail() {
               Play Album
             </button>
             <FavouriteButton itemType="album" itemId={album.id} />
+            <ShareButton path={`/albums/${album.id}`} title={`${album.title} - We Are Radio`} text={`Listen to ${album.title} on We Are Radio`} />
           </div>
         </div>
       </div>
@@ -120,6 +122,7 @@ export function AlbumDetail() {
                   {playingIndex === index ? "Playing" : "Play"}
                 </button>
                 <FavouriteButton itemType="track" itemId={t.id} />
+                <ShareButton path={`/track/${t.id}`} title={`${t.title} - We Are Radio`} text={`Listen to "${t.title}" on We Are Radio`} iconOnly />
               </td>
             </tr>
           ))}

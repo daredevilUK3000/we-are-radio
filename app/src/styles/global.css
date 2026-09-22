@@ -2347,12 +2347,20 @@ td {
   gap: 14px;
 }
 
+/* .rfy-need is the positioning wrapper; .rfy-need-tap carries the card look and
+   is the actual button, so the share button (absolutely positioned over the
+   corner) is a sibling rather than nested inside another button. */
 .rfy-need {
+  position: relative;
+}
+
+.rfy-need-tap {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
   text-align: left;
+  width: 100%;
   padding: 24px;
   border-radius: 20px;
   background: var(--bg-raised);
@@ -2363,10 +2371,32 @@ td {
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.rfy-need:hover {
+.rfy-need-tap:hover {
   transform: translateY(-4px);
   border-color: var(--accent);
   box-shadow: 0 12px 40px rgba(225, 29, 46, 0.18);
+}
+
+.rfy-need-share {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(11, 11, 13, 0.55);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.rfy-need-share:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .rfy-need-emoji {
