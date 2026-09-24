@@ -64,6 +64,9 @@ export function NowPlayingBar() {
   const prevChannelSlug = useRef(channelSlug);
   const playingRef = useRef(playing);
   playingRef.current = playing;
+  // Set each render (below) to this bar's own play/pause handlers; the
+  // "war:player" bridge calls through it so other buttons take the same path.
+  const commandRef = useRef<((action: "toggle" | "play" | "pause") => void) | null>(null);
 
   // Following a link out of the expanded player closes it.
   useEffect(() => {
@@ -88,6 +91,39 @@ export function NowPlayingBar() {
     window.addEventListener("open-vibe-shift", open);
     return () => window.removeEventListener("open-vibe-shift", open);
   }, []);
+
+  // Station bridge (see contest/enter/useStationBridge.ts): other parts of the
+  // page - the Top 3 entry page's "Listen now" - drive this one <audio>
+  // element with "war:player" commands, and hear its state back through
+  // "war:player-state", so every play button on screen always agrees.
+  // dispatchEvent is synchronous, so play() still runs inside the visitor's
+  // click, which iOS requires before it will start audio.
+  useEffect(() => {
+    const onCommand = (e: Event) => {
+      const action = (e as CustomEvent).detail?.action;
+      if (action === "toggle" || action === "play" || action === "pause") commandRef.current?.(action);
+    };
+    window.addEventListener("war:player", onCommand);
+    return () => window.removeEventListener("war:player", onCommand);
+  }, []);
+
+  useEffect(() => {
+    const announce = () =>
+      window.dispatchEvent(
+        new CustomEvent("war:player-state", {
+          detail: {
+            onAir: !!(data && data.on_air),
+            playing,
+            title: data?.now_playing?.label ?? null,
+            channelName: data?.channel?.name ?? null,
+            artworkUrl: data?.now_playing?.artwork_url ? mediaUrl(data.now_playing.artwork_url) : null,
+          },
+        })
+      );
+    announce();
+    window.addEventListener("war:player-state-request", announce);
+    return () => window.removeEventListener("war:player-state-request", announce);
+  }, [data, playing]);
 
   // Poll now-playing for whichever channel is currently active (time-of-day
   // default, or a Vibe Shift override).
@@ -169,6 +205,7 @@ export function NowPlayingBar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, switching]);
 
+  commandRef.current = null; // replaced below while there's a station on air to play
   if (!data || !data.on_air) return null;
 
   const togglePlay = () => {
@@ -183,6 +220,10 @@ export function NowPlayingBar() {
       audio.play().catch(() => {});
       setPlaying(true);
     }
+  };
+
+  commandRef.current = (action) => {
+    if (action === "toggle" || (action === "play") !== playing) togglePlay();
   };
 
   const station = data.channel?.name ?? "We Are Radio";

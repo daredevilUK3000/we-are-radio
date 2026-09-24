@@ -68,6 +68,8 @@ export const Turnstile = forwardRef<TurnstileHandle, { action: string; onToken: 
             sitekey: siteKey,
             action,
             theme: "dark",
+            // A token lasts 5 minutes; renew it quietly rather than fail someone who read the rules first.
+            "refresh-expired": "auto",
             callback: (token: string) => onTokenRef.current(token),
             "expired-callback": () => onTokenRef.current(null),
             "error-callback": () => onTokenRef.current(null),

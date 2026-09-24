@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { CONTEST_TITLE } from "../../components/contest/common";
 import { RULES_LAST_UPDATED, RULES_SECTIONS, type RulesBlock } from "./rulesContent";
 
@@ -49,6 +50,12 @@ function Block({ block }: { block: RulesBlock }) {
 }
 
 export function ContestRules() {
+  // Links like /top3/rules#privacy land on that section (the router doesn't do this by itself).
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
+  }, [hash]);
+
   return (
     <div className="tc t3-rules">
       <span className="rfy-eyebrow">{CONTEST_TITLE}</span>
@@ -59,7 +66,7 @@ export function ContestRules() {
         <>
           {RULES_LAST_UPDATED && <p className="tc-fine">Last updated {RULES_LAST_UPDATED}</p>}
           {RULES_SECTIONS.map((s) => (
-            <section key={s.heading}>
+            <section key={s.heading} id={s.heading.startsWith("13.") ? "privacy" : undefined}>
               <h2>{s.heading}</h2>
               {s.blocks.map((b, i) => (
                 <Block key={i} block={b} />
