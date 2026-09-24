@@ -29,6 +29,10 @@ id = "67d82b0eabf94c2392ee3fafbca5c163"
 [vars]
 R2_ACCOUNT_ID = "ec98850a6c0d0922d6a4738c75f6833c"
 R2_BUCKET_NAME = "kizzi-radio-media"
+# Top 3 contest emails (lib/email.ts). The domain must be verified with Resend first.
+EMAIL_FROM = "We Are Radio <top3@weareradio.app>"
+# Where replies to contest emails go.
+EMAIL_REPLY_TO = "info@weareradio.app"
 
 # Secrets (set with `wrangler secret put <NAME>`, never committed):
 #   STUDIO_PASSWORD   - password for the single Studio admin account
@@ -37,3 +41,11 @@ R2_BUCKET_NAME = "kizzi-radio-media"
 #   R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY - R2 API token for presigned uploads
 #   R2_ACCOUNT_ID     - Cloudflare account id (for the R2 S3-compatible endpoint)
 #   ANTHROPIC_API_KEY - used by the AI producer endpoints
+#   HASH_PEPPER       - HMAC key for contest email/IP hashes and the anonymous
+#                       liker cookie. Long and random; NEVER change it while the
+#                       Top 3 competition runs (every stored hash would stop matching)
+#   TURNSTILE_SECRET  - Cloudflare Turnstile secret for the contest forms
+#   EMAIL_API_KEY     - Resend API key (contest emails)
+#
+# The app build also needs VITE_TURNSTILE_SITE_KEY (the Turnstile widget's
+# public site key) - set it in app/.env.local or the build environment.

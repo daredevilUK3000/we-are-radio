@@ -23,6 +23,9 @@ import { programmeTitleRoutes } from "./routes/programmeTitles";
 import { timeCapsuleRoutes } from "./routes/timeCapsules";
 import { analyticsPublicRoutes, analyticsStudioRoutes } from "./routes/analytics";
 import { shareLinkRoutes } from "./routes/shareLinks";
+import { contestPublicRoutes } from "./routes/contest";
+import { contestStudioRoutes } from "./routes/contestStudio";
+import { likePublicRoutes, likeStudioRoutes } from "./routes/likes";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -36,6 +39,13 @@ app.route("/api", publicRoutes);
 
 // The listener app logs plays and visits here (aggregate only, no identity).
 app.route("/api/analytics", analyticsPublicRoutes);
+
+// Top 3 Creator Songs of 2026 (entries, song pages) and public Likes. These
+// MUST stay above the listener sub-app below: its sign-in check applies to
+// every /api/* route registered after it, which would turn every contest
+// entry and like into a 401.
+app.route("/api/contest", contestPublicRoutes);
+app.route("/api/likes", likePublicRoutes);
 
 // Listener auth (login/logout/session are unauthenticated by nature).
 app.route("/api/auth", listenerAuthRoutes);
@@ -68,12 +78,15 @@ studio.route("/bulk-import", bulkImportRoutes);
 studio.route("/programme-titles", programmeTitleRoutes);
 studio.route("/time-capsules", timeCapsuleRoutes);
 studio.route("/analytics", analyticsStudioRoutes);
+studio.route("/contest", contestStudioRoutes);
+studio.route("/likes", likeStudioRoutes);
 app.route("/studio/api", studio);
 
 // Streams audio straight out of R2 - not gated on Studio auth, since
 // published tracks/assets need to be playable by ordinary listeners. Draft
 // content isn't linked anywhere in the listener app, but the R2 key itself
-// isn't a secret either way.
+// isn't a secret either way. Top 3 contest files are the exception: only
+// approved songs are served (see routes/media.ts).
 app.route("/media", mediaRoutes);
 
 // Shareable pages (track/album/channel/mood) get the SPA shell with Open

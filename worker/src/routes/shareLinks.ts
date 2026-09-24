@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/types";
 import { findNeed } from "../lib/needs";
 import { pageWithOg, absoluteMedia, defaultImage } from "../lib/og";
+import { countryFlag, countryName } from "../lib/countries";
 
 /**
  * Shareable link previews (handoff: shareable links, ahead of the promotion
@@ -99,5 +100,43 @@ shareLinkRoutes.get("/my-mood", async (c) => {
     description: `${need.blurb} - a mix picked for you on We Are Radio.`,
     image: defaultImage(c.req.raw),
     url: canonical(c.req.raw, `?mood=${need.key}`),
+  });
+});
+
+// ---- Top 3 Creator Songs of 2026 ----
+//
+// One static contest image for every contest page (never the creator's own
+// photo, whose shape and quality are unknown). Until Patrick uploads
+// /top3-og.jpg (1200x630) to app/public, the site default is used.
+async function contestImage(c: { env: Env; req: { raw: Request } }): Promise<string> {
+  const url = new URL("/top3-og.jpg", c.req.raw.url);
+  const res = await c.env.ASSETS.fetch(new Request(url, { method: "HEAD" }));
+  return res.ok && (res.headers.get("content-type") ?? "").startsWith("image/") ? url.toString() : defaultImage(c.req.raw);
+}
+
+const contestHomeTags = async (c: { env: Env; req: { raw: Request } }) => ({
+  title: "We Are Radio's Top 3 Creator Songs of 2026",
+  description: "Independent Creators from anywhere in the world. Enter your 2026 song by 31 March 2027.",
+  image: await contestImage(c),
+  url: `${new URL(c.req.raw.url).origin}/top3`,
+});
+
+shareLinkRoutes.get("/top3", async (c) => pageWithOg(c.env, c.req.raw, await contestHomeTags(c)));
+
+// Digits only, so /top3/enter, /top3/rules and the confirm pages fall through to the plain SPA.
+shareLinkRoutes.get("/top3/:id{[0-9]+}", async (c) => {
+  const entry = await c.env.DB.prepare(
+    "SELECT id, title, creator_name, country_code FROM contest_entries WHERE id = ? AND status = 'approved'"
+  )
+    .bind(Number(c.req.param("id")))
+    .first<{ id: number; title: string; creator_name: string; country_code: string }>();
+
+  if (!entry) return pageWithOg(c.env, c.req.raw, await contestHomeTags(c));
+
+  return pageWithOg(c.env, c.req.raw, {
+    title: `"${entry.title}" by ${entry.creator_name} (${countryFlag(entry.country_code)} ${countryName(entry.country_code)}) - Top 3 Creator Songs of 2026`,
+    description: `Song #${entry.id} is in the running on We Are Radio. Listen now, and vote from 1 April 2027.`,
+    image: await contestImage(c),
+    url: canonical(c.req.raw),
   });
 });

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { publicApi, listenerApi, mediaUrl } from "../../api/client";
 import { FavouriteButton } from "../components/FavouriteButton";
+import { LikeButton, useLikes } from "../components/LikeButton";
 import { ShareButton } from "../components/ShareButton";
 import { PlayerCard } from "../components/PlayerCard";
 import { useExclusiveAudio } from "../lib/audioUtils";
@@ -35,6 +36,7 @@ export function TrackDetail() {
   const plays = usePlaySlot();
   const autoplayed = useRef(false);
   const hasStarted = useRef(false);
+  const likes = useLikes("track", track ? [track.id] : []);
 
   useExclusiveAudio("track", audioRef, !!track, () => setPaused(true));
   useOverlayJingles(audioRef, track, !!track);
@@ -137,6 +139,7 @@ export function TrackDetail() {
               {paused ? <span className="play-triangle" /> : <span className="pl-pause-icon"><span /><span /></span>}
               {paused ? "Play" : "Pause"}
             </button>
+            <LikeButton liked={likes.isLiked(track.id)} onToggle={() => likes.toggle(track.id)} className="td-icon-btn" iconOnly />
             <FavouriteButton itemType="track" itemId={track.id} className="td-icon-btn" />
             <ShareButton path={`/track/${track.id}`} title={`${track.title} - We Are Radio`} text={shareText} className="td-icon-btn" iconOnly />
           </div>

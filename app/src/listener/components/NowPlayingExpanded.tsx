@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router-dom";
 import { mediaUrl } from "../../api/client";
 import { FavouriteButton } from "./FavouriteButton";
+import { LikeButton, useLikes } from "./LikeButton";
 import { ShareButton } from "./ShareButton";
 import { formatClock } from "../lib/audioUtils";
 
@@ -100,6 +101,7 @@ export function NowPlayingExpanded({
   const now = data.now_playing;
   const comingUp: any[] = data.coming_up ?? (data.up_next ? [data.up_next] : []);
   const isSong = now?.item_type === "song";
+  const likes = useLikes("track", isSong && now?.track_id ? [now.track_id] : []);
   const artUrl: string | null = now?.artwork_url ? mediaUrl(now.artwork_url) : null;
   const station = data.channel?.name ?? "We Are Radio";
   const programmeTitle: string | null = data.programme?.id ? data.programme.title : null;
@@ -226,7 +228,10 @@ export function NowPlayingExpanded({
 
             <div className="np-secondary">
               {isSong && now.track_id && (
-                <FavouriteButton itemType="track" itemId={now.track_id} label="Favourite" className="np-chip" />
+                <>
+                  <LikeButton liked={likes.isLiked(now.track_id)} onToggle={() => likes.toggle(now.track_id)} className="np-chip" />
+                  <FavouriteButton itemType="track" itemId={now.track_id} label="Favourite" className="np-chip" />
+                </>
               )}
               <ShareButton path={`/channel/${channelSlug}`} title={`${station} - We Are Radio`} text={shareText} className="np-chip" />
               {now?.album_id && (

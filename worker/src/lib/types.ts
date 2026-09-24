@@ -14,6 +14,14 @@ export type Env = {
   R2_BUCKET_NAME: string;
 
   ANTHROPIC_API_KEY: string;
+
+  // Top 3 contest (see lib/hash.ts, lib/turnstile.ts, lib/email.ts).
+  HASH_PEPPER: string;
+  TURNSTILE_SECRET: string;
+  EMAIL_API_KEY: string;
+  EMAIL_FROM: string;
+  /** Optional: where replies to contest emails go. */
+  EMAIL_REPLY_TO?: string;
 };
 
 export type ContentStatus = "draft" | "processing" | "ready" | "published" | "archived";

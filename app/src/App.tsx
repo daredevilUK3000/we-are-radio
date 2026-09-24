@@ -13,6 +13,11 @@ import { Search } from "./listener/pages/Search";
 import { MyRadio } from "./listener/pages/MyRadio";
 import { RadioForYou } from "./listener/pages/RadioForYou";
 import { TimeCapsule } from "./listener/pages/TimeCapsule";
+import { ContestHome } from "./listener/pages/contest/ContestHome";
+import { ContestEnter } from "./listener/pages/contest/ContestEnter";
+import { ContestRules } from "./listener/pages/contest/ContestRules";
+import { ContestSong } from "./listener/pages/contest/ContestSong";
+import { ContestConfirm, ContestNotifyConfirm, ContestUnsubscribe } from "./listener/pages/contest/ContestConfirm";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
 import { ListenerAuthProvider } from "./listener/auth/ListenerAuthContext";
 import { FavouritesProvider } from "./listener/favourites/FavouritesContext";
@@ -40,6 +45,8 @@ import { Analytics } from "./studio/pages/Analytics";
 import { Albums as StudioAlbums } from "./studio/pages/Albums";
 import { AlbumDetail as StudioAlbumDetail } from "./studio/pages/AlbumDetail";
 import { PublishWizard } from "./studio/pages/PublishWizard";
+import { Contest } from "./studio/pages/Contest";
+import { Likes } from "./studio/pages/Likes";
 
 function ListenerLayout({ children }: { children: React.ReactNode }) {
   // One "visit" per browser tab session, with where it came from (a YouTube link, a newsletter...).
@@ -60,6 +67,7 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/albums">Albums</NavLink>
           <NavLink to="/programmes">Programmes</NavLink>
           <NavLink to="/podcasts">Podcasts</NavLink>
+          <NavLink to="/top3">Top 3</NavLink>
           <NavLink to="/my-mood">My Mood</NavLink>
           <NavLink to="/search">Search</NavLink>
           <NavLink to="/my-radio">My Radio</NavLink>
@@ -73,8 +81,9 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
 
 function StudioLayout({ children }: { children: React.ReactNode }) {
   const { logout } = useStudioAuth();
-  // Analytics is a section of its own and uses the whole width of the screen.
-  const wide = useLocation().pathname.startsWith("/studio/analytics");
+  // Analytics and the Top 3 review queue are sections of their own and use the whole width of the screen.
+  const path = useLocation().pathname;
+  const wide = path.startsWith("/studio/analytics") || path.startsWith("/studio/contest");
   return (
     <div className="app-shell">
       <header className="top-nav">
@@ -83,7 +92,9 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/studio" end>
             Dashboard
           </NavLink>
+          <NavLink to="/studio/contest">Top 3</NavLink>
           <NavLink to="/studio/analytics">Analytics</NavLink>
+          <NavLink to="/studio/likes">Likes</NavLink>
           <NavLink to="/studio/publish">Publish Music</NavLink>
           <NavLink to="/studio/bulk-import">Bulk Import</NavLink>
           <NavLink to="/studio/drafts">Drafts</NavLink>
@@ -118,6 +129,8 @@ function StudioApp() {
     <StudioLayout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="contest" element={<Contest />} />
+        <Route path="likes" element={<Likes />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="publish" element={<PublishWizard />} />
         <Route path="bulk-import" element={<BulkImport />} />
@@ -174,6 +187,13 @@ export default function App() {
                     <Route path="my-radio" element={<MyRadio />} />
                     <Route path="my-mood" element={<RadioForYou />} />
                     <Route path="time-capsule" element={<TimeCapsule />} />
+                    <Route path="top3" element={<ContestHome />} />
+                    <Route path="top3/enter" element={<ContestEnter />} />
+                    <Route path="top3/rules" element={<ContestRules />} />
+                    <Route path="top3/confirm" element={<ContestConfirm />} />
+                    <Route path="top3/notify/confirm" element={<ContestNotifyConfirm />} />
+                    <Route path="top3/unsubscribe" element={<ContestUnsubscribe />} />
+                    <Route path="top3/:id" element={<ContestSong />} />
                   </Routes>
                 </ListenerLayout>
               </ActiveChannelProvider>

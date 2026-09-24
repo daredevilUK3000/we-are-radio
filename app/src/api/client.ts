@@ -18,11 +18,16 @@ export function mediaUrl(key: string): string {
   return `${API_ORIGIN}/media/${key}`;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The contest/likes APIs also send a short code, a message meant for people, and the form field it concerns. */
+  code?: string;
+  friendly?: string;
+  field?: string;
+  constructor(status: number, message: string, extra?: { code?: string; friendly?: string; field?: string }) {
     super(message);
     this.status = status;
+    Object.assign(this, extra);
   }
 }
 
@@ -34,7 +39,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error ?? res.statusText);
+    throw new ApiError(res.status, body.error ?? res.statusText, { code: body.error, friendly: body.message, field: body.field });
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -85,6 +90,105 @@ export const publicApi = {
     ),
   sweeper: (band?: string) =>
     request<{ asset: any | null }>(`${API_BASE}/sweeper${band ? `?band=${encodeURIComponent(band)}` : ""}`),
+};
+
+// ---- Top 3 Creator Songs of 2026 (see worker/src/routes/contest.ts) ----
+
+export type ContestPhase = "before_entries" | "entries_open" | "voting" | "results_pending" | "complete";
+
+export interface ContestState {
+  phase: ContestPhase;
+  dates: { entriesOpen: string; entriesClose: string; votingOpen: string; votingClose: string; eligibleFrom: string; eligibleTo: string };
+  limits: { maxEntriesPerEntrant: number; maxAudioBytes: number; maxPhotoBytes: number; maxDurationSeconds: number };
+  likesOpen: boolean;
+  studioPreview: boolean;
+  approvedCount: number;
+  countryCount: number;
+  byCountry: { code: string; n: number }[];
+}
+
+export interface ContestEntry {
+  id: number;
+  title: string;
+  creator_name: string;
+  country_code: string;
+  /** R2 keys, like tracks.audio_url - pass through mediaUrl(). */
+  photo_url: string | null;
+  audio_url: string;
+  duration_seconds: number | null;
+  bio?: string | null;
+  links?: string[];
+  approved_at?: string | null;
+}
+
+export const contestApi = {
+  state: () => request<ContestState>(`${API_BASE}/contest/state`),
+  entries: (opts: { country?: string; cursor?: string | null; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.country) qs.set("country", opts.country);
+    if (opts.cursor) qs.set("cursor", opts.cursor);
+    if (opts.limit) qs.set("limit", String(opts.limit));
+    return request<{ entries: ContestEntry[]; nextCursor: string | null }>(`${API_BASE}/contest/entries?${qs}`);
+  },
+  entry: (id: string | number) => request<{ entry: ContestEntry }>(`${API_BASE}/contest/entries/${id}`),
+  confirm: (token: string) =>
+    request<{ ok: true; alreadyConfirmed?: boolean; title?: string }>(`${API_BASE}/contest/entries/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+  notify: (data: { email: string; entryId?: number; wantsNews: boolean; turnstileToken: string; website: string }) =>
+    request<{ ok: true; message: string }>(`${API_BASE}/contest/notify`, { method: "POST", body: JSON.stringify(data) }),
+  notifyConfirm: (token: string) =>
+    request<{ ok: true }>(`${API_BASE}/contest/notify/confirm`, { method: "POST", body: JSON.stringify({ token }) }),
+  unsubscribe: (id: string, sig: string) =>
+    request<{ ok: true }>(`${API_BASE}/contest/notify/unsubscribe`, { method: "POST", body: JSON.stringify({ id, sig }) }),
+
+  /**
+   * The entry itself: multipart, so the song and photo go up with the form
+   * (and without request()'s JSON Content-Type). XMLHttpRequest rather than
+   * fetch, because only XHR reports upload progress - a 20 MB MP3 on a phone
+   * connection needs a progress bar.
+   */
+  submitEntry: (form: FormData, onProgress: (fraction: number) => void) =>
+    new Promise<{ ok: true }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${API_BASE}/contest/entries`);
+      xhr.withCredentials = true;
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+      xhr.onload = () => {
+        let body: any = {};
+        try {
+          body = JSON.parse(xhr.responseText);
+        } catch {
+          body = {};
+        }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+        else
+          reject(
+            new ApiError(xhr.status, body.error ?? `HTTP ${xhr.status}`, {
+              code: body.error,
+              friendly: body.message ?? "Something went wrong sending your entry. Please try again.",
+              field: body.field,
+            })
+          );
+      };
+      xhr.onerror = () =>
+        reject(new ApiError(0, "network", { friendly: "Your connection dropped while uploading. Please try again." }));
+      xhr.send(form);
+    }),
+};
+
+// ---- Likes (see worker/src/routes/likes.ts) - never any counts on this side ----
+
+export type LikeItemType = "track" | "contest_entry";
+
+export const likesApi = {
+  like: (itemType: LikeItemType, itemId: string) =>
+    request<{ liked: true }>(`${API_BASE}/likes`, { method: "POST", body: JSON.stringify({ itemType, itemId }) }),
+  unlike: (itemType: LikeItemType, itemId: string) =>
+    request<{ liked: false }>(`${API_BASE}/likes/${itemType}/${encodeURIComponent(itemId)}`, { method: "DELETE" }),
+  mine: (itemType: LikeItemType, ids: string[]) =>
+    request<{ liked: string[] }>(`${API_BASE}/likes/mine?itemType=${itemType}&ids=${ids.map(encodeURIComponent).join(",")}`),
 };
 
 // ---- Listener account (favourites / listening history) ----
@@ -283,6 +387,35 @@ export const studioApi = {
       method: "POST",
       body: JSON.stringify({ ids }),
     }),
+  // Top 3 contest review (see worker/src/routes/contestStudio.ts)
+  contestEntries: (status: string, q?: string) =>
+    request<{ entries: any[]; counts: Record<string, number> }>(
+      `${STUDIO_BASE}/contest/entries?status=${encodeURIComponent(status)}${q ? `&q=${encodeURIComponent(q)}` : ""}`
+    ),
+  contestEntry: (id: number) => request<{ entry: any; others: any[]; history: any[] }>(`${STUDIO_BASE}/contest/entries/${id}`),
+  contestEntryAudioUrl: (id: number) => `${STUDIO_BASE}/contest/entries/${id}/audio`,
+  contestEntryPhotoUrl: (id: number) => `${STUDIO_BASE}/contest/entries/${id}/photo`,
+  updateContestEntry: (id: number, data: Record<string, unknown>) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/contest/entries/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  reviewContestEntry: (id: number, decision: "approve" | "reject", reason?: string) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/contest/entries/${id}/review`, {
+      method: "POST",
+      body: JSON.stringify({ decision, reason }),
+    }),
+  removeContestEntry: (id: number, action: "disqualify" | "withdraw", reason: string) =>
+    request<{ ok: true; inPublishedProgrammes: { id: string; title: string }[] }>(
+      `${STUDIO_BASE}/contest/entries/${id}/${action}`,
+      { method: "POST", body: JSON.stringify({ reason }) }
+    ),
+  addContestEntryToLibrary: (id: number) =>
+    request<{ ok: true; trackId: string; alreadyAdded?: boolean }>(`${STUDIO_BASE}/contest/entries/${id}/add-to-library`, {
+      method: "POST",
+    }),
+  contestStats: () => request<any>(`${STUDIO_BASE}/contest/stats`),
+  contestExportUrl: () => `${STUDIO_BASE}/contest/export.csv`,
+  likes: (itemType: "all" | "track" | "contest_entry", sort: "total" | "week") =>
+    request<{ items: any[] }>(`${STUDIO_BASE}/likes?itemType=${itemType}&sort=${sort}`),
+
   importPodcastEpisodes: (channelId: string, episodes: any[], showName: string) =>
     request<{ imported: number; skipped: number }>(`${STUDIO_BASE}/podcast-import/import`, {
       method: "POST",
