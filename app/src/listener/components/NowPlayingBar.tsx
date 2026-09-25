@@ -7,6 +7,7 @@ import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { NowPlayingExpanded } from "./NowPlayingExpanded";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "./ShareButton";
+import { radioSessionInfo, useMediaSession } from "../../shared/mediaSession";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -51,7 +52,7 @@ const VIBE_SHIFT_CHANNELS: { slug: string; label: string }[] = [
 ];
 
 export function NowPlayingBar() {
-  const { channelSlug, band, isOverridden, setOverride, clearOverride } = useActiveChannel();
+  const { channelSlug, band, isOverridden, liveSlugs, setOverride, clearOverride } = useActiveChannel();
   const [data, setData] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -83,6 +84,24 @@ export function NowPlayingBar() {
   // Jingles that play over a song (music ducked underneath) rather than
   // between songs; the rotation says when, this carries it out.
   useOverlayJingles(audioRef, data?.now_playing, !!(data && data.on_air));
+
+  // Lock screen / notification: the song on air, play and pause. These act on
+  // the element itself rather than toggling, so "play" still works after the
+  // phone paused the audio on its own (a call, headphones unplugged).
+  useMediaSession(audioRef, radioSessionInfo(data), {
+    live: true,
+    onPlay: () => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      void unlockAudio(audio);
+      audio.play().catch(() => {});
+      setPlaying(true);
+    },
+    onPause: () => {
+      audioRef.current?.pause();
+      setPlaying(false);
+    },
+  });
 
   // The landing page's "Vibe Shift" card opens this same control rather
   // than duplicating it.
@@ -266,7 +285,7 @@ export function NowPlayingBar() {
               >
                 Auto &middot; {band}
               </button>
-              {VIBE_SHIFT_CHANNELS.map((c) => (
+              {VIBE_SHIFT_CHANNELS.filter((c) => liveSlugs === null || liveSlugs.includes(c.slug)).map((c) => (
                 <button
                   key={c.slug}
                   className={`chip${isOverridden && channelSlug === c.slug ? " selected" : ""}`}

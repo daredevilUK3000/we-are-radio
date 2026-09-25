@@ -8,6 +8,7 @@ import { ShareButton } from "../components/ShareButton";
 import { FlagshipPlayer } from "../components/FlagshipPlayer";
 import { StudioConsole } from "../components/StudioConsole";
 import { channelAccent } from "../lib/channelAccent";
+import { radioSessionInfo, useMediaSession } from "../../shared/mediaSession";
 
 const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark"]);
 
@@ -47,6 +48,20 @@ export function Listen() {
   useChannelLog(audioRef, data, playing);
   useExclusiveAudio("listen", audioRef, !!(data && data.on_air), () => setPlaying(false));
   useOverlayJingles(audioRef, data?.now_playing, !!(data && data.on_air));
+  useMediaSession(audioRef, radioSessionInfo(data), {
+    live: true,
+    onPlay: () => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      void unlockAudio(audio);
+      audio.play().catch(() => {});
+      setPlaying(true);
+    },
+    onPause: () => {
+      audioRef.current?.pause();
+      setPlaying(false);
+    },
+  });
 
   useEffect(() => {
     setData(null);

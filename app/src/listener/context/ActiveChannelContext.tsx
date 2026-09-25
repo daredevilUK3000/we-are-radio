@@ -1,13 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { currentTimeOfDayChannel } from "../lib/timeOfDay";
+import { publicApi } from "../../api/client";
 import type { TimeOfDayBand } from "../../shared/moods";
 
 const OVERRIDE_KEY = "we-are-radio:vibe-shift-channel";
+// Where the player goes when the channel it would otherwise pick is switched
+// off in the Studio (channels.status isn't 'live').
+const FALLBACK_CHANNEL = "kizzi-radio";
 
 interface ActiveChannelState {
   channelSlug: string;
   band: TimeOfDayBand;
   isOverridden: boolean;
+  /** Slugs of the channels switched on in the Studio; null until loaded. */
+  liveSlugs: string[] | null;
   setOverride: (slug: string) => void;
   clearOverride: () => void;
 }
@@ -28,6 +34,20 @@ export function ActiveChannelProvider({ children }: { children: ReactNode }) {
     }
   });
   const [auto, setAuto] = useState(() => currentTimeOfDayChannel());
+  const [liveSlugs, setLiveSlugs] = useState<string[] | null>(null);
+
+  // Which channels are switched on. Re-checked every few minutes so a channel
+  // hidden in the Studio drops out of an open tab without a reload.
+  useEffect(() => {
+    const load = () =>
+      publicApi
+        .channels()
+        .then((r) => setLiveSlugs(r.channels.map((ch) => ch.slug)))
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 5 * 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Re-check every minute so the main player actually shifts live if left
   // open across a time-band boundary, not just on the next page load.
@@ -55,16 +75,26 @@ export function ActiveChannelProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const value = useMemo<ActiveChannelState>(
-    () => ({
-      channelSlug: override ?? auto.channelSlug,
+  const value = useMemo<ActiveChannelState>(() => {
+    // The time-of-day pick (or a Vibe Shift pick saved earlier) may be a
+    // channel that's switched off - then Kizzi Radio plays instead, so the
+    // player never disappears just because it's the afternoon.
+    const preferred = override ?? auto.channelSlug;
+    const channelSlug =
+      liveSlugs === null || liveSlugs.includes(preferred)
+        ? preferred
+        : liveSlugs.includes(FALLBACK_CHANNEL) || liveSlugs.length === 0
+          ? FALLBACK_CHANNEL
+          : liveSlugs[0];
+    return {
+      channelSlug,
       band: auto.band,
-      isOverridden: override !== null,
+      isOverridden: override !== null && channelSlug === override,
+      liveSlugs,
       setOverride,
       clearOverride,
-    }),
-    [override, auto, setOverride, clearOverride]
-  );
+    };
+  }, [override, auto, liveSlugs, setOverride, clearOverride]);
 
   return <ActiveChannelContext.Provider value={value}>{children}</ActiveChannelContext.Provider>;
 }

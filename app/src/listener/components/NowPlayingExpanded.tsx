@@ -5,6 +5,7 @@ import { FavouriteButton } from "./FavouriteButton";
 import { LikeButton, useLikes } from "./LikeButton";
 import { ShareButton } from "./ShareButton";
 import { formatClock } from "../lib/audioUtils";
+import { useActiveChannel } from "../context/ActiveChannelContext";
 
 // The Vibe Shift choices, as atmospheres rather than pages. Today they map to
 // the four live channels; new moods (Happy, Energy, Talk...) slot in here as
@@ -96,6 +97,7 @@ export function NowPlayingExpanded({
   onVibe: (slug: string | null) => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const { liveSlugs } = useActiveChannel();
   const [elapsed, setElapsed] = useState<number>(data?.position_seconds ?? 0);
 
   const now = data.now_playing;
@@ -266,7 +268,7 @@ export function NowPlayingExpanded({
               <button className={`np-vibe-chip${!isOverridden ? " selected" : ""}`} onClick={() => onVibe(null)}>
                 <span aria-hidden="true">✨</span> Auto <small>{band}</small>
               </button>
-              {VIBES.map((v) => (
+              {VIBES.filter((v) => liveSlugs === null || liveSlugs.includes(v.slug)).map((v) => (
                 <button
                   key={v.slug}
                   className={`np-vibe-chip${isOverridden && channelSlug === v.slug ? " selected" : ""}`}
