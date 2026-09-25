@@ -13,6 +13,8 @@ import { Search } from "./listener/pages/Search";
 import { MyRadio } from "./listener/pages/MyRadio";
 import { RadioForYou } from "./listener/pages/RadioForYou";
 import { TimeCapsule } from "./listener/pages/TimeCapsule";
+import { Offline } from "./listener/pages/Offline";
+import { useOnline } from "./shared/offline";
 import { ContestHome } from "./listener/pages/contest/ContestHome";
 import { ContestEnter } from "./listener/pages/contest/ContestEnter";
 import { ContestRules } from "./listener/pages/contest/ContestRules";
@@ -53,6 +55,7 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     trackVisit();
   }, []);
+  const online = useOnline();
 
   return (
     <div className="app-shell listener-shell">
@@ -64,6 +67,14 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/" end>
             Home
           </NavLink>
+          <NavLink to="/offline" className="nav-offline">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3v13" />
+              <path d="M6 11l6 6 6-6" />
+              <path d="M4 21h16" />
+            </svg>
+            Offline
+          </NavLink>
           <NavLink to="/albums">Albums</NavLink>
           <NavLink to="/programmes">Programmes</NavLink>
           <NavLink to="/podcasts">Podcasts</NavLink>
@@ -73,6 +84,11 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/my-radio">My Radio</NavLink>
         </nav>
       </header>
+      {!online && (
+        <div className="offline-strip" role="status">
+          You're offline. <Link to="/offline">Downloaded radio</Link> still plays.
+        </div>
+      )}
       <main>{children}</main>
       <NowPlayingBar />
     </div>
@@ -187,6 +203,7 @@ export default function App() {
                     <Route path="my-radio" element={<MyRadio />} />
                     <Route path="my-mood" element={<RadioForYou />} />
                     <Route path="time-capsule" element={<TimeCapsule />} />
+                    <Route path="offline" element={<Offline />} />
                     <Route path="top3" element={<ContestHome />} />
                     <Route path="top3/enter" element={<ContestEnter />} />
                     <Route path="top3/rules" element={<ContestRules />} />

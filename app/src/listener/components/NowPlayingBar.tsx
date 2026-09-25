@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { publicApi, mediaUrl } from "../../api/client";
+import { ApiError, publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
@@ -11,6 +11,9 @@ import { radioSessionInfo, useMediaSession } from "../../shared/mediaSession";
 import { startCasting, toggleCastPlayback } from "../../shared/cast";
 import { useRadioCast } from "../lib/useRadioCast";
 import { CastButtons } from "./CastButtons";
+import { OfflineBar } from "./OfflineBar";
+import { DownloadButton } from "./DownloadButton";
+import { useOfflineBlocks, useOnline } from "../../shared/offline";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -61,6 +64,9 @@ export function NowPlayingBar() {
   const [switching, setSwitching] = useState(false);
   const [showVibeShift, setShowVibeShift] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  // The server couldn't be reached at all (not just "channel off air") - some
+  // phones still say they're online on Wi-Fi with no internet.
+  const [unreachable, setUnreachable] = useState(false);
   const location = useLocation();
   const closeExpanded = useCallback(() => setExpanded(false), []);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -166,8 +172,16 @@ export function NowPlayingBar() {
     const poll = () => {
       publicApi
         .nowPlaying(channelSlug)
-        .then((d) => !cancelled && setData(d))
-        .catch(() => !cancelled && setData(null));
+        .then((d) => {
+          if (cancelled) return;
+          setData(d);
+          setUnreachable(false);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setData(null);
+          setUnreachable(!(err instanceof ApiError));
+        });
     };
     poll();
     const id = setInterval(poll, 30_000);
@@ -242,6 +256,52 @@ export function NowPlayingBar() {
     if (playing) audio.play().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, switching]);
+
+  // Offline listening: with no connection (or when the listener picks "Play
+  // downloads"), a downloaded block plays here instead of the live station.
+  // It stays until they choose "Back to live", so a connection coming back
+  // doesn't cut off what they're hearing.
+  const online = useOnline();
+  const allBlocks = useOfflineBlocks();
+  // A download of a channel that's since been switched off doesn't play
+  // (offline the live list can't be checked, so everything downloaded does).
+  const blocks = useMemo(
+    () => (allBlocks && liveSlugs ? allBlocks.filter((b) => liveSlugs.includes(b.channelSlug)) : allBlocks),
+    [allBlocks, liveSlugs]
+  );
+  const [offline, setOffline] = useState<{ slug: string | null; autoStart: boolean } | null>(null);
+  const offlineBlock =
+    (offline?.slug && blocks?.find((b) => b.channelSlug === offline.slug)) ||
+    blocks?.find((b) => b.channelSlug === channelSlug) ||
+    blocks?.[0] ||
+    null;
+  useEffect(() => {
+    if ((!online || unreachable) && blocks?.length) setOffline((o) => o ?? { slug: null, autoStart: false });
+    // Downloads removed: nothing to play offline any more.
+    if (blocks && blocks.length === 0) setOffline(null);
+  }, [online, unreachable, blocks]);
+  useEffect(() => {
+    const onPlayDownloads = (e: Event) => {
+      audioRef.current?.pause();
+      setPlaying(false);
+      setOffline({ slug: (e as CustomEvent).detail?.channelSlug ?? null, autoStart: true });
+    };
+    window.addEventListener("war:offline-play", onPlayDownloads);
+    return () => window.removeEventListener("war:offline-play", onPlayDownloads);
+  }, []);
+
+  if (offline && offlineBlock) {
+    commandRef.current = null;
+    return (
+      <OfflineBar
+        key={`${offlineBlock.channelSlug}@${offlineBlock.downloadedAt}`}
+        block={offlineBlock}
+        online={online && !unreachable}
+        autoStart={offline.autoStart}
+        onBackToLive={() => setOffline(null)}
+      />
+    );
+  }
 
   commandRef.current = null; // replaced below while there's a station on air to play
   if (!data || !data.on_air) return null;
@@ -331,10 +391,11 @@ export function NowPlayingBar() {
           path={`/channel/${channelSlug}`}
           title={`${station} - We Are Radio`}
           text={data.now_playing?.label ? `Listening to ${data.now_playing.label} on ${station}` : `Live on ${station}`}
-          className="btn"
+          className="btn mp-share"
           iconOnly
         />
         <CastButtons audioRef={audioRef} channelSlug={channelSlug} ready className="btn" />
+        <DownloadButton channelSlug={channelSlug} />
         <button className="mp-play-btn" onClick={togglePlay} aria-label={shownPlaying ? "Pause" : "Play"}>
           {shownPlaying ? <PauseIcon /> : <PlayIcon />}
         </button>

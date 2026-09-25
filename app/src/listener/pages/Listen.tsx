@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { publicApi, mediaUrl } from "../../api/client";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { ApiError, publicApi, mediaUrl } from "../../api/client";
 import { useExclusiveAudio, formatClock } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { useChannelLog } from "../../shared/analytics";
@@ -12,6 +12,7 @@ import { radioSessionInfo, useMediaSession } from "../../shared/mediaSession";
 import { toggleCastPlayback } from "../../shared/cast";
 import { useRadioCast } from "../lib/useRadioCast";
 import { CastButtons } from "../components/CastButtons";
+import { playDownloads, useOfflineBlocks, useOnline } from "../../shared/offline";
 
 const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark"]);
 
@@ -44,6 +45,9 @@ export function Listen() {
   const channelSlug = pathSlug ?? searchParams.get("channel") ?? "kizzi-radio";
   const [data, setData] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
+  const [unreachable, setUnreachable] = useState(false);
+  const online = useOnline();
+  const blocks = useOfflineBlocks();
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentItemId = useRef<string | null>(null);
 
@@ -72,7 +76,14 @@ export function Listen() {
     setData(null);
     currentItemId.current = null;
     setPlaying(false);
-    const poll = () => publicApi.nowPlaying(channelSlug).then(setData).catch(() => {});
+    const poll = () =>
+      publicApi
+        .nowPlaying(channelSlug)
+        .then((d) => {
+          setData(d);
+          setUnreachable(false);
+        })
+        .catch((err) => setUnreachable(!(err instanceof ApiError)));
     poll();
     const id = setInterval(poll, 15_000);
     return () => clearInterval(id);
@@ -110,6 +121,31 @@ export function Listen() {
       setPlaying(true);
     }
   };
+
+  // No connection: live radio can't play, so point at the downloads instead
+  // of sitting on "Tuning in..." (or a play button that can't work).
+  if (!online || (unreachable && !data)) {
+    return (
+      <div className="lp-offline">
+        <h1>You're offline</h1>
+        {blocks?.length ? (
+          <>
+            <p>Live radio needs a connection, but your downloads play without one.</p>
+            <button type="button" className="btn primary lp-offline-play" onClick={() => playDownloads(blocks.some((b) => b.channelSlug === channelSlug) ? channelSlug : null)}>
+              ▶ Play downloads
+            </button>
+          </>
+        ) : (
+          <>
+            <p>Live radio needs a connection. Next time you're connected, download some radio and it will play anywhere.</p>
+            <Link to="/offline" className="btn">
+              Offline listening
+            </Link>
+          </>
+        )}
+      </div>
+    );
+  }
 
   if (!data) return <p>Tuning in...</p>;
   if (!data.on_air) return <p>{data.channel?.name ?? "This channel"} isn't broadcasting anything published yet.</p>;
@@ -226,6 +262,10 @@ export function Listen() {
           </div>
         </div>
       )}
+
+      <p className="lp-offline-link">
+        <Link to={`/offline?channel=${channelSlug}`}>Going somewhere without signal? Download {data.channel.name} for offline listening</Link>
+      </p>
 
       <audio ref={audioRef} onEnded={() => publicApi.nowPlaying(channelSlug).then(setData).catch(() => {})} />
     </div>

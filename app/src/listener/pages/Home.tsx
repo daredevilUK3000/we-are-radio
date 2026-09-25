@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { publicApi } from "../../api/client";
 import { HeroBackdrop } from "../components/HeroBackdrop";
+import { InstallCard } from "../components/InstallCard";
+import { ChannelRow } from "./Offline";
+import { offlineSupported, useOfflineBlocks, useOnline } from "../../shared/offline";
 import { EyebrowPill } from "../components/BrandMark";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { CHANNEL_LABELS } from "../lib/channelLabels";
@@ -64,6 +67,7 @@ export function Home() {
     : "Kizzi's personal radio network";
 
   const remaining = Math.max(0, TOTAL_CHANNELS - channels.length);
+  const liveChannel = channels.find((c) => c.slug === channelSlug);
 
   return (
     <div>
@@ -94,6 +98,28 @@ export function Home() {
           </a>
         </div>
       </section>
+
+      {/* Offline listening, straight under the hero so nobody has to go looking for it. */}
+      {offlineSupported && liveChannel && (
+        <section className="offline-promo" aria-labelledby="offline-promo-title">
+          <div className="offline-promo-head">
+            <span className="offline-promo-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 4v11" />
+                <path d="M7 11l5 5 5-5" />
+                <path d="M5 20h14" />
+              </svg>
+            </span>
+            <div>
+              <h2 id="offline-promo-title">Listen offline</h2>
+              <p>No signal? Download the next stretch of {liveChannel.name} and it keeps playing - on a plane, on the Underground, anywhere.</p>
+            </div>
+          </div>
+          <OfflinePromoRow slug={liveChannel.slug} name={liveChannel.name} />
+        </section>
+      )}
+
+      <InstallCard dismissible />
 
       <section className="channels-section" id="channels">
         <div className="channels-heading-row">
@@ -147,5 +173,21 @@ export function Home() {
       <WaysToListen channels={channels} />
       <TimeCapsuleBanner />
     </div>
+  );
+}
+
+// The Offline page's own download panel, for the Home page's "Listen offline" card.
+function OfflinePromoRow({ slug, name }: { slug: string; name: string }) {
+  const blocks = useOfflineBlocks();
+  const online = useOnline();
+  return (
+    <ChannelRow
+      slug={slug}
+      name={name}
+      block={blocks?.find((b) => b.channelSlug === slug)}
+      online={online}
+      highlight={false}
+      withdrawn={false}
+    />
   );
 }

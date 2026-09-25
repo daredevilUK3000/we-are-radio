@@ -31,7 +31,9 @@ export async function streamR2Object(
   headers.set("accept-ranges", "bytes");
   headers.set("cache-control", cacheControl);
 
-  if (object.range && "offset" in object.range && "length" in object.range) {
+  // R2 reports a range even for a plain request; only answer 206 when one
+  // was actually asked for (a Chromecast or a cache may reject a 206 otherwise).
+  if (range && object.range && "offset" in object.range && "length" in object.range) {
     const offset = object.range.offset ?? 0;
     const length = object.range.length ?? object.size - offset;
     headers.set("content-range", `bytes ${offset}-${offset + length - 1}/${object.size}`);

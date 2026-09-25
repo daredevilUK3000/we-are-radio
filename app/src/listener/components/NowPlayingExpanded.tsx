@@ -235,6 +235,9 @@ export function NowPlayingExpanded({
                   <FavouriteButton itemType="track" itemId={now.track_id} label="Favourite" className="np-chip" />
                 </>
               )}
+              <Link className="np-chip np-chip-offline" to={`/offline?channel=${channelSlug}`}>
+                ⬇ Download for offline
+              </Link>
               <ShareButton path={`/channel/${channelSlug}`} title={`${station} - We Are Radio`} text={shareText} className="np-chip" />
               {now?.album_id && (
                 <Link className="np-chip" to={`/albums/${now.album_id}`}>
