@@ -242,6 +242,78 @@ interface ItemRow {
   audio_asset_audio_url: string | null;
 }
 
+publicRoutes.get("/now-playing", async (c) => {
+  const channel = await liveChannel(c.env.DB, c.req.query("channel") ?? "kizzi-radio");
+  if (!channel) return c.json({ error: "channel not found or not live" }, 404);
+
+  const station = await loadStation(c.env.DB, c.env.CONFIG, channel);
+  if (!station.items) {
+    return c.json({ channel, ...(station.programme ? { programme: station.programme } : {}), on_air: false });
+  }
+  const { currentIndex, position_seconds } = locateInLoop(station.items, station.elapsed);
+
+  return c.json({
+    channel,
+    programme: station.programme,
+    on_air: true,
+    position_seconds,
+    ...(await describePlayback(c.env.DB, station.items, currentIndex)),
+  });
+});
+
+/**
+ * The channel's running order from now on - what a Chromecast queue (and,
+ * later, an offline download) needs: every item, jingles and station IDs
+ * included, each with the moment it starts on air. The first item is the one
+ * on air now, already `position_seconds` in. Covers `minutes` (default 60,
+ * at most 180) of air time, however many loops of the rotation that takes.
+ * Live channels only, like /now-playing.
+ */
+publicRoutes.get("/schedule", async (c) => {
+  const channel = await liveChannel(c.env.DB, c.req.query("channel") ?? "kizzi-radio");
+  if (!channel) return c.json({ error: "channel not found or not live" }, 404);
+
+  const minutes = Math.min(180, Math.max(1, Number(c.req.query("minutes")) || 60));
+  const station = await loadStation(c.env.DB, c.env.CONFIG, channel);
+  if (!station.items) return c.json({ channel, on_air: false, items: [] });
+
+  const { items } = station;
+  const { currentIndex, position_seconds } = locateInLoop(items, station.elapsed);
+  const nowSec = Math.floor(Date.now() / 1000);
+  let startsAt = nowSec - position_seconds;
+  const horizon = nowSec + minutes * 60;
+  const picked: { item: RotationItem; starts_at: number }[] = [];
+  // A rotation of zero-length items would never reach the horizon.
+  for (let step = 0; startsAt < horizon && step < 1000; step++) {
+    const item = items[(currentIndex + step) % items.length];
+    if (item.duration_seconds > 0) picked.push({ item, starts_at: startsAt });
+    startsAt += item.duration_seconds;
+  }
+
+  const enriched = await enrichItems(c.env.DB, picked.map((p) => p.item));
+  return c.json({
+    channel,
+    programme: station.programme,
+    on_air: true,
+    position_seconds,
+    items: picked.map((p, i) => ({
+      ...enriched[i],
+      // Overlay jingles are played by the listener's browser over a song; a
+      // queue can't do that, so they're left out rather than sent unused.
+      overlays: undefined,
+      starts_at: p.starts_at,
+    })),
+  });
+});
+
+async function liveChannel(db: D1Database, slug: string) {
+  return db.prepare("SELECT * FROM channels WHERE slug = ? AND status = 'live'").bind(slug).first<Channel>();
+}
+
+type Station =
+  | { items: RotationItem[]; elapsed: number; programme: Programme | { id: null; title: string; description: string | null } }
+  | { items: null; programme?: Programme };
+
 /**
  * Section 20: the station doesn't need a real 24/7 audio stream. Instead we
  * pick the current on-air content for a live channel and deterministically
@@ -262,49 +334,38 @@ interface ItemRow {
  * tracks/assets currently qualify - so it's stable between requests but
  * regenerates itself the moment Kizzi tags a new track into the pool,
  * without a cron job or a "last generated" timestamp to manage.
+ *
+ * Returns the loop and how many seconds into it the broadcast is right now.
  */
-publicRoutes.get("/now-playing", async (c) => {
-  const channelSlug = c.req.query("channel") ?? "kizzi-radio";
+async function loadStation(db: D1Database, kv: KVNamespace, channel: Channel): Promise<Station> {
+  if (channel.programming_mode === "autopilot") return loadAutopilot(db, kv, channel);
 
-  const channel = await c.env.DB.prepare(
-    "SELECT * FROM channels WHERE slug = ? AND status = 'live'"
-  )
-    .bind(channelSlug)
-    .first<Channel>();
-  if (!channel) return c.json({ error: "channel not found or not live" }, 404);
-
-  if (channel.programming_mode === "autopilot") {
-    return c.json(await nowPlayingAutopilot(c.env.DB, c.env.CONFIG, channel));
-  }
-
-  const programme = await c.env.DB.prepare(
-    `SELECT * FROM programmes
-     WHERE channel_id = ? AND status = 'published'
-     ORDER BY is_flagship DESC, publish_date DESC
-     LIMIT 1`
-  )
+  const programme = await db
+    .prepare(
+      `SELECT * FROM programmes
+       WHERE channel_id = ? AND status = 'published'
+       ORDER BY is_flagship DESC, publish_date DESC
+       LIMIT 1`
+    )
     .bind(channel.id)
     .first<Programme>();
 
-  if (!programme || !programme.duration_seconds) {
-    return c.json({ channel, on_air: false });
-  }
+  if (!programme || !programme.duration_seconds) return { items: null };
 
-  const { results: rows } = await c.env.DB.prepare(
-    `SELECT pi.*, t.title as track_title, t.duration_seconds as track_duration_seconds, t.audio_url as track_audio_url, t.artwork_url as track_artwork_url,
-            aa.title as audio_asset_title, aa.duration_seconds as audio_asset_duration_seconds, aa.audio_url as audio_asset_audio_url
-     FROM programme_items pi
-     LEFT JOIN tracks t ON t.id = pi.track_id
-     LEFT JOIN audio_assets aa ON aa.id = pi.audio_asset_id
-     WHERE pi.programme_id = ?
-     ORDER BY pi.position ASC`
-  )
+  const { results: rows } = await db
+    .prepare(
+      `SELECT pi.*, t.title as track_title, t.duration_seconds as track_duration_seconds, t.audio_url as track_audio_url, t.artwork_url as track_artwork_url,
+              aa.title as audio_asset_title, aa.duration_seconds as audio_asset_duration_seconds, aa.audio_url as audio_asset_audio_url
+       FROM programme_items pi
+       LEFT JOIN tracks t ON t.id = pi.track_id
+       LEFT JOIN audio_assets aa ON aa.id = pi.audio_asset_id
+       WHERE pi.programme_id = ?
+       ORDER BY pi.position ASC`
+    )
     .bind(programme.id)
     .all<ItemRow>();
 
-  if (rows.length === 0) {
-    return c.json({ channel, programme, on_air: false });
-  }
+  if (rows.length === 0) return { items: null, programme };
 
   const baseItems: RotationItem[] = rows.map((row) => ({
     id: row.id,
@@ -319,24 +380,16 @@ publicRoutes.get("/now-playing", async (c) => {
   // Pinned jingles play over their song here too, not just on autopilot channels.
   // Time capsules due today are dropped into the loop like station IDs.
   const items = withCapsules(
-    withPinnedJingles(baseItems, await loadPinnedJingles(c.env.DB)),
-    await loadTodaysCapsules(c.env.DB)
+    withPinnedJingles(baseItems, await loadPinnedJingles(db)),
+    await loadTodaysCapsules(db)
   );
   const loopSeconds = items.reduce((sum, i) => sum + i.duration_seconds, 0) || programme.duration_seconds;
   const publishedAt = programme.publish_date ? new Date(programme.publish_date).getTime() : Date.now();
   const elapsed = Math.floor(((Date.now() - publishedAt) / 1000) % loopSeconds);
-  const { currentIndex, position_seconds } = locateInLoop(items, elapsed);
+  return { items, elapsed, programme };
+}
 
-  return c.json({
-    channel,
-    programme,
-    on_air: true,
-    position_seconds,
-    ...(await describePlayback(c.env.DB, items, currentIndex)),
-  });
-});
-
-async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Channel) {
+async function loadAutopilot(db: D1Database, kv: KVNamespace, channel: Channel): Promise<Station> {
   const rules = channel.catalogue_rules ? JSON.parse(channel.catalogue_rules) : null;
   const tagsAny: string[] = rules?.tags_any ?? [];
 
@@ -360,9 +413,7 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
     .prepare("SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle','promo')")
     .all<AudioAsset>();
 
-  if (tracks.length === 0) {
-    return { channel, on_air: false };
-  }
+  if (tracks.length === 0) return { items: null };
 
   // The cache/seed key is fingerprinted on exactly which tracks and station
   // IDs currently qualify, not a timestamp - so the rotation is stable
@@ -403,20 +454,10 @@ async function nowPlayingAutopilot(db: D1Database, kv: KVNamespace, channel: Cha
   }
 
   const totalDuration = items.reduce((sum, i) => sum + i.duration_seconds, 0);
-  if (items.length === 0 || totalDuration === 0) {
-    return { channel, on_air: false };
-  }
+  if (items.length === 0 || totalDuration === 0) return { items: null };
 
   const elapsed = Math.floor((Date.now() / 1000) % totalDuration);
-  const { currentIndex, position_seconds } = locateInLoop(items, elapsed);
-
-  return {
-    channel,
-    programme: { id: null, title: channel.name, description: channel.description },
-    on_air: true,
-    position_seconds,
-    ...(await describePlayback(db, items, currentIndex)),
-  };
+  return { items, elapsed, programme: { id: null, title: channel.name, description: channel.description } };
 }
 
 /**
@@ -437,9 +478,13 @@ async function describePlayback(db: D1Database, items: RotationItem[], currentIn
     if (item.item_type !== "station_id" && item.id !== now.id) comingUp.push(item);
   }
 
-  const trackIds = Array.from(
-    new Set([now, upNext, ...comingUp].map((i) => i?.track_id).filter((id): id is string => !!id))
-  );
+  const [nowE, upNextE, ...comingUpE] = await enrichItems(db, [now, upNext, ...comingUp]);
+  return { now_playing: nowE, up_next: upNextE, coming_up: comingUpE };
+}
+
+/** Adds each song's artist and album, and the album's artwork when the song has none. */
+async function enrichItems<T extends RotationItem | null>(db: D1Database, items: T[]): Promise<T[]> {
+  const trackIds = Array.from(new Set(items.map((i) => i?.track_id).filter((id): id is string => !!id)));
   const albumByTrack = new Map<
     string,
     { artist: string | null; album_id: string | null; album_title: string | null; album_artwork_url: string | null }
@@ -462,8 +507,8 @@ async function describePlayback(db: D1Database, items: RotationItem[], currentIn
     for (const row of results) albumByTrack.set(row.id, row);
   }
 
-  const enrich = (item: RotationItem | null): RotationItem | null => {
-    if (!item) return null;
+  return items.map((item) => {
+    if (!item) return item;
     const album = item.track_id ? albumByTrack.get(item.track_id) : undefined;
     return {
       ...item,
@@ -472,13 +517,7 @@ async function describePlayback(db: D1Database, items: RotationItem[], currentIn
       album_title: album?.album_title ?? null,
       artwork_url: item.artwork_url ?? album?.album_artwork_url ?? null,
     };
-  };
-
-  return {
-    now_playing: enrich(now),
-    up_next: enrich(upNext),
-    coming_up: comingUp.map((i) => enrich(i)),
-  };
+  });
 }
 
 // Jingles pinned to specific songs (published jingles only).

@@ -9,6 +9,9 @@ import { FlagshipPlayer } from "../components/FlagshipPlayer";
 import { StudioConsole } from "../components/StudioConsole";
 import { channelAccent } from "../lib/channelAccent";
 import { radioSessionInfo, useMediaSession } from "../../shared/mediaSession";
+import { toggleCastPlayback } from "../../shared/cast";
+import { useRadioCast } from "../lib/useRadioCast";
+import { CastButtons } from "../components/CastButtons";
 
 const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark"]);
 
@@ -43,6 +46,8 @@ export function Listen() {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentItemId = useRef<string | null>(null);
+
+  const { cast, castingHere } = useRadioCast({ audioRef, channelSlug, currentItemId, setData, setPlaying });
 
   // Starting a podcast/album elsewhere pauses this stream (and its button).
   useChannelLog(audioRef, data, playing);
@@ -90,6 +95,10 @@ export function Listen() {
   }, [data]);
 
   const togglePlay = () => {
+    if (castingHere) {
+      toggleCastPlayback();
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     if (playing) {
@@ -106,6 +115,8 @@ export function Listen() {
   if (!data.on_air) return <p>{data.channel?.name ?? "This channel"} isn't broadcasting anything published yet.</p>;
 
   const accent = channelAccent(channelSlug);
+  // While this channel is on the Chromecast, the buttons show and drive the device.
+  const shownPlaying = castingHere ? !cast.paused : playing;
   const now = data.now_playing;
   const isSong = now?.item_type === "song";
   const artUrl: string | null = now?.artwork_url ? mediaUrl(now.artwork_url) : null;
@@ -113,7 +124,7 @@ export function Listen() {
   const queue: any[] = data.coming_up ?? (data.up_next ? [data.up_next] : []);
 
   return (
-    <div className={`lp-page${playing ? " is-playing" : ""}`}>
+    <div className={`lp-page${shownPlaying ? " is-playing" : ""}`}>
       <div className="lp-glow" aria-hidden="true">
         <div className="lp-glow-warm" />
         <div className="lp-glow-accent" style={{ background: `radial-gradient(circle, ${accent}1f 0%, transparent 70%)` }} />
@@ -122,14 +133,18 @@ export function Listen() {
       <div className="lp-top">
         <span className="on-air-badge lp-eyebrow">
           <span className="on-air-dot" /> On Air &middot; {data.channel.name}
+          {castingHere && <> &middot; Casting{cast.deviceName ? ` to ${cast.deviceName}` : ""}</>}
         </span>
-        <ShareButton
-          path={`/channel/${channelSlug}`}
-          title={`${data.channel.name} - We Are Radio`}
-          text={now?.label ? `Listening to ${now.label} on ${data.channel.name}` : `Live on ${data.channel.name}`}
-          className="lp-icon-btn"
-          iconOnly
-        />
+        <div className="lp-top-actions">
+          <CastButtons audioRef={audioRef} channelSlug={channelSlug} ready className="lp-icon-btn" />
+          <ShareButton
+            path={`/channel/${channelSlug}`}
+            title={`${data.channel.name} - We Are Radio`}
+            text={now?.label ? `Listening to ${now.label} on ${data.channel.name}` : `Live on ${data.channel.name}`}
+            className="lp-icon-btn"
+            iconOnly
+          />
+        </div>
       </div>
 
       <div className="lp-hero">
@@ -160,8 +175,8 @@ export function Listen() {
               <circle cx="205" cy="205" r="112" fill="none" stroke="#FFFFFF" strokeWidth="1" strokeDasharray="2 9" />
             </svg>
             <div className="lp-art-shine" aria-hidden="true" />
-            <button className="lp-art-play" style={{ background: accent, boxShadow: `0 12px 36px ${accent}8c` }} onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
-              {playing ? (
+            <button className="lp-art-play" style={{ background: accent, boxShadow: `0 12px 36px ${accent}8c` }} onClick={togglePlay} aria-label={shownPlaying ? "Pause" : "Play"}>
+              {shownPlaying ? (
                 <span className="pl-pause-icon">
                   <span />
                   <span />
@@ -193,7 +208,7 @@ export function Listen() {
             audioRef={audioRef}
             accent={accent}
             seed={`${now?.id ?? ""}${now?.label ?? ""}`}
-            playing={playing}
+            playing={shownPlaying}
             onTogglePlay={togglePlay}
           />
         </div>

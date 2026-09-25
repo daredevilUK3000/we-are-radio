@@ -8,6 +8,9 @@ import { NowPlayingExpanded } from "./NowPlayingExpanded";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "./ShareButton";
 import { radioSessionInfo, useMediaSession } from "../../shared/mediaSession";
+import { startCasting, toggleCastPlayback } from "../../shared/cast";
+import { useRadioCast } from "../lib/useRadioCast";
+import { CastButtons } from "./CastButtons";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -74,6 +77,18 @@ export function NowPlayingBar() {
     setExpanded(false);
   }, [location.pathname]);
 
+  // Chromecast: while this channel is on the device, the play button drives it.
+  const { cast, castingHere } = useRadioCast({
+    audioRef,
+    channelSlug,
+    currentItemId,
+    setData,
+    setPlaying,
+    isDefault: true,
+  });
+  const castRef = useRef(cast);
+  castRef.current = cast;
+
   // Tune-ins and song plays on this channel, for the Studio's Analytics.
   useChannelLog(audioRef, data, playing);
 
@@ -132,7 +147,7 @@ export function NowPlayingBar() {
         new CustomEvent("war:player-state", {
           detail: {
             onAir: !!(data && data.on_air),
-            playing,
+            playing: castingHere ? !cast.paused : playing,
             title: data?.now_playing?.label ?? null,
             channelName: data?.channel?.name ?? null,
             artworkUrl: data?.now_playing?.artwork_url ? mediaUrl(data.now_playing.artwork_url) : null,
@@ -142,7 +157,7 @@ export function NowPlayingBar() {
     announce();
     window.addEventListener("war:player-state-request", announce);
     return () => window.removeEventListener("war:player-state-request", announce);
-  }, [data, playing]);
+  }, [data, playing, castingHere, cast.paused]);
 
   // Poll now-playing for whichever channel is currently active (time-of-day
   // default, or a Vibe Shift override).
@@ -184,8 +199,12 @@ export function NowPlayingBar() {
   // is pressed.
   useEffect(() => {
     if (prevChannelSlug.current === channelSlug) return;
+    const previous = prevChannelSlug.current;
     prevChannelSlug.current = channelSlug;
     currentItemId.current = null;
+    // A Vibe Shift while this player's channel is on the Chromecast moves the
+    // Chromecast to the new channel too.
+    if (castRef.current.connected && castRef.current.channelSlug === previous) void startCasting(channelSlug);
     const audio = audioRef.current;
     if (!audio || !playingRef.current) return;
 
@@ -228,6 +247,10 @@ export function NowPlayingBar() {
   if (!data || !data.on_air) return null;
 
   const togglePlay = () => {
+    if (castingHere) {
+      toggleCastPlayback();
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     if (playing) {
@@ -241,8 +264,11 @@ export function NowPlayingBar() {
     }
   };
 
+  // What the buttons show: the Chromecast's state while this channel is on it.
+  const shownPlaying = castingHere ? !cast.paused : playing;
+
   commandRef.current = (action) => {
-    if (action === "toggle" || (action === "play") !== playing) togglePlay();
+    if (action === "toggle" || (action === "play") !== shownPlaying) togglePlay();
   };
 
   const station = data.channel?.name ?? "We Are Radio";
@@ -259,7 +285,7 @@ export function NowPlayingBar() {
           )}
           <span className="mp-text">
             <span className="mp-onair">
-              <span className="mp-onair-dot" /> {switching ? "Switching..." : "On Air"}
+              <span className="mp-onair-dot" /> {castingHere ? `Casting${cast.deviceName ? ` to ${cast.deviceName}` : ""}` : switching ? "Switching..." : "On Air"}
               <span className="mp-station">{station}</span>
             </span>
             <span className="mp-title">{data.now_playing?.label ?? "We Are Radio"}</span>
@@ -308,8 +334,9 @@ export function NowPlayingBar() {
           className="btn"
           iconOnly
         />
-        <button className="mp-play-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
-          {playing ? <PauseIcon /> : <PlayIcon />}
+        <CastButtons audioRef={audioRef} channelSlug={channelSlug} ready className="btn" />
+        <button className="mp-play-btn" onClick={togglePlay} aria-label={shownPlaying ? "Pause" : "Play"}>
+          {shownPlaying ? <PauseIcon /> : <PlayIcon />}
         </button>
         <audio
           ref={audioRef}
@@ -322,7 +349,7 @@ export function NowPlayingBar() {
         <NowPlayingExpanded
           data={data}
           audioRef={audioRef}
-          playing={playing}
+          playing={shownPlaying}
           switching={switching}
           onTogglePlay={togglePlay}
           onClose={closeExpanded}

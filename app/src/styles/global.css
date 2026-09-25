@@ -5127,3 +5127,26 @@ main.studio-wide {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Cast / AirPlay buttons (CastButtons.tsx) ---- */
+
+.cast-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.now-playing-bar .cast-btn {
+  padding: 7px 10px;
+}
+.cast-btn.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.mp-casting {
+  color: var(--accent);
+}
+.lp-top-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}

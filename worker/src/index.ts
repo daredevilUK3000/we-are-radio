@@ -29,7 +29,17 @@ import { likePublicRoutes, likeStudioRoutes } from "./routes/likes";
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.use("*", cors({ credentials: true, origin: (origin) => origin ?? "*" }));
+// exposeHeaders: a Chromecast (Google's Default Media Receiver) fetches
+// /media/* audio from its own origin and must be able to read the range
+// headers to start and seek within a track.
+app.use(
+  "*",
+  cors({
+    credentials: true,
+    origin: (origin) => origin ?? "*",
+    exposeHeaders: ["Content-Length", "Content-Range", "Accept-Ranges", "Content-Type", "ETag"],
+  })
+);
 
 app.get("/health", (c) => c.json({ ok: true }));
 

@@ -69,6 +69,11 @@ export const publicApi = {
   featuredAlbum: () => request<{ album: any | null; tracks: any[] }>(`${API_BASE}/featured-album`),
   nowPlaying: (channel = "kizzi-radio") =>
     request<any>(`${API_BASE}/now-playing?channel=${encodeURIComponent(channel)}`),
+  /** The channel's running order from now on, each item with its on-air start (unix seconds). */
+  schedule: (channel: string, minutes = 60) =>
+    request<{ on_air: boolean; position_seconds?: number; channel: any; items: any[] }>(
+      `${API_BASE}/schedule?channel=${encodeURIComponent(channel)}&minutes=${minutes}`
+    ),
   search: (q: string) => request<{ tracks: any[]; albums: any[]; programmes: any[] }>(
     `${API_BASE}/search?q=${encodeURIComponent(q)}`
   ),
