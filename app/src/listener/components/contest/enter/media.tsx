@@ -29,21 +29,28 @@ export function LoopVideo({
   poster,
   className,
   preload = "metadata",
+  lazy = false,
 }: {
   src: string;
   poster: string;
   className?: string;
   preload?: "auto" | "metadata" | "none";
+  /** Don't give the video its source until it first scrolls into view (autoplay ignores preload="none"). */
+  lazy?: boolean;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   const lite = useLiteMedia();
+  const [seen, setSeen] = useState(!lazy);
 
   useEffect(() => {
     const video = ref.current;
     if (!video || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) video.play().catch(() => {});
+        if (entry.isIntersecting) {
+          setSeen(true);
+          video.play().catch(() => {});
+        }
         else video.pause();
       },
       { threshold: 0.05 }
@@ -57,7 +64,7 @@ export function LoopVideo({
     <video
       ref={ref}
       className={className}
-      src={src}
+      src={seen ? src : undefined}
       poster={poster}
       autoPlay
       muted

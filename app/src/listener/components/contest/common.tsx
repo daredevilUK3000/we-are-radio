@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { contestApi, mediaUrl, ApiError, type ContestEntry, type ContestState } from "../../../api/client";
+import { Link, useLocation } from "react-router-dom";
+import { contestApi, mediaUrl, ApiError, type ContestEntry, type ContestPhase, type ContestState } from "../../../api/client";
 import { countryFlag, countryName } from "../../../shared/countries";
 import { Turnstile, type TurnstileHandle } from "../../../shared/Turnstile";
 import { ShareButton } from "../ShareButton";
@@ -19,6 +19,67 @@ export function useContestState() {
       .then(setState)
       .catch(() => setError(true));
   }, []);
+  return { state, error };
+}
+
+// One /api/contest/state request shared by everything outside the /top3 pages
+// (the announcement bar in the layout, the homepage pill and band), reused for
+// 60 seconds. A failed request resolves to null and is forgotten, so the next
+// navigation tries again - never a retry loop.
+const SHARED_TTL_MS = 60_000;
+let shared: { at: number; promise: Promise<ContestState | null>; value?: ContestState | null } | null = null;
+
+function loadShared(): Promise<ContestState | null> {
+  if (shared && Date.now() - shared.at < SHARED_TTL_MS) return shared.promise;
+  const entry: NonNullable<typeof shared> = { at: Date.now(), promise: Promise.resolve(null) };
+  entry.promise = contestApi.state().then(
+    (s) => (entry.value = s),
+    () => {
+      if (shared === entry) shared = null;
+      return (entry.value = null);
+    }
+  );
+  shared = entry;
+  return entry.promise;
+}
+
+// Development only (stripped from production builds): ?t3phase=voting forces a
+// phase and ?t3approved=12 an approved-song count, to check every version of the
+// homepage pieces. The choice sticks for the tab until another is given.
+function devOverride(s: ContestState | null): ContestState | null {
+  if (!import.meta.env.DEV || !s) return s;
+  try {
+    const q = new URLSearchParams(location.search);
+    for (const k of ["t3phase", "t3approved"]) if (q.has(k)) sessionStorage.setItem(k, q.get(k)!);
+    const phase = sessionStorage.getItem("t3phase") as ContestPhase | null;
+    const approved = sessionStorage.getItem("t3approved");
+    return {
+      ...s,
+      ...(phase ? { phase, studioPreview: false } : {}),
+      ...(approved ? { approvedCount: Number(approved) } : {}),
+    };
+  } catch {
+    return s;
+  }
+}
+
+/** Like useContestState, but one cached request for the whole site (see above); re-checked on navigation. */
+export function useContestStateShared() {
+  const { pathname } = useLocation();
+  const cached = shared && shared.value !== undefined ? devOverride(shared.value) : null;
+  const [state, setState] = useState<ContestState | null>(cached);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let live = true;
+    loadShared().then((s) => {
+      if (!live) return;
+      setState(devOverride(s));
+      setError(s === null);
+    });
+    return () => {
+      live = false;
+    };
+  }, [pathname]);
   return { state, error };
 }
 

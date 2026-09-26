@@ -48,6 +48,7 @@ export const IconShield = ({ size = 18, className }: P) =>
 export const IconDoc = ({ size = 18, className }: P) =>
   svg(size, className, <><path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>);
 export const IconArrow = ({ size = 18, className }: P) => svg(size, className, <path d="M5 12h14M13 6l6 6-6 6" />);
+export const IconClose = ({ size = 16, className }: P) => svg(size, className, <path d="M6 6l12 12M18 6 6 18" />);
 
 /** Four little bouncing bars - "this is playing". */
 export function PlayingBars({ className = "" }: { className?: string }) {

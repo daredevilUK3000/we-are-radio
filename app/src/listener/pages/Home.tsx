@@ -9,6 +9,8 @@ import { EyebrowPill } from "../components/BrandMark";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { CHANNEL_LABELS } from "../lib/channelLabels";
 import { trackListenNow } from "../../shared/analytics";
+import { Top3HeroButton, Top3HeroPill } from "../components/contest/Top3HeroPill";
+import { Top3FeatureBand } from "../components/contest/Top3FeatureBand";
 import {
   FeaturedAlbumSection,
   PodcastShowcase,
@@ -83,7 +85,10 @@ export function Home() {
         />
         <div className="hero-scrim" aria-hidden="true" />
         <HeroBackdrop />
-        <EyebrowPill label={`On Air · ${channelLabel}`} className="hero-eyebrow" />
+        <div className="t3f-hero-row">
+          <EyebrowPill label={`On Air · ${channelLabel}`} className="hero-eyebrow" />
+          <Top3HeroPill />
+        </div>
         <h1 className="hero-logo">
           <img src="/weareradio-logo-hero.webp" alt="We Are Radio" />
         </h1>
@@ -93,11 +98,18 @@ export function Home() {
             <span className="play-triangle" />
             Listen Now
           </Link>
+          {/* Phones only: the gold Top 3 button, and Explore Channels as a text link under it. */}
+          <Top3HeroButton />
           <a href="#channels" className="pill-btn pill-btn-ghost">
             Explore Channels
           </a>
+          <a href="#channels" className="t3f-hero-explore">
+            Explore channels ↓
+          </a>
         </div>
       </section>
+
+      <Top3FeatureBand />
 
       {/* Offline listening, straight under the hero so nobody has to go looking for it. */}
       {offlineSupported && liveChannel && (

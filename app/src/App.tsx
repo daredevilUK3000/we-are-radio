@@ -21,6 +21,8 @@ import { ContestRules } from "./listener/pages/contest/ContestRules";
 import { ContestSong } from "./listener/pages/contest/ContestSong";
 import { ContestConfirm, ContestNotifyConfirm, ContestUnsubscribe } from "./listener/pages/contest/ContestConfirm";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
+import { Top3AnnouncementBar } from "./listener/components/contest/Top3AnnouncementBar";
+import { IconTrophy } from "./listener/components/contest/enter/icons";
 import { ListenerAuthProvider } from "./listener/auth/ListenerAuthContext";
 import { FavouritesProvider } from "./listener/favourites/FavouritesContext";
 import { ActiveChannelProvider } from "./listener/context/ActiveChannelContext";
@@ -59,6 +61,7 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell listener-shell">
+      <Top3AnnouncementBar />
       <header className="top-nav">
         <Link to="/" className="brand listener-logo">
           <img src="/weareradio-logo.webp" alt="We Are Radio" className="listener-logo-img" />
@@ -78,7 +81,10 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/albums">Albums</NavLink>
           <NavLink to="/programmes">Programmes</NavLink>
           <NavLink to="/podcasts">Podcasts</NavLink>
-          <NavLink to="/top3">Top 3</NavLink>
+          <NavLink to="/top3" className="t3f-nav-pill">
+            <IconTrophy size={12} />
+            Top 3
+          </NavLink>
           <NavLink to="/my-mood">My Mood</NavLink>
           <NavLink to="/search">Search</NavLink>
           <NavLink to="/my-radio">My Radio</NavLink>

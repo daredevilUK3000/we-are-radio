@@ -45,16 +45,21 @@ function branch(from: number, to: number) {
   return { stem, leaves };
 }
 
-function Laurel() {
+/** The laurel; `prefix` picks the stylesheet's classes (t3p on the entry page, t3f on the homepage band). */
+export function Laurel({ prefix = "t3p", rings = true }: { prefix?: string; rings?: boolean }) {
   const left = branch(252, 128);
   const right = branch(288, 412); // up the right-hand side, through 0°
   return (
-    <svg className="t3p-laurel" viewBox="0 0 400 400" aria-hidden="true" focusable="false">
-      <circle cx={CX} cy={CY} r="186" className="t3p-laurel-ring" />
-      <circle cx={CX} cy={CY} r="112" className="t3p-laurel-ring" />
-      <path d={left.stem} className="t3p-laurel-stem" />
-      <path d={right.stem} className="t3p-laurel-stem" />
-      <g className="t3p-laurel-leaves">
+    <svg className={`${prefix}-laurel`} viewBox="0 0 400 400" aria-hidden="true" focusable="false">
+      {rings && (
+        <>
+          <circle cx={CX} cy={CY} r="186" className={`${prefix}-laurel-ring`} />
+          <circle cx={CX} cy={CY} r="112" className={`${prefix}-laurel-ring`} />
+        </>
+      )}
+      <path d={left.stem} className={`${prefix}-laurel-stem`} />
+      <path d={right.stem} className={`${prefix}-laurel-stem`} />
+      <g className={`${prefix}-laurel-leaves`}>
         {left.leaves}
         {right.leaves}
       </g>
