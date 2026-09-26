@@ -2,8 +2,11 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { studioApi, uploadFileToR2 } from "../../api/client";
 import { LINK_KINDS, NEED_TAGS } from "./RecordLink";
+import { decodedDuration } from "../lib/audio";
 
-function readAudioDuration(file: File): Promise<number> {
+async function readAudioDuration(file: File): Promise<number> {
+  const exact = await decodedDuration(file);
+  if (exact) return Math.max(1, Math.round(exact));
   return new Promise((resolve, reject) => {
     const audio = document.createElement("audio");
     audio.preload = "metadata";

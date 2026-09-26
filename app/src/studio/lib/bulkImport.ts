@@ -1,6 +1,8 @@
 // Helpers for the Studio's Bulk Import page: reading files in the browser
 // (fingerprint, length), uploading with progress, and small utilities.
 
+import { decodedDuration } from "./audio";
+
 export const AUDIO_EXT = /\.(mp3|wav|m4a|aac|flac|ogg|oga|opus|wma)$/i;
 
 export function isAudioFile(file: File): boolean {
@@ -28,8 +30,13 @@ export async function sha256Hex(file: File): Promise<string> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Length in whole seconds, read from the file's own metadata. */
-export function readDuration(file: File): Promise<number> {
+/**
+ * Length in whole seconds, from decoding the audio (see decodedDuration);
+ * the file's own metadata only if the browser can't decode it.
+ */
+export async function readDuration(file: File): Promise<number> {
+  const exact = await decodedDuration(file);
+  if (exact) return Math.max(1, Math.round(exact));
   return new Promise((resolve, reject) => {
     const audio = document.createElement("audio");
     const url = URL.createObjectURL(file);
