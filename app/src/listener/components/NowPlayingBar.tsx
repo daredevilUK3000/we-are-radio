@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { ApiError, publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
-import { useExclusiveAudio } from "../lib/audioUtils";
+import { CATCH_UP_SECONDS, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { NowPlayingExpanded } from "./NowPlayingExpanded";
 import { useChannelLog } from "../../shared/analytics";
@@ -71,6 +71,9 @@ export function NowPlayingBar() {
   const closeExpanded = useCallback(() => setExpanded(false), []);
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentItemId = useRef<string | null>(null);
+  // The station moved on while the previous song was still finishing.
+  const heldBack = useRef(false);
+  const [loadedItem, setLoadedItem] = useState<any>(null);
   const prevChannelSlug = useRef(channelSlug);
   const playingRef = useRef(playing);
   playingRef.current = playing;
@@ -103,8 +106,10 @@ export function NowPlayingBar() {
   useExclusiveAudio("mini-player", audioRef, !!(data && data.on_air), () => setPlaying(false));
 
   // Jingles that play over a song (music ducked underneath) rather than
-  // between songs; the rotation says when, this carries it out.
-  useOverlayJingles(audioRef, data?.now_playing, !!(data && data.on_air));
+  // between songs; the rotation says when, this carries it out. Keyed to the
+  // item actually in the <audio> element, which trails now_playing while a
+  // song is let finish.
+  useOverlayJingles(audioRef, loadedItem, !!(data && data.on_air));
 
   // Lock screen / notification: the song on air, play and pause. These act on
   // the element itself rather than toggling, so "play" still works after the
@@ -216,6 +221,7 @@ export function NowPlayingBar() {
     const previous = prevChannelSlug.current;
     prevChannelSlug.current = channelSlug;
     currentItemId.current = null;
+    heldBack.current = false;
     // A Vibe Shift while this player's channel is on the Chromecast moves the
     // Chromecast to the new channel too.
     if (castRef.current.connected && castRef.current.channelSlug === previous) void startCasting(channelSlug);
@@ -242,17 +248,30 @@ export function NowPlayingBar() {
 
   // Only touch the <audio> element when the on-air item actually changes -
   // a poll landing mid-song shouldn't restart playback - and never while a
-  // sweeper transition is mid-play.
+  // sweeper transition is mid-play, or while the last song is still finishing
+  // (see stillFinishing; its "ended" brings this back round).
   useEffect(() => {
     const item = data?.now_playing;
     const audio = audioRef.current;
     if (!item || !audio || switching) return;
-    if (currentItemId.current === item.id) return;
+    if (currentItemId.current === item.id) {
+      // Loaded elsewhere (useRadioCast, when a cast ends).
+      setLoadedItem((l: any) => (l?.id === item.id ? l : item));
+      return;
+    }
+    if (stillFinishing(audio, currentItemId.current !== null)) {
+      heldBack.current = true;
+      return;
+    }
     currentItemId.current = item.id;
+    const waited = heldBack.current;
+    heldBack.current = false;
 
     if (!item.audio_url) return;
+    setLoadedItem(item);
+    const position = data.position_seconds ?? 0;
     audio.src = mediaUrl(item.audio_url);
-    audio.currentTime = data.position_seconds ?? 0;
+    audio.currentTime = waited && position <= CATCH_UP_SECONDS ? 0 : position;
     if (playing) audio.play().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, switching]);

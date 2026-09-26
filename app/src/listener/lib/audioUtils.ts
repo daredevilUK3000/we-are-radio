@@ -25,6 +25,21 @@ export function formatClock(seconds: number): string {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
+// The station runs on the server's clock, but a listener's playback starts a
+// few seconds behind it (buffering, a stall, a pause), so when the clock moves
+// on to the next item the last seconds of their song are often still playing.
+// Rather than cut it off, the radio players let it finish: its "ended" event
+// then loads whatever is on air. Only while it's really sounding - a paused or
+// stalled element switches straight away, as before.
+export function stillFinishing(audio: HTMLAudioElement, hadItem: boolean): boolean {
+  return hadItem && !!audio.src && !audio.paused && !audio.ended && audio.readyState > 2;
+}
+
+// After letting a song finish, the next one starts from the top if the station
+// is only this far into it (no clipped intros); further behind than that, the
+// player rejoins the live point so listeners don't drift ever later.
+export const CATCH_UP_SECONDS = 15;
+
 // Several places on the site have their own <audio> element (the fixed
 // mini-player, a podcast or programme page, an album page). Without this,
 // starting one would leave the others playing underneath it. Whenever one

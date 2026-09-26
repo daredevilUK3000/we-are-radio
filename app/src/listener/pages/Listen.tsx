@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError, publicApi, mediaUrl } from "../../api/client";
-import { useExclusiveAudio, formatClock } from "../lib/audioUtils";
+import { useExclusiveAudio, formatClock, stillFinishing, CATCH_UP_SECONDS } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "../components/ShareButton";
@@ -50,13 +50,18 @@ export function Listen() {
   const blocks = useOfflineBlocks();
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentItemId = useRef<string | null>(null);
+  // The station moved on while the previous song was still finishing.
+  const heldBack = useRef(false);
+  const [loadedItem, setLoadedItem] = useState<any>(null);
 
   const { cast, castingHere } = useRadioCast({ audioRef, channelSlug, currentItemId, setData, setPlaying });
 
   // Starting a podcast/album elsewhere pauses this stream (and its button).
   useChannelLog(audioRef, data, playing);
   useExclusiveAudio("listen", audioRef, !!(data && data.on_air), () => setPlaying(false));
-  useOverlayJingles(audioRef, data?.now_playing, !!(data && data.on_air));
+  // Keyed to the item actually in the <audio> element (it trails now_playing
+  // while a song is let finish).
+  useOverlayJingles(audioRef, loadedItem, !!(data && data.on_air));
   useMediaSession(audioRef, radioSessionInfo(data), {
     live: true,
     onPlay: () => {
@@ -75,6 +80,7 @@ export function Listen() {
   useEffect(() => {
     setData(null);
     currentItemId.current = null;
+    heldBack.current = false;
     setPlaying(false);
     const poll = () =>
       publicApi
@@ -90,17 +96,31 @@ export function Listen() {
   }, [channelSlug]);
 
   // Only touch the <audio> element when the on-air item actually changes -
-  // a poll landing mid-song shouldn't restart playback.
+  // a poll landing mid-song shouldn't restart playback - nor while the last
+  // song is still finishing (see stillFinishing; its "ended" brings this back
+  // round).
   useEffect(() => {
     const item = data?.now_playing;
     const audio = audioRef.current;
     if (!item || !audio) return;
-    if (currentItemId.current === item.id) return;
+    if (currentItemId.current === item.id) {
+      // Loaded elsewhere (useRadioCast, when a cast ends).
+      setLoadedItem((l: any) => (l?.id === item.id ? l : item));
+      return;
+    }
+    if (stillFinishing(audio, currentItemId.current !== null)) {
+      heldBack.current = true;
+      return;
+    }
     currentItemId.current = item.id;
+    const waited = heldBack.current;
+    heldBack.current = false;
 
     if (!item.audio_url) return;
+    setLoadedItem(item);
+    const position = data.position_seconds ?? 0;
     audio.src = mediaUrl(item.audio_url);
-    audio.currentTime = data.position_seconds ?? 0;
+    audio.currentTime = waited && position <= CATCH_UP_SECONDS ? 0 : position;
     if (playing) audio.play().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
