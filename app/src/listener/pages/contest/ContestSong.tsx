@@ -154,6 +154,8 @@ export function ContestSong() {
         )}
         {" · "}
         <Link to="/top3/rules">Official rules</Link>
+        {" · "}
+        <Link to="/contact?topic=top3">Questions? Contact us</Link>
       </p>
 
       <audio

@@ -203,6 +203,8 @@ export function ContestHome() {
             <Link to="/top3/enter">Enter your song</Link>
           </>
         )}
+        {" · "}
+        <Link to="/contact?topic=top3">Questions? Contact us</Link>
       </p>
 
       <audio ref={audioRef} onEnded={() => setPlayingId(null)} onPause={() => setPlayingId(null)} style={{ display: "none" }} />

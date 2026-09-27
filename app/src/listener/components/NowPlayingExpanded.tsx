@@ -250,6 +250,11 @@ export function NowPlayingExpanded({
                 </Link>
               )}
             </div>
+
+            {/* onClose too: already on /contact, the address change alone wouldn't close this view. */}
+            <Link className="np-studio-link" to="/contact?topic=studio" onClick={onClose}>
+              Message the studio
+            </Link>
           </div>
         </div>
 

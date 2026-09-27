@@ -103,6 +103,15 @@ shareLinkRoutes.get("/my-mood", async (c) => {
   });
 });
 
+shareLinkRoutes.get("/contact", (c) =>
+  pageWithOg(c.env, c.req.raw, {
+    title: "Talk to the studio · We Are Radio",
+    description: "Requests, dedications, ideas and questions. The lines are open.",
+    image: defaultImage(c.req.raw),
+    url: `${new URL(c.req.raw.url).origin}/contact`,
+  })
+);
+
 // ---- Top 3 Creator Songs of 2026 ----
 //
 // One static contest image for every contest page (never the creator's own

@@ -1892,33 +1892,6 @@
 
 /* ================================================================= FOOTER */
 
-.t3p-footer {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px 24px;
-  padding: 28px var(--t3-side);
-  border-top: 1px solid var(--t3-line);
-  color: var(--t3-body-dim);
-  font-size: 14px;
-}
-
-.t3p-footer img {
-  height: 30px;
-  width: auto;
-}
-
-.t3p-footer nav {
-  margin-left: auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-}
-
-.t3p-footer a {
-  color: #d4d4d8;
-}
-
 /* ================================================================= KEYFRAMES */
 
 @keyframes t3pSheen {
@@ -2443,14 +2416,6 @@
 
   .t3p-preview-media {
     height: 160px;
-  }
-
-  .t3p-footer {
-    padding-bottom: 32px;
-  }
-
-  .t3p-footer nav {
-    margin-left: 0;
   }
 }
 

@@ -8,6 +8,8 @@ import { constantTimeEqual, emailHash, ipHash, randomToken, tokenHash, unsubscri
 import { verifyTurnstile } from "../lib/turnstile";
 import { sendEmail, templates } from "../lib/email";
 import { isCountryCode } from "../lib/countries";
+import { bump, dayWindow, hourWindow, overLimit, type Limit } from "../lib/rateLimit";
+import { sweepOldContactMessages } from "./contact";
 
 /**
  * Top 3 Creator Songs of 2026 - the public side of the entry phase (Phase A).
@@ -27,27 +29,6 @@ type Ctx = Context<{ Bindings: Env }>;
 const clientIp = (c: Ctx) => c.req.header("cf-connecting-ip") ?? "unknown";
 const fail = (c: Ctx, status: 400 | 403 | 404 | 409 | 413 | 429 | 503, error: string, message: string, field?: string) =>
   c.json({ error, message, ...(field ? { field } : {}) }, status);
-
-// -------------------------------------------------------------- rate limits
-
-// Counters in KV, one key per window (the Time Capsule pattern in public.ts).
-// Approximate by nature - KV is eventually consistent - which is fine for
-// throttling: the hard rules (entries per person) are enforced in D1.
-interface Limit {
-  key: string;
-  max: number;
-  ttl: number;
-}
-const hourWindow = () => new Date().toISOString().slice(0, 13);
-const dayWindow = () => new Date().toISOString().slice(0, 10);
-
-async function overLimit(env: Env, limits: Limit[]): Promise<{ over: boolean; counts: number[] }> {
-  const counts = await Promise.all(limits.map(async (l) => Number((await env.CONFIG.get(l.key)) ?? 0)));
-  return { over: counts.some((n, i) => n >= limits[i].max), counts };
-}
-async function bump(env: Env, limits: Limit[], counts: number[]) {
-  await Promise.all(limits.map((l, i) => env.CONFIG.put(l.key, String(counts[i] + 1), { expirationTtl: l.ttl })));
-}
 
 // ---------------------------------------------------------------- housekeeping
 
@@ -99,6 +80,8 @@ contestPublicRoutes.get("/state", async (c) => {
   }
 
   c.executionCtx.waitUntil(sweepUnconfirmed(c.env).catch((err) => console.error("contest sweep failed", err)));
+  // Contact messages ride on the same regular, site-wide request (the Top 3 bar asks for /state on every page).
+  c.executionCtx.waitUntil(sweepOldContactMessages(c.env).catch((err) => console.error("contact sweep failed", err)));
 
   // The Studio can try the whole entry flow before 1 October (see POST /entries).
   const studioPreview =

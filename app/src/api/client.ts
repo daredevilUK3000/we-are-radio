@@ -183,6 +183,24 @@ export const contestApi = {
     }),
 };
 
+// ---- Contact page (see worker/src/routes/contact.ts) ----
+
+export interface ContactMessage {
+  topic: string;
+  name: string;
+  email: string;
+  message: string;
+  fields: Record<string, string>;
+  on_air_ok: boolean;
+  page_ref: string | null;
+  turnstileToken: string;
+  company_url: string;
+}
+
+export const contactApi = {
+  send: (data: ContactMessage) => request<{ ok: true }>(`${API_BASE}/contact`, { method: "POST", body: JSON.stringify(data) }),
+};
+
 // ---- Likes (see worker/src/routes/likes.ts) - never any counts on this side ----
 
 export type LikeItemType = "track" | "contest_entry";

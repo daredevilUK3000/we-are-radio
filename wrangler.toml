@@ -33,6 +33,9 @@ R2_BUCKET_NAME = "kizzi-radio-media"
 EMAIL_FROM = "We Are Radio <top3@weareradio.app>"
 # Where replies to contest emails go.
 EMAIL_REPLY_TO = "info@weareradio.app"
+# The contact page (routes/contact.ts): where messages go, and who both emails come from.
+CONTACT_TO = "info@weareradio.app"
+CONTACT_FROM = "We Are Radio <info@weareradio.app>"
 
 # Secrets (set with `wrangler secret put <NAME>`, never committed):
 #   STUDIO_PASSWORD   - password for the single Studio admin account

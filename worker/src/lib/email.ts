@@ -18,10 +18,16 @@ export interface EmailMessage {
   subject: string;
   text: string;
   html: string;
+  /** Overrides EMAIL_FROM (the contact page sends from info@). */
+  from?: string;
+  /** Overrides EMAIL_REPLY_TO; null sends no Reply-To at all. */
+  replyTo?: string | null;
 }
 
 export async function sendEmail(env: Env, msg: EmailMessage): Promise<boolean> {
-  if (!env.EMAIL_API_KEY || !env.EMAIL_FROM) {
+  const from = msg.from ?? env.EMAIL_FROM;
+  const replyTo = msg.replyTo === undefined ? env.EMAIL_REPLY_TO : msg.replyTo;
+  if (!env.EMAIL_API_KEY || !from) {
     console.error("email not configured (EMAIL_API_KEY / EMAIL_FROM); not sent:", msg.subject);
     return false;
   }
@@ -30,12 +36,12 @@ export async function sendEmail(env: Env, msg: EmailMessage): Promise<boolean> {
       method: "POST",
       headers: { Authorization: `Bearer ${env.EMAIL_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: env.EMAIL_FROM,
+        from,
         to: [msg.to],
         subject: msg.subject,
         text: msg.text,
         html: msg.html,
-        ...(env.EMAIL_REPLY_TO ? { reply_to: env.EMAIL_REPLY_TO } : {}),
+        ...(replyTo ? { reply_to: replyTo } : {}),
       }),
     });
     if (!res.ok) {
@@ -53,14 +59,23 @@ export async function sendEmail(env: Env, msg: EmailMessage): Promise<boolean> {
 
 const SITE = "https://weareradio.app";
 const FOOTER = "We Are Radio · Top 3 Creator Songs of 2026 · weareradio.app/top3/rules";
+const CONTACT_FOOTER = "We Are Radio · Music, talk and real people · weareradio.app";
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-type Block = { p: string } | { button: { label: string; url: string } } | { quote: string } | { small: string };
+type Block =
+  | { p: string }
+  | { button: { label: string; url: string } }
+  | { quote: string }
+  | { small: string }
+  // Label/value pairs as a small table (the studio's copy of a contact message).
+  | { rows: [string, string][] }
+  // Someone's own words, line breaks kept.
+  | { message: string };
 
 // Every template is written once as a list of blocks and rendered to both
 // plain text and simple, inline-styled HTML, so the two never drift apart.
-function render(to: string, subject: string, blocks: Block[], extraFooter?: string): EmailMessage {
+function render(to: string, subject: string, blocks: Block[], extraFooter?: string, footer = FOOTER): EmailMessage {
   const text: string[] = [];
   const html: string[] = [];
   for (const b of blocks) {
@@ -79,12 +94,31 @@ function render(to: string, subject: string, blocks: Block[], extraFooter?: stri
       html.push(
         `<p style="margin:0 0 16px;padding:12px 14px;background:#f4f4f4;border-left:3px solid #e11d2e;line-height:1.5">${esc(b.quote)}</p>`
       );
+    } else if ("rows" in b) {
+      text.push(b.rows.map(([k, v]) => `${k}: ${v}`).join("\n"));
+      html.push(
+        `<table style="margin:0 0 16px;border-collapse:collapse;font-size:14px">` +
+          b.rows
+            .map(
+              ([k, v]) =>
+                `<tr><td style="padding:4px 14px 4px 0;color:#666;vertical-align:top;white-space:nowrap">${esc(k)}</td>` +
+                `<td style="padding:4px 0;vertical-align:top">${esc(v)}</td></tr>`
+            )
+            .join("") +
+          `</table>`
+      );
+    } else if ("message" in b) {
+      text.push(b.message);
+      html.push(
+        `<div style="margin:0 0 16px;padding:12px 14px;background:#f4f4f4;border-left:3px solid #e11d2e;line-height:1.5">` +
+          `${esc(b.message).replace(/\r?\n/g, "<br>")}</div>`
+      );
     } else {
       text.push(b.small);
       html.push(`<p style="margin:0 0 16px;font-size:13px;color:#666;line-height:1.5">${esc(b.small)}</p>`);
     }
   }
-  const footerLines = [FOOTER, ...(extraFooter ? [extraFooter] : [])];
+  const footerLines = [footer, ...(extraFooter ? [extraFooter] : [])];
   return {
     to,
     subject,
@@ -149,5 +183,70 @@ export const templates = {
         { small: "If this wasn't you, ignore this email and you won't hear from us." },
       ],
       `Unsubscribe: ${e.unsubscribeUrl}`
+    ),
+};
+
+// ------------------------------------------------------------ contact page
+
+export interface ContactNotice {
+  id: string;
+  short: string;
+  topicTitle: string;
+  name: string;
+  email: string;
+  /** The topic's extra fields, already labelled, in form order. */
+  details: [string, string][];
+  message: string;
+  onAirOk: boolean;
+  pageRef: string | null;
+  device: string | null;
+}
+
+export const contactTemplates = {
+  /** The studio's copy. Sent with Reply-To set to the sender, so a reply goes straight to them. */
+  toStudio: (to: string, m: ContactNotice) => {
+    const preview = m.message.replace(/\s+/g, " ").trim().slice(0, 60);
+    return render(
+      to,
+      `[${m.short}] ${m.name}: ${preview}`,
+      [
+        { rows: [["Topic", m.topicTitle], ["Name", m.name], ["Email", m.email], ...m.details] },
+        { message: m.message },
+        {
+          rows: [
+            ["OK to read on air", m.onAirOk ? "Yes" : "No"],
+            ...(m.pageRef ? ([["Came from", m.pageRef]] as [string, string][]) : []),
+            ...(m.device ? ([["Browser (technical)", m.device]] as [string, string][]) : []),
+            ["Message ID", m.id],
+          ],
+        },
+        { small: "Press Reply to answer: it goes straight to the sender." },
+      ],
+      undefined,
+      CONTACT_FOOTER
+    );
+  },
+
+  /**
+   * The sender's confirmation. Deliberately contains nothing they typed
+   * except a first name that passed firstNameForEmail() - otherwise anyone
+   * could use the form to put their own words in a stranger's inbox, sent
+   * from our domain.
+   */
+  toSender: (to: string, e: { firstName: string | null; topicTitle: string; replyDays: number }) =>
+    render(
+      to,
+      "We've got your message: We Are Radio",
+      [
+        {
+          p:
+            `${e.firstName ? `Thanks, ${e.firstName}.` : "Thank you."} Your message about ${e.topicTitle} is on the studio desk. ` +
+            `If you asked a question, we'll reply from info@weareradio.app within ${e.replyDays} working days.`,
+        },
+        { button: { label: "Listen live", url: `${SITE}/` } },
+        { small: "If you didn't send a message to We Are Radio, you can ignore this email." },
+      ],
+      undefined,
+      CONTACT_FOOTER
     ),
 };

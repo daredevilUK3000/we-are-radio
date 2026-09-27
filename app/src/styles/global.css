@@ -1146,6 +1146,18 @@ td {
   color: var(--text-dim);
 }
 
+/* "Message the studio" under the chips: a quiet text link to /contact. */
+.np-studio-link {
+  align-self: flex-start;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  text-underline-offset: 3px;
+}
+
+.np-studio-link:hover {
+  color: var(--text);
+}
+
 .np-secondary {
   display: flex;
   flex-wrap: wrap;
@@ -5477,4 +5489,75 @@ main.studio-wide {
 .lp-offline-play {
   font-size: 1.05rem;
   padding: 12px 22px;
+}
+
+/* ---- Site footer (SiteFooter.tsx), at the end of every listener page's <main>.
+   Full-bleed like the Top 3 and contact pages. <main>'s own 110px bottom
+   padding already clears the fixed mini-player, so none is added here. ---- */
+.site-footer {
+  width: 100vw;
+  margin: 72px calc(50% - 50vw) 0;
+  border-top: 1px solid var(--border);
+}
+
+.site-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  max-width: 1248px;
+  margin: 0 auto;
+  padding: 28px 20px 0;
+}
+
+.site-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.site-footer-brand img {
+  height: 28px;
+  width: auto;
+  opacity: 0.85;
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 26px;
+}
+
+.site-footer nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #d4d4d8;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.site-footer nav a:hover {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 767px) {
+  .site-footer {
+    margin-top: 56px;
+  }
+
+  .site-footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px 16px 0;
+  }
+
+  .site-footer nav {
+    gap: 0 22px;
+  }
 }

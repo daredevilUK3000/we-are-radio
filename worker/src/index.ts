@@ -26,6 +26,7 @@ import { shareLinkRoutes } from "./routes/shareLinks";
 import { contestPublicRoutes } from "./routes/contest";
 import { contestStudioRoutes } from "./routes/contestStudio";
 import { likePublicRoutes, likeStudioRoutes } from "./routes/likes";
+import { contactRoutes } from "./routes/contact";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -56,6 +57,8 @@ app.route("/api/analytics", analyticsPublicRoutes);
 // entry and like into a 401.
 app.route("/api/contest", contestPublicRoutes);
 app.route("/api/likes", likePublicRoutes);
+// The contact page (/contact) - public for the same reason.
+app.route("/api/contact", contactRoutes);
 
 // Listener auth (login/logout/session are unauthenticated by nature).
 app.route("/api/auth", listenerAuthRoutes);

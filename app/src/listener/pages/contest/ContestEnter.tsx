@@ -1,5 +1,4 @@
 import { useCallback, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { useContestState } from "../../components/contest/common";
 import { Top3Hero } from "../../components/contest/enter/Top3Hero";
 import { CountryMarquee } from "../../components/contest/enter/CountryMarquee";
@@ -84,15 +83,6 @@ export function ContestEnter() {
         <EntryWizard state={state} station={station} />
       </section>
 
-      <footer className="t3p-footer">
-        <img src="/weareradio-logo.webp" alt="We Are Radio" width={68} height={30} />
-        <span>Top 3 Creator Songs of 2026</span>
-        <nav aria-label="Competition links">
-          <Link to="/top3/rules">Official rules</Link>
-          <Link to="/top3/rules#privacy">Privacy</Link>
-          <a href="mailto:info@weareradio.app">info@weareradio.app</a>
-        </nav>
-      </footer>
     </div>
   );
 }

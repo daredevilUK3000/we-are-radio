@@ -77,6 +77,8 @@ export function ContestRules() {
       )}
       <p className="t3-footer-links">
         <Link to="/top3">Back to the Top 3</Link>
+        {" · "}
+        <Link to="/contact?topic=top3">Questions? Contact us</Link>
       </p>
     </div>
   );

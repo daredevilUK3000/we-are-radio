@@ -22,6 +22,12 @@ export type Env = {
   EMAIL_FROM: string;
   /** Optional: where replies to contest emails go. */
   EMAIL_REPLY_TO?: string;
+
+  // Contact page (routes/contact.ts). Both default to info@weareradio.app.
+  /** Where messages from /contact are emailed. */
+  CONTACT_TO?: string;
+  /** Sender for both contact emails, e.g. "We Are Radio <info@weareradio.app>". */
+  CONTACT_FROM?: string;
 };
 
 export type ContentStatus = "draft" | "processing" | "ready" | "published" | "archived";

@@ -20,6 +20,11 @@ import { ContestEnter } from "./listener/pages/contest/ContestEnter";
 import { ContestRules } from "./listener/pages/contest/ContestRules";
 import { ContestSong } from "./listener/pages/contest/ContestSong";
 import { ContestConfirm, ContestNotifyConfirm, ContestUnsubscribe } from "./listener/pages/contest/ContestConfirm";
+import { Contact } from "./listener/pages/contact/Contact";
+import { Legal } from "./listener/pages/legal/Legal";
+import { Privacy } from "./listener/pages/legal/Privacy";
+import { SiteFooter } from "./listener/components/SiteFooter";
+import { rememberPage } from "./shared/navHistory";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
 import { Top3AnnouncementBar } from "./listener/components/contest/Top3AnnouncementBar";
 import { IconTrophy } from "./listener/components/contest/enter/icons";
@@ -58,6 +63,11 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
     trackVisit();
   }, []);
   const online = useOnline();
+  // Remembered for the contact page's "Which page?" pre-fill.
+  const { pathname, search } = useLocation();
+  useEffect(() => {
+    rememberPage(`${pathname}${search}`);
+  }, [pathname, search]);
 
   return (
     <div className="app-shell listener-shell">
@@ -95,7 +105,10 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
           You're offline. <Link to="/offline">Downloaded radio</Link> still plays.
         </div>
       )}
-      <main>{children}</main>
+      <main>
+        {children}
+        <SiteFooter />
+      </main>
       <NowPlayingBar />
     </div>
   );
@@ -217,6 +230,9 @@ export default function App() {
                     <Route path="top3/notify/confirm" element={<ContestNotifyConfirm />} />
                     <Route path="top3/unsubscribe" element={<ContestUnsubscribe />} />
                     <Route path="top3/:id" element={<ContestSong />} />
+                    <Route path="contact" element={<Contact />} />
+                    <Route path="legal" element={<Legal />} />
+                    <Route path="privacy" element={<Privacy />} />
                   </Routes>
                 </ListenerLayout>
               </ActiveChannelProvider>
