@@ -4,6 +4,10 @@ main = "worker/src/index.ts"
 compatibility_date = "2024-09-01"
 compatibility_flags = ["nodejs_compat"]
 
+# The Scheduler runs every minute (worker/src/lib/scheduler/cron.ts).
+[triggers]
+crons = ["* * * * *"]
+
 [[routes]]
 pattern = "weareradio.app"
 custom_domain = true

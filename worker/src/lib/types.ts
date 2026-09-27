@@ -28,6 +28,9 @@ export type Env = {
   CONTACT_TO?: string;
   /** Sender for both contact emails, e.g. "We Are Radio <info@weareradio.app>". */
   CONTACT_FROM?: string;
+
+  /** "1" only on a local `wrangler dev` (--var SCHED_DEV:1): exposes the Scheduler's test hooks. Never set in wrangler.toml. */
+  SCHED_DEV?: string;
 };
 
 export type ContentStatus = "draft" | "processing" | "ready" | "published" | "archived";

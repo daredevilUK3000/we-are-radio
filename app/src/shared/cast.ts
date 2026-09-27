@@ -198,11 +198,15 @@ function toQueueItem(item: any, channel: any, startTime = 0) {
   meta.albumName = (isSong && item.album_title) || station;
   meta.images = [new chrome.cast.Image(absolute(item.artwork_url ? mediaUrl(item.artwork_url) : "/icons/icon-512.png"))];
   info.metadata = meta;
-  info.customData = { channel: channel?.slug, starts_at: item.starts_at, ends_at: item.starts_at + item.duration_seconds };
+  info.customData = { channel: channel?.slug, id: item.id, starts_at: item.starts_at, ends_at: item.starts_at + item.duration_seconds };
   const queueItem = new chrome.cast.media.QueueItem(info);
   queueItem.autoplay = true;
   queueItem.preloadTime = 10;
   queueItem.startTime = startTime;
+  // The Scheduler sometimes ends an airing before its file does (to start the next hour on time).
+  if (item.file_duration_seconds && item.duration_seconds < item.file_duration_seconds) {
+    queueItem.playbackDuration = Math.max(1, item.duration_seconds - startTime);
+  }
   return queueItem;
 }
 
@@ -243,6 +247,32 @@ async function loadChannel(slug: string): Promise<boolean> {
       () => resolve(false)
     );
   });
+}
+
+/**
+ * The Scheduler published a new version of the log (a Skip, a Play now...):
+ * if what's queued on the device no longer matches what's on air, reload the
+ * channel so the TV follows. Extensions don't change what's queued, so they
+ * don't disturb it.
+ */
+export async function syncCastQueue(slug: string): Promise<void> {
+  if (state.channelSlug !== slug || !session()) return;
+  const media = session()?.getMediaSession();
+  const queued: any[] = media?.items ?? [];
+  const nowSec = Date.now() / 1000;
+  const queuedIds = queued
+    .map((q) => q.media?.customData)
+    .filter((d) => d && d.ends_at > nowSec + 5)
+    .map((d) => d.id);
+  if (queuedIds.length === 0) return;
+  try {
+    const schedule = await publicApi.schedule(slug, QUEUE_MINUTES);
+    const onAir = schedule.items.filter((i: any) => i.audio_url && i.starts_at + i.duration_seconds > nowSec + 5).map((i: any) => i.id);
+    const n = Math.min(queuedIds.length, onAir.length, 6);
+    if (queuedIds.slice(0, n).join("|") !== onAir.slice(0, n).join("|")) await loadChannel(slug);
+  } catch {
+    // Offline or channel gone: leave the queue alone.
+  }
 }
 
 // When the device gets within 20 minutes of the end of its queue, append the

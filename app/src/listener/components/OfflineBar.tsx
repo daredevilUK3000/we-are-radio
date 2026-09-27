@@ -39,6 +39,15 @@ function loadPosition(block: OfflineBlock): { index: number; time: number } {
  * answering the audio element's range requests). Remembers where it was, so
  * pausing, closing the app and coming back carries on from the same spot.
  */
+/** "Tue 14:30" in the listener's local time. */
+function savedLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = d.toLocaleDateString("en-GB", { weekday: "short" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${day} ${time}`;
+}
+
 export function OfflineBar({
   block,
   online,
@@ -224,7 +233,8 @@ export function OfflineBar({
         {art ? <img className="mp-art" src={art} alt="" /> : <img className="mp-art" src="/icons/icon-192.png" alt="" />}
         <span className="mp-text">
           <span className="mp-onair offline-badge">
-            <span className="offline-dot" /> {online ? "Downloads" : "Offline"}
+            {/* A snapshot, never "on air": when it was saved, in the listener's own time. */}
+            <span className="offline-dot" /> Offline · saved {savedLabel(block.downloadedAt)}
             <span className="mp-station">{station}</span>
           </span>
           <span className="mp-title">{cleared ? "Downloads were cleared" : (item?.label ?? station)}</span>

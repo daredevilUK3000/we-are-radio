@@ -69,6 +69,9 @@ export const publicApi = {
   featuredAlbum: () => request<{ album: any | null; tracks: any[] }>(`${API_BASE}/featured-album`),
   nowPlaying: (channel = "kizzi-radio") =>
     request<any>(`${API_BASE}/now-playing?channel=${encodeURIComponent(channel)}`),
+  /** The Scheduler's live log version (0 for channels still on the old playback). Cheap enough to poll every 10 s. */
+  nowPlayingVersion: (channel: string) =>
+    request<{ version: number; fallback: boolean }>(`${API_BASE}/now-playing/version?channel=${encodeURIComponent(channel)}`),
   /** The channel's running order from now on, each item with its on-air start (unix seconds). */
   schedule: (channel: string, minutes = 60) =>
     request<{ on_air: boolean; position_seconds?: number; channel: any; items: any[] }>(

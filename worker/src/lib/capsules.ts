@@ -118,6 +118,14 @@ export async function loadTodaysCapsules(db: D1Database): Promise<CapsuleClip[]>
     );
   }
 
+  return loadCapsulesFor(db, today);
+}
+
+/**
+ * The capsules due on a given station date (YYYY-MM-DD), with no side
+ * effects: the Scheduler asks about tomorrow as well as today.
+ */
+export async function loadCapsulesFor(db: D1Database, date: string): Promise<CapsuleClip[]> {
   const { results } = await db
     .prepare(
       `SELECT tc.id, tc.occasion_label, aa.id AS audio_asset_id, aa.audio_url, aa.duration_seconds
@@ -126,7 +134,7 @@ export async function loadTodaysCapsules(db: D1Database): Promise<CapsuleClip[]>
        WHERE tc.status = 'scheduled' AND tc.scheduled_date = ? AND aa.status = 'published'
        ORDER BY tc.created_at ASC`
     )
-    .bind(today)
+    .bind(date)
     .all<{ id: string; occasion_label: string; audio_asset_id: string; audio_url: string; duration_seconds: number }>();
 
   return results.map((r) => ({

@@ -27,6 +27,9 @@ import { contestPublicRoutes } from "./routes/contest";
 import { contestStudioRoutes } from "./routes/contestStudio";
 import { likePublicRoutes, likeStudioRoutes } from "./routes/likes";
 import { contactRoutes } from "./routes/contact";
+import { schedulerDevRoutes } from "./routes/schedulerDev";
+import { runMinute } from "./lib/scheduler/cron";
+import { schedulerRoutes } from "./routes/scheduler";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -59,6 +62,8 @@ app.route("/api/contest", contestPublicRoutes);
 app.route("/api/likes", likePublicRoutes);
 // The contact page (/contact) - public for the same reason.
 app.route("/api/contact", contactRoutes);
+// Local-only Scheduler test hooks (404 unless SCHED_DEV = "1").
+app.route("/dev/scheduler", schedulerDevRoutes);
 
 // Listener auth (login/logout/session are unauthenticated by nature).
 app.route("/api/auth", listenerAuthRoutes);
@@ -93,6 +98,7 @@ studio.route("/time-capsules", timeCapsuleRoutes);
 studio.route("/analytics", analyticsStudioRoutes);
 studio.route("/contest", contestStudioRoutes);
 studio.route("/likes", likeStudioRoutes);
+studio.route("/scheduler", schedulerRoutes);
 app.route("/studio/api", studio);
 
 // Streams audio straight out of R2 - not gated on Studio auth, since
@@ -130,4 +136,10 @@ app.get("*", (c) => {
   return c.env.ASSETS.fetch(new Request(url, { method: "GET" }));
 });
 
-export default app;
+// The Scheduler's minute (wrangler.toml [triggers]): keeps every channel's
+// log generated, extended and checked. See lib/scheduler/cron.ts.
+async function scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+  ctx.waitUntil(runMinute(env).then(() => undefined));
+}
+
+export default { fetch: app.fetch, scheduled };

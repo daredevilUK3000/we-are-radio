@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { ApiError, publicApi, mediaUrl } from "../../api/client";
+import { publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { CATCH_UP_SECONDS, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
@@ -14,6 +14,7 @@ import { CastButtons } from "./CastButtons";
 import { OfflineBar } from "./OfflineBar";
 import { DownloadButton } from "./DownloadButton";
 import { useOfflineBlocks, useOnline } from "../../shared/offline";
+import { useStationLog } from "../lib/useStationLog";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -170,31 +171,11 @@ export function NowPlayingBar() {
     return () => window.removeEventListener("war:player-state-request", announce);
   }, [data, playing, castingHere, cast.paused]);
 
-  // Poll now-playing for whichever channel is currently active (time-of-day
-  // default, or a Vibe Shift override).
-  useEffect(() => {
-    let cancelled = false;
-    const poll = () => {
-      publicApi
-        .nowPlaying(channelSlug)
-        .then((d) => {
-          if (cancelled) return;
-          setData(d);
-          setUnreachable(false);
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          setData(null);
-          setUnreachable(!(err instanceof ApiError));
-        });
-    };
-    poll();
-    const id = setInterval(poll, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [channelSlug]);
+  // Now-playing for whichever channel is currently active (time-of-day
+  // default, or a Vibe Shift override): polled every 30 s, plus the log's
+  // version every 10 s while playing, a 2-hour buffer and scheduled fades
+  // (see useStationLog).
+  const { refresh } = useStationLog({ channelSlug, pollMs: 30_000, playing, audioRef, loadedItem, setData, setUnreachable });
 
   // Refresh right as the current item is due to finish, so titles, artwork and
   // the queue change with the broadcast rather than up to 30 s afterwards.
@@ -202,14 +183,9 @@ export function NowPlayingBar() {
     const item = data?.now_playing;
     if (!item?.duration_seconds) return;
     const remaining = item.duration_seconds - (data.position_seconds ?? 0);
-    const id = setTimeout(() => {
-      publicApi
-        .nowPlaying(channelSlug)
-        .then(setData)
-        .catch(() => {});
-    }, Math.max(1500, remaining * 1000 + 500));
+    const id = setTimeout(() => void refresh(), Math.max(1500, remaining * 1000 + 500));
     return () => clearTimeout(id);
-  }, [data, channelSlug]);
+  }, [data, channelSlug, refresh]);
 
   // Phase 3: when the active channel changes - a time-band boundary
   // passing, or a Vibe Shift pick - sweep between them with a jingle if
@@ -420,7 +396,7 @@ export function NowPlayingBar() {
         </button>
         <audio
           ref={audioRef}
-          onEnded={() => publicApi.nowPlaying(channelSlug).then(setData).catch(() => {})}
+          onEnded={() => void refresh()}
         />
       </div>
 

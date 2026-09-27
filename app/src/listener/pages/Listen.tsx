@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ApiError, publicApi, mediaUrl } from "../../api/client";
+import { mediaUrl } from "../../api/client";
 import { useExclusiveAudio, formatClock, stillFinishing, CATCH_UP_SECONDS } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { useChannelLog } from "../../shared/analytics";
@@ -13,6 +13,7 @@ import { toggleCastPlayback } from "../../shared/cast";
 import { useRadioCast } from "../lib/useRadioCast";
 import { CastButtons } from "../components/CastButtons";
 import { playDownloads, useOfflineBlocks, useOnline } from "../../shared/offline";
+import { useStationLog } from "../lib/useStationLog";
 
 const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark"]);
 
@@ -82,18 +83,9 @@ export function Listen() {
     currentItemId.current = null;
     heldBack.current = false;
     setPlaying(false);
-    const poll = () =>
-      publicApi
-        .nowPlaying(channelSlug)
-        .then((d) => {
-          setData(d);
-          setUnreachable(false);
-        })
-        .catch((err) => setUnreachable(!(err instanceof ApiError)));
-    poll();
-    const id = setInterval(poll, 15_000);
-    return () => clearInterval(id);
   }, [channelSlug]);
+  // Polled every 15 s, plus the log's version every 10 s while playing, a 2-hour buffer and scheduled fades.
+  const { refresh } = useStationLog({ channelSlug, pollMs: 15_000, playing, audioRef, loadedItem, setData, setUnreachable });
 
   // Only touch the <audio> element when the on-air item actually changes -
   // a poll landing mid-song shouldn't restart playback - nor while the last
@@ -287,7 +279,7 @@ export function Listen() {
         <Link to={`/offline?channel=${channelSlug}`}>Going somewhere without signal? Download {data.channel.name} for offline listening</Link>
       </p>
 
-      <audio ref={audioRef} onEnded={() => publicApi.nowPlaying(channelSlug).then(setData).catch(() => {})} />
+      <audio ref={audioRef} onEnded={() => void refresh()} />
     </div>
   );
 }

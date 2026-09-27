@@ -56,6 +56,8 @@ import { AlbumDetail as StudioAlbumDetail } from "./studio/pages/AlbumDetail";
 import { PublishWizard } from "./studio/pages/PublishWizard";
 import { Contest } from "./studio/pages/Contest";
 import { Likes } from "./studio/pages/Likes";
+import { MasterControl } from "./studio/scheduler/MasterControl";
+import { WeeklyGrid } from "./studio/scheduler/WeeklyGrid";
 
 function ListenerLayout({ children }: { children: React.ReactNode }) {
   // One "visit" per browser tab session, with where it came from (a YouTube link, a newsletter...).
@@ -118,7 +120,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
   const { logout } = useStudioAuth();
   // Analytics and the Top 3 review queue are sections of their own and use the whole width of the screen.
   const path = useLocation().pathname;
-  const wide = path.startsWith("/studio/analytics") || path.startsWith("/studio/contest");
+  const wide = path.startsWith("/studio/analytics") || path.startsWith("/studio/contest") || path.startsWith("/studio/scheduler");
   return (
     <div className="app-shell">
       <header className="top-nav">
@@ -127,6 +129,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/studio" end>
             Dashboard
           </NavLink>
+          <NavLink to="/studio/scheduler">Scheduler</NavLink>
           <NavLink to="/studio/contest">Top 3</NavLink>
           <NavLink to="/studio/analytics">Analytics</NavLink>
           <NavLink to="/studio/likes">Likes</NavLink>
@@ -164,6 +167,8 @@ function StudioApp() {
     <StudioLayout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="scheduler" element={<MasterControl />} />
+        <Route path="scheduler/grid" element={<WeeklyGrid />} />
         <Route path="contest" element={<Contest />} />
         <Route path="likes" element={<Likes />} />
         <Route path="analytics" element={<Analytics />} />

@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import type { Env, Programme, Channel, Track, AudioAsset } from "../lib/types";
 import { findNeed, NEEDS, NEED_KEYS } from "../lib/needs";
-import { addDays, loadTodaysCapsules, parseCapsuleFields, stationToday, withCapsules } from "../lib/capsules";
+import { addDays, parseCapsuleFields, stationToday } from "../lib/capsules";
+import { enrichItems, loadPinnedJingles, loadStation } from "../lib/station";
+import { nowPlayingFromLog, scheduleFromLog, schedState } from "../lib/scheduler/read";
 import { newId, nowIso } from "../lib/id";
 import {
   buildRotation,
@@ -226,25 +228,37 @@ publicRoutes.get("/programmes/:id", async (c) => {
   });
 });
 
-interface ItemRow {
-  id: string;
-  position: number;
-  item_type: string;
-  track_id: string | null;
-  audio_asset_id: string | null;
-  label: string | null;
-  track_title: string | null;
-  track_duration_seconds: number | null;
-  track_audio_url: string | null;
-  track_artwork_url: string | null;
-  audio_asset_title: string | null;
-  audio_asset_duration_seconds: number | null;
-  audio_asset_audio_url: string | null;
-}
+/**
+ * The live log version for a channel the Scheduler drives, so players can
+ * poll cheaply (every 10 s) and refetch now-playing the moment it changes.
+ * One indexed D1 read; not KV, which can take a minute to propagate.
+ * Channels still on the old path report version 0.
+ */
+publicRoutes.get("/now-playing/version", async (c) => {
+  c.header("Cache-Control", "no-store");
+  const slug = c.req.query("channel") ?? "kizzi-radio";
+  const row = await c.env.DB.prepare(
+    `SELECT sc.enabled, sc.on_fallback_since_ms,
+            (SELECT COALESCE(MAX(v.number), 0) FROM sched_versions v WHERE v.channel_id = ch.id AND v.status = 'published') AS live
+     FROM channels ch LEFT JOIN sched_channels sc ON sc.channel_id = ch.id
+     WHERE ch.slug = ? AND ch.status = 'live'`
+  )
+    .bind(slug)
+    .first<{ enabled: number | null; on_fallback_since_ms: number | null; live: number }>();
+  if (!row) return c.json({ error: "channel not found or not live" }, 404);
+  return c.json({ version: row.enabled ? row.live : 0, fallback: !!(row.enabled && row.on_fallback_since_ms) });
+});
 
 publicRoutes.get("/now-playing", async (c) => {
   const channel = await liveChannel(c.env.DB, c.req.query("channel") ?? "kizzi-radio");
   if (!channel) return c.json({ error: "channel not found or not live" }, 404);
+
+  // Scheduler on air for this channel: the log (or its emergency playlist).
+  const sched = await schedState(c.env.DB, channel.id).catch(() => null);
+  if (sched?.enabled) {
+    const body = await nowPlayingFromLog(c.env, channel, sched, Date.now(), (p) => c.executionCtx.waitUntil(p));
+    if (body) return c.json(body);
+  }
 
   const station = await loadStation(c.env.DB, c.env.CONFIG, channel);
   if (!station.items) {
@@ -274,6 +288,11 @@ publicRoutes.get("/schedule", async (c) => {
   if (!channel) return c.json({ error: "channel not found or not live" }, 404);
 
   const minutes = Math.min(180, Math.max(1, Number(c.req.query("minutes")) || 60));
+  const sched = await schedState(c.env.DB, channel.id).catch(() => null);
+  if (sched?.enabled) {
+    const body = await scheduleFromLog(c.env, channel, sched, Date.now(), minutes);
+    if (body) return c.json(body);
+  }
   const station = await loadStation(c.env.DB, c.env.CONFIG, channel);
   if (!station.items) return c.json({ channel, on_air: false, items: [] });
 
@@ -310,156 +329,6 @@ async function liveChannel(db: D1Database, slug: string) {
   return db.prepare("SELECT * FROM channels WHERE slug = ? AND status = 'live'").bind(slug).first<Channel>();
 }
 
-type Station =
-  | { items: RotationItem[]; elapsed: number; programme: Programme | { id: null; title: string; description: string | null } }
-  | { items: null; programme?: Programme };
-
-/**
- * Section 20: the station doesn't need a real 24/7 audio stream. Instead we
- * pick the current on-air content for a live channel and deterministically
- * compute *where in it* a listener joining right now would be, looping it
- * once it finishes. That's enough to make "Listen Now" feel live.
- *
- * 'manual' channels (Kizzi Radio) work exactly as before: the most recent
- * published programme, hand-built or AI-assisted-then-approved, looped
- * against its publish date.
- *
- * 'autopilot' channels (handoff_radio_brain_roadmap.md, Phase 1 - We Are
- * 50s and friends) have no programme at all. The Radio Brain
- * (lib/radioBrain.ts) builds a rotation from every published track
- * matching the channel's catalogue_rules (or, if it has none, the whole
- * catalogue - useful for a flagship channel running autopilot with no
- * programme ready yet), plus any published station IDs/jingles. That
- * rotation is cached in KV, keyed on the channel and exactly which
- * tracks/assets currently qualify - so it's stable between requests but
- * regenerates itself the moment Kizzi tags a new track into the pool,
- * without a cron job or a "last generated" timestamp to manage.
- *
- * Returns the loop and how many seconds into it the broadcast is right now.
- */
-async function loadStation(db: D1Database, kv: KVNamespace, channel: Channel): Promise<Station> {
-  if (channel.programming_mode === "autopilot") return loadAutopilot(db, kv, channel);
-
-  const programme = await db
-    .prepare(
-      `SELECT * FROM programmes
-       WHERE channel_id = ? AND status = 'published'
-       ORDER BY is_flagship DESC, publish_date DESC
-       LIMIT 1`
-    )
-    .bind(channel.id)
-    .first<Programme>();
-
-  if (!programme || !programme.duration_seconds) return { items: null };
-
-  const { results: rows } = await db
-    .prepare(
-      `SELECT pi.*, t.title as track_title, t.duration_seconds as track_duration_seconds, t.audio_url as track_audio_url, t.artwork_url as track_artwork_url,
-              aa.title as audio_asset_title, aa.duration_seconds as audio_asset_duration_seconds, aa.audio_url as audio_asset_audio_url
-       FROM programme_items pi
-       LEFT JOIN tracks t ON t.id = pi.track_id
-       LEFT JOIN audio_assets aa ON aa.id = pi.audio_asset_id
-       WHERE pi.programme_id = ?
-       ORDER BY pi.position ASC`
-    )
-    .bind(programme.id)
-    .all<ItemRow>();
-
-  if (rows.length === 0) return { items: null, programme };
-
-  const baseItems: RotationItem[] = rows.map((row) => ({
-    id: row.id,
-    item_type: row.item_type,
-    label: row.label ?? row.track_title ?? row.audio_asset_title,
-    track_id: row.track_id,
-    audio_asset_id: row.audio_asset_id,
-    duration_seconds: row.track_duration_seconds ?? row.audio_asset_duration_seconds ?? 0,
-    audio_url: row.track_audio_url ?? row.audio_asset_audio_url,
-    artwork_url: row.track_artwork_url,
-  }));
-  // Pinned jingles play over their song here too, not just on autopilot channels.
-  // Time capsules due today are dropped into the loop like station IDs.
-  const items = withCapsules(
-    withPinnedJingles(baseItems, await loadPinnedJingles(db)),
-    await loadTodaysCapsules(db)
-  );
-  const loopSeconds = items.reduce((sum, i) => sum + i.duration_seconds, 0) || programme.duration_seconds;
-  const publishedAt = programme.publish_date ? new Date(programme.publish_date).getTime() : Date.now();
-  const elapsed = Math.floor(((Date.now() - publishedAt) / 1000) % loopSeconds);
-  return { items, elapsed, programme };
-}
-
-async function loadAutopilot(db: D1Database, kv: KVNamespace, channel: Channel): Promise<Station> {
-  const rules = channel.catalogue_rules ? JSON.parse(channel.catalogue_rules) : null;
-  const tagsAny: string[] = rules?.tags_any ?? [];
-
-  const tracks =
-    tagsAny.length > 0
-      ? (
-          await db
-            .prepare(
-              `SELECT DISTINCT t.* FROM tracks t
-               JOIN track_tags tt ON tt.track_id = t.id
-               JOIN tags tg ON tg.id = tt.tag_id
-               WHERE t.status = 'published' AND tg.name IN (${tagsAny.map(() => "?").join(",")})
-               ORDER BY t.id ASC`
-            )
-            .bind(...tagsAny)
-            .all<Track>()
-        ).results
-      : (await db.prepare("SELECT * FROM tracks WHERE status = 'published' ORDER BY id ASC").all<Track>()).results;
-
-  const { results: stationIds } = await db
-    .prepare("SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle','promo')")
-    .all<AudioAsset>();
-
-  if (tracks.length === 0) return { items: null };
-
-  // The cache/seed key is fingerprinted on exactly which tracks and station
-  // IDs currently qualify, not a timestamp - so the rotation is stable
-  // between requests but regenerates itself the instant the pool changes.
-  const fingerprint = [
-    tracks.map((t) => t.id).sort().join(","),
-    stationIds.map((a) => a.id).sort().join(","),
-  ].join("|");
-  const seedKey = `${channel.id}:${fingerprint}`;
-  // KV keys are capped at 512 bytes - the raw fingerprint alone blows past
-  // that once there are more than a handful of tracks/assets, so the cache
-  // key is a hash of it instead. The PRNG seed (seedKey) can stay the full
-  // string - that's just in-memory, no length limit there.
-  //
-  // How each jingle is played (sequenced vs ducked over a song) changes the
-  // rotation's contents but must NOT change its shuffle order - a listener
-  // mid-song shouldn't be teleported because Kizzi tuned a jingle - so it
-  // goes in the cache key only, not in the seed.
-  const playbackConfig = stationIds
-    .map((a) => `${a.id}:${a.play_mode}:${a.duck_level}:${a.duck_fade_ms}`)
-    .sort()
-    .join(",");
-  // Pinned jingles change the rotation's contents the same way, so they're part of the key too.
-  const pins = await loadPinnedJingles(db);
-  const pinsConfig = pins
-    .map((p) => `${p.track_id}>${p.asset_id}@${p.start_offset_seconds}:${p.duck_level}:${p.duck_fade_ms}`)
-    .sort()
-    .join(",");
-  // Today's time capsules are part of the rotation, so which ones are due is part of the key too.
-  const capsules = await loadTodaysCapsules(db);
-  const capsuleConfig = capsules.map((cp) => cp.id).join(",");
-  const cacheKey = `radio-brain:${channel.id}:${hashSeed(fingerprint + "|" + playbackConfig + "|" + pinsConfig + "|" + capsuleConfig)}`;
-
-  let items = await kv.get<RotationItem[]>(cacheKey, "json");
-  if (!items) {
-    items = withCapsules(buildRotation(seedKey, tracks, stationIds, pins), capsules);
-    await kv.put(cacheKey, JSON.stringify(items), { expirationTtl: 60 * 60 * 24 * 30 });
-  }
-
-  const totalDuration = items.reduce((sum, i) => sum + i.duration_seconds, 0);
-  if (items.length === 0 || totalDuration === 0) return { items: null };
-
-  const elapsed = Math.floor((Date.now() / 1000) % totalDuration);
-  return { items, elapsed, programme: { id: null, title: channel.name, description: channel.description } };
-}
-
 /**
  * What the Now Playing screen needs beyond "the current item": the next few
  * things on air (so the listener sees the flow of the station, not one track),
@@ -480,58 +349,6 @@ async function describePlayback(db: D1Database, items: RotationItem[], currentIn
 
   const [nowE, upNextE, ...comingUpE] = await enrichItems(db, [now, upNext, ...comingUp]);
   return { now_playing: nowE, up_next: upNextE, coming_up: comingUpE };
-}
-
-/** Adds each song's artist and album, and the album's artwork when the song has none. */
-async function enrichItems<T extends RotationItem | null>(db: D1Database, items: T[]): Promise<T[]> {
-  const trackIds = Array.from(new Set(items.map((i) => i?.track_id).filter((id): id is string => !!id)));
-  const albumByTrack = new Map<
-    string,
-    { artist: string | null; album_id: string | null; album_title: string | null; album_artwork_url: string | null }
-  >();
-  if (trackIds.length > 0) {
-    const { results } = await db
-      .prepare(
-        `SELECT t.id, t.artist, t.album_id, a.title AS album_title, a.artwork_url AS album_artwork_url
-         FROM tracks t LEFT JOIN albums a ON a.id = t.album_id
-         WHERE t.id IN (${trackIds.map(() => "?").join(",")})`
-      )
-      .bind(...trackIds)
-      .all<{
-        id: string;
-        artist: string | null;
-        album_id: string | null;
-        album_title: string | null;
-        album_artwork_url: string | null;
-      }>();
-    for (const row of results) albumByTrack.set(row.id, row);
-  }
-
-  return items.map((item) => {
-    if (!item) return item;
-    const album = item.track_id ? albumByTrack.get(item.track_id) : undefined;
-    return {
-      ...item,
-      artist: album?.artist ?? null,
-      album_id: album?.album_id ?? null,
-      album_title: album?.album_title ?? null,
-      artwork_url: item.artwork_url ?? album?.album_artwork_url ?? null,
-    };
-  });
-}
-
-// Jingles pinned to specific songs (published jingles only).
-async function loadPinnedJingles(db: D1Database): Promise<PinnedJingle[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT tj.track_id, tj.audio_asset_id AS asset_id, tj.start_offset_seconds,
-              aa.title AS label, aa.audio_url, aa.duration_seconds, aa.duck_level, aa.duck_fade_ms
-       FROM track_jingles tj
-       JOIN audio_assets aa ON aa.id = tj.audio_asset_id
-       WHERE aa.status = 'published'`
-    )
-    .all<PinnedJingle>();
-  return results;
 }
 
 /**

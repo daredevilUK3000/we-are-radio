@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { studioApi } from "../../api/client";
+import { schedApi } from "../scheduler/api";
 
 export function Dashboard() {
   const [tracks, setTracks] = useState<any[]>([]);
   const [programmes, setProgrammes] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
+  const [schedHealth, setSchedHealth] = useState<{ red: number; amber: number } | null>(null);
 
   useEffect(() => {
     studioApi.tracks().then((r) => setTracks(r.tracks)).catch(() => {});
     studioApi.programmes().then((r) => setProgrammes(r.programmes)).catch(() => {});
     studioApi.channels().then((r) => setChannels(r.channels)).catch(() => {});
+    schedApi
+      .health()
+      .then((r) => setSchedHealth({ red: r.checks.filter((c) => c.level === "red").length, amber: r.checks.filter((c) => c.level === "amber").length }))
+      .catch(() => {});
   }, []);
 
   const liveChannels = channels.filter((c) => c.status === "live");
@@ -44,6 +50,18 @@ export function Dashboard() {
           </Link>
         </div>
       </div>
+
+      {schedHealth && (
+        <Link to="/studio/scheduler" className="card" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, textDecoration: "none" }}>
+          <span
+            aria-hidden="true"
+            style={{ width: 10, height: 10, borderRadius: "50%", background: schedHealth.red ? "#e11d2e" : schedHealth.amber ? "#f2b33d" : "#34d27b" }}
+          />
+          <strong>Scheduler:</strong>
+          <span>{schedHealth.red ? `Action needed (${schedHealth.red})` : schedHealth.amber ? `Attention (${schedHealth.amber} items)` : "All clear"}</span>
+          <span style={{ marginLeft: "auto", color: "var(--text-dim)" }}>Master Control →</span>
+        </Link>
+      )}
 
       <div className="grid">
         <div className="card">
