@@ -146,6 +146,23 @@
   border: 1px solid var(--sch-line);
 }
 
+.sch-pill.is-link {
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sch-pill.is-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.sch-health-card {
+  scroll-margin-top: 16px;
+}
+.sch-health-card:focus {
+  outline: none;
+}
+
 .sch-pill i {
   width: 8px;
   height: 8px;

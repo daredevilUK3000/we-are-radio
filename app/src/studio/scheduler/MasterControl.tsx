@@ -147,10 +147,27 @@ export function MasterControl() {
           </p>
         </div>
         <div className="sch-head-right">
-          <span className={`sch-pill is-${counts.red ? "red" : counts.amber ? "amber" : "green"}`}>
-            <i aria-hidden="true" />
-            {counts.red ? `Action needed: ${counts.red}` : counts.amber ? `Attention: ${counts.amber} items` : "All clear"}
-          </span>
+          {counts.red || counts.amber ? (
+            <button
+              type="button"
+              className={`sch-pill is-${counts.red ? "red" : "amber"} is-link`}
+              title="Show them in Schedule health"
+              onClick={() => {
+                const card = document.getElementById("sch-health");
+                if (!card) return;
+                card.scrollIntoView({ behavior: "smooth", block: "start" });
+                card.focus({ preventScroll: true });
+              }}
+            >
+              <i aria-hidden="true" />
+              {counts.red ? `Action needed: ${counts.red}` : `Attention: ${counts.amber} items`}
+            </button>
+          ) : (
+            <span className="sch-pill is-green">
+              <i aria-hidden="true" />
+              All clear
+            </span>
+          )}
           <button type="button" className="sch-btn" onClick={() => setModal({ kind: "preview" })} disabled={!timeline?.up_next.length}>
             Preview next 2 hours
           </button>
@@ -741,7 +758,7 @@ function HealthRail({
   const problems = checks?.filter((c) => c.level === "red" || c.level === "amber") ?? [];
   const fine = checks?.filter((c) => c.level === "green") ?? [];
   return (
-    <section className="sch-card" aria-labelledby="sch-health-h">
+    <section id="sch-health" tabIndex={-1} className="sch-card sch-health-card" aria-labelledby="sch-health-h">
       <div className="sch-section-head">
         <h3 id="sch-health-h" className="sch-eyebrow">
           Schedule health
