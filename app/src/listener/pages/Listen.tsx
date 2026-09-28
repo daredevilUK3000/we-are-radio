@@ -15,7 +15,7 @@ import { CastButtons } from "../components/CastButtons";
 import { playDownloads, useOfflineBlocks, useOnline } from "../../shared/offline";
 import { useStationLog } from "../lib/useStationLog";
 
-const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark"]);
+const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark", "we-are-instrumental"]);
 
 function QueueCard({ item, accent, next }: { item: any; accent: string; next: boolean }) {
   return (

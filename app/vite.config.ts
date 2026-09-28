@@ -20,6 +20,7 @@ const SHELL_PUBLIC_FILES = [
   "/channels/channel-we-are-50s.jpg",
   "/channels/channel-we-are-love.jpg",
   "/channels/channel-we-are-after-dark.jpg",
+  "/channels/channel-we-are-instrumental.jpg",
 ];
 
 /**

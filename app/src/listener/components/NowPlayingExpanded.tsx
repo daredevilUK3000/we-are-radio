@@ -17,7 +17,7 @@ export const VIBES: { slug: string; label: string; emoji: string }[] = [
   { slug: "kizzi-radio", label: "Kizzi Radio", emoji: "🎙" },
 ];
 
-const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark"]);
+const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark", "we-are-instrumental"]);
 const BAR_COUNT = 56;
 
 // A tiny deterministic hash, so each song gets its own waveform "shape".

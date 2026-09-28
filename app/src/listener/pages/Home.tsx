@@ -34,7 +34,7 @@ const CHANNEL_THEME: Record<string, string> = {
 // (public/channels/channel-<slug>.mp4, with a still frame alongside). A
 // channel without one falls back to its emoji, so a newly launched channel
 // still gets a card.
-const CHANNEL_VIDEOS = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark"]);
+const CHANNEL_VIDEOS = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark", "we-are-instrumental"]);
 
 // Visitors who've asked their system for reduced motion get the still frame.
 const prefersReducedMotion =
