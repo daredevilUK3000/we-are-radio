@@ -55,7 +55,7 @@ export interface OverviewChannel {
   state: "scheduler" | "shadow" | "fallback" | "not_live";
   live_version: number;
   horizon_ms: number | null;
-  shadow: { checks: number; mismatches: number; since_ms: number | null; eligibility: { ok: boolean; reason: string } };
+  shadow: { checks: number; mismatches: number; since_ms: number | null; paused_until_ms: number | null; eligibility: { ok: boolean; reason: string } };
   on_air: SchedItem | null;
   grid: GridNow;
   health: "red" | "amber" | "green" | "grey";

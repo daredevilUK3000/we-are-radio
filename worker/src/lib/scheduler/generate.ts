@@ -30,7 +30,11 @@ export interface SchedChannelRow {
   shadow_window_start_ms: number | null;
   shadow_last_mismatch_ms: number | null;
   shadow_since_ms: number | null;
+  shadow_grace_until_ms: number | null;
 }
+
+/** How long shadow checks pause after a library-change rebuild takes effect. */
+export const SHADOW_GRACE_MS = 2 * 60_000;
 
 export async function latestVersion(db: D1Database, channelId: string): Promise<VersionRow | null> {
   return db
@@ -197,6 +201,13 @@ export async function tickChannel(
     if (!(sc.last_run_ok === 1 && sc.inputs_fingerprint === fingerprint)) outcome = await regenerate();
   } else if (sc.inputs_fingerprint !== fingerprint) {
     outcome = await regenerate();
+    // The old path reshuffled the moment the library changed; the log only
+    // follows from its next boundary. Shadow checks sit that gap out.
+    if (outcome.status === "published") {
+      await env.DB.prepare("UPDATE sched_channels SET shadow_grace_until_ms = ? WHERE channel_id = ?")
+        .bind(outcome.version.effective_from_ms + SHADOW_GRACE_MS, channel.id)
+        .run();
+    }
   } else if (latest.horizon_ms < nowMs + EXTEND_BELOW_MS) {
     outcome = await buildFromPlan(env, channel, {
       kind: "extend",

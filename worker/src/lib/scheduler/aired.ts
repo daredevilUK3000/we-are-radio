@@ -58,6 +58,12 @@ export async function endAiring(db: D1Database, channelId: string, airingId: str
  * 24 hours since the last mismatch.
  */
 export async function shadowCheck(env: Env, channel: Channel, nowMs: number): Promise<boolean | null> {
+  // Paused just after a library change (see tickChannel): not a check.
+  const grace = await env.DB.prepare("SELECT shadow_grace_until_ms AS until FROM sched_channels WHERE channel_id = ?")
+    .bind(channel.id)
+    .first<{ until: number | null }>();
+  if (grace?.until && nowMs < grace.until) return null;
+
   const old = await loadStation(env.DB, env.CONFIG, channel, nowMs);
   const mine = await itemAt(env.DB, channel.id, nowMs);
   if (!old.items && !mine) return null; // nothing on air either way: not a check

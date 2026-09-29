@@ -729,6 +729,7 @@ function ShadowPanel({ channel, onEnable }: { channel: OverviewChannel; onEnable
         {s.checks ? `Matches ${(s.checks - s.mismatches).toLocaleString("en-GB")} of ${s.checks.toLocaleString("en-GB")} checks` : "No checks yet"}
       </p>
       {s.since_ms && <p className="sch-dim">Checking since {dayHm(s.since_ms)}.</p>}
+      {s.paused_until_ms && <p className="sch-dim">Paused for a library change until {hm(s.paused_until_ms)}.</p>}
       <button type="button" className="sch-btn sch-btn-red sch-btn-block" disabled={!s.eligibility.ok} onClick={onEnable} aria-describedby="sch-elig">
         Put the Scheduler on air
       </button>

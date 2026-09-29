@@ -5,7 +5,7 @@ import { blockLengthMin, blockTags, loadGridBlocks, occurrencesBetween, occurren
 import { furthestHorizon, type SchedChannelRow } from "./generate";
 import { fallbackLoop } from "./read";
 import { itemAt, itemsBetween } from "./timeline";
-import { DAY, HOUR, MINUTE, parisDayTime, wallClock, PARIS_TZ } from "./time";
+import { DAY, HOUR, MINUTE, parisDayTime, parisHHMM, wallClock, PARIS_TZ } from "./time";
 import { REPEAT_WINDOW_MS } from "./types";
 
 /**
@@ -114,9 +114,10 @@ export async function channelHealth(env: Env, channel: Channel, sc: SchedChannel
   if (!sc.enabled) {
     const checks = sc.shadow_checks;
     const mism = sc.shadow_mismatches;
-    if (checks && mism / checks > 0.05) add("shadow", "red", "Shadow comparison failing", `${mism} of ${checks} checks didn't match what listeners hear.`, "shadow");
-    else if (mism) add("shadow", "amber", "Shadow mismatches", `${mism} of ${checks} checks didn't match in the last 24 h.`, "shadow");
-    else add("shadow", "green", "Shadow comparison", checks ? `Matches ${checks.toLocaleString("en-GB")} of ${checks.toLocaleString("en-GB")} checks.` : "No checks yet.");
+    const paused = sc.shadow_grace_until_ms && nowMs < sc.shadow_grace_until_ms ? ` Paused for a library change until ${parisHHMM(sc.shadow_grace_until_ms)}.` : "";
+    if (checks && mism / checks > 0.05) add("shadow", "red", "Shadow comparison failing", `${mism} of ${checks} checks didn't match what listeners hear.${paused}`, "shadow");
+    else if (mism) add("shadow", "amber", "Shadow mismatches", `${mism} of ${checks} checks didn't match in the last 24 h.${paused}`, "shadow");
+    else add("shadow", "green", "Shadow comparison", (checks ? `Matches ${checks.toLocaleString("en-GB")} of ${checks.toLocaleString("en-GB")} checks.` : "No checks yet.") + paused);
   }
 
   // The grid.

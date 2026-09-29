@@ -172,6 +172,7 @@ schedulerRoutes.get("/overview", async (c) => {
         checks: sc.shadow_checks,
         mismatches: sc.shadow_mismatches,
         since_ms: sc.shadow_since_ms,
+        paused_until_ms: sc.shadow_grace_until_ms && sc.shadow_grace_until_ms > now ? sc.shadow_grace_until_ms : null,
         eligibility: eligibility(sc, !!latest, now),
       },
       on_air: on ? itemJson(on, ch, L) : null,
