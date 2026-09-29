@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
-import { CATCH_UP_SECONDS, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
+import { CATCH_UP_SECONDS, livePosition, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { NowPlayingExpanded } from "./NowPlayingExpanded";
 import { useChannelLog } from "../../shared/analytics";
@@ -112,18 +112,39 @@ export function NowPlayingBar() {
   // song is let finish.
   useOverlayJingles(audioRef, loadedItem, !!(data && data.on_air));
 
+  // Play (the button, or the keyboard / lock-screen controls) always joins the
+  // station where it is now. The song was loaded at its position when the
+  // page last heard from the server; without this, pressing Play minutes
+  // later started from that stale point and stayed minutes behind.
+  const dataRef = useRef<any>(null);
+  dataRef.current = data;
+  function playLive() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    // The press is the user gesture that lets the audio engine start.
+    void unlockAudio(audio);
+    const d = dataRef.current;
+    if (d?.now_playing && currentItemId.current === d.now_playing.id) {
+      const pos = livePosition(d);
+      if (pos === null) {
+        // That song has ended since: load and play whatever's on now.
+        currentItemId.current = null;
+        setPlaying(true);
+        void refresh();
+        return;
+      }
+      if (Math.abs(audio.currentTime - pos) > 2) audio.currentTime = pos;
+    }
+    audio.play().catch(() => {});
+    setPlaying(true);
+  }
+
   // Lock screen / notification: the song on air, play and pause. These act on
   // the element itself rather than toggling, so "play" still works after the
   // phone paused the audio on its own (a call, headphones unplugged).
   useMediaSession(audioRef, radioSessionInfo(data), {
     live: true,
-    onPlay: () => {
-      const audio = audioRef.current;
-      if (!audio) return;
-      void unlockAudio(audio);
-      audio.play().catch(() => {});
-      setPlaying(true);
-    },
+    onPlay: () => playLive(),
     onPause: () => {
       audioRef.current?.pause();
       setPlaying(false);
@@ -312,10 +333,7 @@ export function NowPlayingBar() {
       audio.pause();
       setPlaying(false);
     } else {
-      // The play press is the user gesture that lets the audio engine start.
-      void unlockAudio(audio);
-      audio.play().catch(() => {});
-      setPlaying(true);
+      playLive();
     }
   };
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { mediaUrl } from "../../api/client";
-import { useExclusiveAudio, formatClock, stillFinishing, CATCH_UP_SECONDS } from "../lib/audioUtils";
+import { useExclusiveAudio, formatClock, livePosition, stillFinishing, CATCH_UP_SECONDS } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "../components/ShareButton";
@@ -57,6 +57,33 @@ export function Listen() {
 
   const { cast, castingHere } = useRadioCast({ audioRef, channelSlug, currentItemId, setData, setPlaying });
 
+  // Play (the button, or the keyboard / lock-screen controls) always joins the
+  // station where it is now. The song was loaded at its position when the
+  // page last heard from the server; without this, pressing Play minutes
+  // later started from that stale point and stayed minutes behind.
+  const dataRef = useRef<any>(null);
+  dataRef.current = data;
+  function playLive() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    // The press is the user gesture that lets the audio engine start.
+    void unlockAudio(audio);
+    const d = dataRef.current;
+    if (d?.now_playing && currentItemId.current === d.now_playing.id) {
+      const pos = livePosition(d);
+      if (pos === null) {
+        // That song has ended since: load and play whatever's on now.
+        currentItemId.current = null;
+        setPlaying(true);
+        void refresh();
+        return;
+      }
+      if (Math.abs(audio.currentTime - pos) > 2) audio.currentTime = pos;
+    }
+    audio.play().catch(() => {});
+    setPlaying(true);
+  }
+
   // Starting a podcast/album elsewhere pauses this stream (and its button).
   useChannelLog(audioRef, data, playing);
   useExclusiveAudio("listen", audioRef, !!(data && data.on_air), () => setPlaying(false));
@@ -65,13 +92,7 @@ export function Listen() {
   useOverlayJingles(audioRef, loadedItem, !!(data && data.on_air));
   useMediaSession(audioRef, radioSessionInfo(data), {
     live: true,
-    onPlay: () => {
-      const audio = audioRef.current;
-      if (!audio) return;
-      void unlockAudio(audio);
-      audio.play().catch(() => {});
-      setPlaying(true);
-    },
+    onPlay: () => playLive(),
     onPause: () => {
       audioRef.current?.pause();
       setPlaying(false);
@@ -128,9 +149,7 @@ export function Listen() {
       audio.pause();
       setPlaying(false);
     } else {
-      void unlockAudio(audio);
-      audio.play().catch(() => {});
-      setPlaying(true);
+      playLive();
     }
   };
 

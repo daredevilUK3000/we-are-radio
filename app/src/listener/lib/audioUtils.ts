@@ -25,6 +25,18 @@ export function formatClock(seconds: number): string {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/**
+ * Where the station is now in the item a now-playing answer described,
+ * counting the time since it arrived (useStationLog stamps received_at_ms).
+ * Null when that item is already over, or the answer has no stamp.
+ */
+export function livePosition(data: any): number | null {
+  const item = data?.now_playing;
+  if (!item || !data.received_at_ms) return null;
+  const pos = (data.position_seconds ?? 0) + (Date.now() - data.received_at_ms) / 1000;
+  return pos < (Number(item.duration_seconds) || Infinity) - 1 ? pos : null;
+}
+
 // The station runs on the server's clock, but a listener's playback starts a
 // few seconds behind it (buffering, a stall, a pause), so when the clock moves
 // on to the next item the last seconds of their song are often still playing.

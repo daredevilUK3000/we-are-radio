@@ -48,6 +48,7 @@ function fromBuffer(buf: Buffer | null, last: any, nowSec: number) {
     up_next: rest[0] ?? null,
     coming_up: rest.filter((i) => i.item_type !== "station_id").slice(0, 4),
     from_buffer: true,
+    received_at_ms: nowSec * 1000,
   };
 }
 
@@ -92,9 +93,11 @@ export function useStationLog({
     const slug = slugRef.current;
     window.clearTimeout(retry.current);
     try {
-      const d = await publicApi.nowPlaying(slug);
+      const d: any = await publicApi.nowPlaying(slug);
       if (slug !== slugRef.current) return;
       failures.current = 0;
+      // When it arrived: pressing Play later rejoins the station from here (livePosition).
+      if (d) d.received_at_ms = Date.now();
       last.current = d;
       setData(d);
       setUnreachable(false);
