@@ -26,6 +26,8 @@ export interface MediaSessionOptions {
   live: boolean;
   /** Skipping allowed on this player (no radio channel allows it today). */
   onNext?: () => void;
+  /** "Previous" on the lock screen / headphones: the radio players' Start over, only while it's offered. */
+  onPrevious?: (() => void) | null;
   onPlay: () => void;
   onPause: () => void;
 }
@@ -88,7 +90,7 @@ function applyHandlers(audio: HTMLAudioElement, entry: Entry) {
     navigator.mediaSession.playbackState = "paused";
   });
   setHandler("nexttrack", entry.options.onNext ? () => current()?.onNext?.() : null);
-  setHandler("previoustrack", null);
+  setHandler("previoustrack", entry.options.onPrevious ? () => current()?.onPrevious?.() : null);
   // Live radio offers no seeking at all: no scrubber, no +/-10s buttons that
   // would move the listener off the broadcast.
   const audioEl = audio;
@@ -149,7 +151,8 @@ export function useMediaSession(
   options: MediaSessionOptions
 ) {
   const registered = useRef<HTMLAudioElement | null>(null);
-  const key = [info?.title, info?.artist, info?.album, info?.artworkUrl, options.live, !!options.onNext].join("|");
+  // Which buttons exist is part of the key, so "previous" appears and disappears with Start over.
+  const key = [info?.title, info?.artist, info?.album, info?.artworkUrl, options.live, !!options.onNext, !!options.onPrevious].join("|");
 
   // Runs after every render: the <audio> element may only appear once the
   // station is on air, and the callbacks change each render.

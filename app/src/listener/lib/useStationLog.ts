@@ -60,6 +60,7 @@ export function useStationLog({
   loadedItem,
   setData,
   setUnreachable,
+  earlyEndFade = true,
 }: {
   channelSlug: string;
   pollMs: number;
@@ -69,6 +70,8 @@ export function useStationLog({
   loadedItem: any;
   setData: (d: any) => void;
   setUnreachable: (u: boolean) => void;
+  /** Off while a listener replays a song (Start over): they hear the whole file; the trim only matters live. */
+  earlyEndFade?: boolean;
 }) {
   const buffer = useRef<Buffer | null>(null);
   const last = useRef<any>(null);
@@ -171,7 +174,7 @@ export function useStationLog({
     const audio = audioRef.current;
     const endAt = Number(loadedItem?.duration_seconds);
     const fileLength = Number(loadedItem?.file_duration_seconds);
-    if (!audio || !loadedItem || !(fileLength > endAt + 0.5)) return;
+    if (!audio || !loadedItem || !earlyEndFade || !(fileLength > endAt + 0.5)) return;
     let fading = false;
     let startVolume = 1;
     const onTime = () => {
@@ -197,7 +200,7 @@ export function useStationLog({
       audio.removeEventListener("timeupdate", onTime);
       if (fading) audio.volume = startVolume;
     };
-  }, [audioRef, loadedItem, refresh]);
+  }, [audioRef, loadedItem, refresh, earlyEndFade]);
 
   return { refresh };
 }

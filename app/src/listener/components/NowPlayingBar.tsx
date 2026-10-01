@@ -17,6 +17,8 @@ import { useOfflineBlocks, useOnline } from "../../shared/offline";
 import { useStationLog } from "../lib/useStationLog";
 import { usePauseForRecording } from "./onair/recording";
 import { voiceLines } from "./onair/voice";
+import { fadeIn, useRewind } from "../lib/useRewind";
+import { BackToLivePill } from "./PlayerRewind";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -101,8 +103,26 @@ export function NowPlayingBar() {
   const castRef = useRef(cast);
   castRef.current = cast;
 
-  // Tune-ins and song plays on this channel, for the Studio's Analytics.
-  useChannelLog(audioRef, data, playing);
+  // Start over (useRewind): while a listener replays the song, the player keeps
+  // showing it and ignores the station moving on; `shown` is what the screen,
+  // the lock screen and analytics see. The live station's current item rides
+  // along as on_air_now (Coming up shows it as "On air now").
+  const rw = useRewind({ audioRef, channelSlug, channelId: data?.channel?.id ?? null, loadedItem, playing, castingHere });
+  const lastOnAir = useRef<any>(null);
+  if (data?.on_air) lastOnAir.current = data;
+  const shown = useMemo(
+    () =>
+      rw.rewound
+        ? { ...(data?.on_air ? data : lastOnAir.current), on_air: true, now_playing: rw.rewound.item, on_air_now: data?.on_air ? data.now_playing : null }
+        : data,
+    [data, rw.rewound]
+  );
+  // Set when rejoining after a replay: a live-point join fades in over a second.
+  const rejoinFade = useRef(false);
+
+  // Tune-ins and song plays on this channel, for the Studio's Analytics. A
+  // replay keeps the same item, so it never counts as a second play.
+  useChannelLog(audioRef, shown, playing);
 
   // If a podcast/album page starts playing, this player steps aside (and its
   // button must show "play" again rather than a stale "pause").
@@ -112,7 +132,8 @@ export function NowPlayingBar() {
   // between songs; the rotation says when, this carries it out. Keyed to the
   // item actually in the <audio> element, which trails now_playing while a
   // song is let finish.
-  useOverlayJingles(audioRef, loadedItem, !!(data && data.on_air));
+  // A replay is the song on its own: its overlays (fired or not) don't play again.
+  useOverlayJingles(audioRef, rw.rewound ? { ...loadedItem, overlays: undefined } : loadedItem, !!(shown && shown.on_air));
 
   // Play (the button, or the keyboard / lock-screen controls) always joins the
   // station where it is now. The song was loaded at its position when the
@@ -125,6 +146,13 @@ export function NowPlayingBar() {
     if (!audio) return;
     // The press is the user gesture that lets the audio engine start.
     void unlockAudio(audio);
+    // The one exception: while replaying a song (Start over), Play resumes the
+    // replay where it was. Only "Back to live" returns to the station.
+    if (rw.rewoundRef.current) {
+      audio.play().catch(() => {});
+      setPlaying(true);
+      return;
+    }
     const d = dataRef.current;
     if (d?.now_playing && currentItemId.current === d.now_playing.id) {
       const pos = livePosition(d);
@@ -144,8 +172,10 @@ export function NowPlayingBar() {
   // Lock screen / notification: the song on air, play and pause. These act on
   // the element itself rather than toggling, so "play" still works after the
   // phone paused the audio on its own (a call, headphones unplugged).
-  useMediaSession(audioRef, radioSessionInfo(data), {
+  useMediaSession(audioRef, radioSessionInfo(shown), {
     live: true,
+    // "Previous" on the lock screen, headphones or car: Start over, only when the button would show.
+    onPrevious: rw.canStartOver ? () => rw.startOver() : null,
     onPlay: () => playLive(),
     onPause: () => {
       audioRef.current?.pause();
@@ -194,22 +224,58 @@ export function NowPlayingBar() {
           detail: {
             onAir: !!(data && data.on_air),
             playing: castingHere ? !cast.paused : playing,
-            title: data?.now_playing?.label ?? null,
-            channelName: data?.channel?.name ?? null,
-            artworkUrl: data?.now_playing?.artwork_url ? mediaUrl(data.now_playing.artwork_url) : null,
+            title: shown?.now_playing?.label ?? null,
+            channelName: shown?.channel?.name ?? null,
+            artworkUrl: shown?.now_playing?.artwork_url ? mediaUrl(shown.now_playing.artwork_url) : null,
           },
         })
       );
     announce();
     window.addEventListener("war:player-state-request", announce);
     return () => window.removeEventListener("war:player-state-request", announce);
-  }, [data, playing, castingHere, cast.paused]);
+  }, [shown, playing, castingHere, cast.paused]);
 
   // Now-playing for whichever channel is currently active (time-of-day
   // default, or a Vibe Shift override): polled every 30 s, plus the log's
   // version every 10 s while playing, a 2-hour buffer and scheduled fades
   // (see useStationLog).
-  const { refresh } = useStationLog({ channelSlug, pollMs: 30_000, playing, audioRef, loadedItem, setData, setUnreachable });
+  const { refresh } = useStationLog({
+    channelSlug,
+    pollMs: 30_000,
+    playing,
+    audioRef,
+    loadedItem,
+    setData,
+    setUnreachable,
+    // A replay is the whole file: the Scheduler's early fade only matters live.
+    earlyEndFade: !rw.rewound,
+  });
+
+  // "Back to live" (or the replay ending): rejoin the station by the same rule
+  // as after letting a song finish - the load path below, with waited set.
+  function backToLive() {
+    const audio = audioRef.current;
+    const was = rw.rewoundRef.current;
+    rw.clear();
+    if (!audio) return;
+    const d = dataRef.current;
+    if (was && d?.now_playing?.id === was.airingId) {
+      // The station is still on the song they replayed: carry on from where it is now.
+      const pos = livePosition(d);
+      if (pos !== null) {
+        audio.currentTime = pos;
+        fadeIn(audio, 1000);
+        audio.play().catch(() => {});
+        setPlaying(true);
+        return;
+      }
+    }
+    currentItemId.current = null;
+    heldBack.current = true;
+    rejoinFade.current = true;
+    setPlaying(true);
+    void refresh();
+  }
 
   // Refresh right as the current item is due to finish, so titles, artwork and
   // the queue change with the broadcast rather than up to 30 s afterwards.
@@ -230,6 +296,8 @@ export function NowPlayingBar() {
     if (prevChannelSlug.current === channelSlug) return;
     const previous = prevChannelSlug.current;
     prevChannelSlug.current = channelSlug;
+    // A replay belongs to its channel: switching plays the new one live.
+    rw.clear();
     currentItemId.current = null;
     heldBack.current = false;
     // A Vibe Shift while this player's channel is on the Chromecast moves the
@@ -264,6 +332,8 @@ export function NowPlayingBar() {
     const item = data?.now_playing;
     const audio = audioRef.current;
     if (!item || !audio || switching) return;
+    // Replaying a song (Start over): nothing new loads until it ends or "Back to live".
+    if (rw.rewoundRef.current) return;
     if (currentItemId.current === item.id) {
       // Loaded elsewhere (useRadioCast, when a cast ends).
       setLoadedItem((l: any) => (l?.id === item.id ? l : item));
@@ -282,7 +352,11 @@ export function NowPlayingBar() {
     setLoadedItem(item);
     const position = data.position_seconds ?? 0;
     audio.src = mediaUrl(item.audio_url);
-    audio.currentTime = startPosition(item, position, waited, followsOn);
+    const from = startPosition(item, position, waited, followsOn);
+    audio.currentTime = from;
+    // Rejoining after a replay at the live point (not from the top): ease in over a second.
+    if (rejoinFade.current && from > 0) fadeIn(audio, 1000);
+    rejoinFade.current = false;
     if (playing) audio.play().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, switching]);
@@ -334,7 +408,7 @@ export function NowPlayingBar() {
   }
 
   commandRef.current = null; // replaced below while there's a station on air to play
-  if (!data || !data.on_air) return null;
+  if (!shown || !shown.on_air) return null;
 
   const togglePlay = () => {
     if (castingHere) {
@@ -358,15 +432,15 @@ export function NowPlayingBar() {
     if (action === "toggle" || (action === "play") !== shownPlaying) togglePlay();
   };
 
-  const station = data.channel?.name ?? "We Are Radio";
-  const upNextLabel = data.up_next?.label;
+  const station = shown.channel?.name ?? "We Are Radio";
+  const upNextLabel = shown.up_next?.label;
 
   return (
     <>
       <div className="now-playing-bar">
         <button className="mp-open" onClick={() => setExpanded(true)} aria-label="Open Now Playing">
-          {data.now_playing?.artwork_url ? (
-            <img className="mp-art" src={mediaUrl(data.now_playing.artwork_url)} alt="" />
+          {shown.now_playing?.artwork_url ? (
+            <img className="mp-art" src={mediaUrl(shown.now_playing.artwork_url)} alt="" />
           ) : (
             <div className="mp-art" />
           )}
@@ -376,20 +450,22 @@ export function NowPlayingBar() {
               <span className="mp-station">{station}</span>
             </span>
             <span className="mp-title">
-              {data.now_playing?.voice ? (
+              {shown.now_playing?.voice ? (
                 <>
-                  <span className="lv-pill">Listener voice</span> {voiceLines(data.now_playing.voice).title}
+                  <span className="lv-pill">Listener voice</span> {voiceLines(shown.now_playing.voice).title}
                 </>
               ) : (
-                (data.now_playing?.label ?? "We Are Radio")
+                (shown.now_playing?.label ?? "We Are Radio")
               )}
             </span>
-            <span className="mp-programme">{upNextLabel ? `Next: ${upNextLabel}` : data.programme?.title}</span>
+            <span className="mp-programme">{upNextLabel ? `Next: ${upNextLabel}` : shown.programme?.title}</span>
           </span>
           <svg className="mp-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 15l6-6 6 6" />
           </svg>
         </button>
+
+        {rw.rewound && <BackToLivePill compact behindSeconds={rw.behindSeconds} onClick={backToLive} />}
 
         <div style={{ position: "relative" }}>
           <button className="btn" onClick={() => setShowVibeShift((s) => !s)}>
@@ -425,7 +501,7 @@ export function NowPlayingBar() {
         <ShareButton
           path={`/channel/${channelSlug}`}
           title={`${station} - We Are Radio`}
-          text={data.now_playing?.label ? `Listening to ${data.now_playing.label} on ${station}` : `Live on ${station}`}
+          text={shown.now_playing?.label ? `Listening to ${shown.now_playing.label} on ${station}` : `Live on ${station}`}
           className="btn mp-share"
           iconOnly
         />
@@ -436,14 +512,22 @@ export function NowPlayingBar() {
         </button>
         <audio
           ref={audioRef}
-          onEnded={() => void refresh()}
+          onEnded={() => (rw.rewoundRef.current ? backToLive() : void refresh())}
         />
       </div>
 
       {/* A sibling of the bar, not a child: the bar's blur would otherwise pin it to the bar's box. */}
       {expanded && (
         <NowPlayingExpanded
-          data={data}
+          data={shown}
+          rewind={{
+            canStartOver: rw.canStartOver,
+            onStartOver: rw.startOver,
+            rewound: !!rw.rewound,
+            behindSeconds: rw.behindSeconds,
+            onBackToLive: backToLive,
+            liveNow: rw.rewound ? (shown.on_air_now ?? null) : null,
+          }}
           audioRef={audioRef}
           playing={shownPlaying}
           switching={switching}

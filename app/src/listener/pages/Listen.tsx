@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { mediaUrl } from "../../api/client";
 import { useExclusiveAudio, formatClock, livePosition, stillFinishing, startPosition } from "../lib/audioUtils";
@@ -17,6 +17,9 @@ import { useStationLog } from "../lib/useStationLog";
 import { usePauseForRecording } from "../components/onair/recording";
 import { OnAirSheet, SayItOnAirButton } from "../components/onair/OnAirSheet";
 import { ListenerVoicePill, voiceLines } from "../components/onair/voice";
+import { fadeIn, useRewind } from "../lib/useRewind";
+import { BackToLivePill, StartOverButton } from "../components/PlayerRewind";
+import { JustPlayed, ThatWasChip, useJustPlayed } from "../components/JustPlayed";
 
 const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark", "we-are-instrumental"]);
 
@@ -63,6 +66,21 @@ export function Listen() {
 
   const { cast, castingHere } = useRadioCast({ audioRef, channelSlug, currentItemId, setData, setPlaying });
 
+  // Start over: kept in step with NowPlayingBar (see useRewind and the comments there).
+  const rw = useRewind({ audioRef, channelSlug, channelId: data?.channel?.id ?? null, loadedItem, playing, castingHere });
+  const lastOnAir = useRef<any>(null);
+  if (data?.on_air) lastOnAir.current = data;
+  const shown = useMemo(
+    () =>
+      rw.rewound
+        ? { ...(data?.on_air ? data : lastOnAir.current), on_air: true, now_playing: rw.rewound.item, on_air_now: data?.on_air ? data.now_playing : null }
+        : data,
+    [data, rw.rewound]
+  );
+  const rejoinFade = useRef(false);
+  const liveNowItem = rw.rewound ? (shown?.on_air_now ?? null) : (data?.now_playing ?? null);
+  const justPlayed = useJustPlayed(channelSlug, liveNowItem?.id);
+
   // Play (the button, or the keyboard / lock-screen controls) always joins the
   // station where it is now. The song was loaded at its position when the
   // page last heard from the server; without this, pressing Play minutes
@@ -74,6 +92,12 @@ export function Listen() {
     if (!audio) return;
     // The press is the user gesture that lets the audio engine start.
     void unlockAudio(audio);
+    // While replaying (Start over), Play resumes the replay; only "Back to live" returns to the station.
+    if (rw.rewoundRef.current) {
+      audio.play().catch(() => {});
+      setPlaying(true);
+      return;
+    }
     const d = dataRef.current;
     if (d?.now_playing && currentItemId.current === d.now_playing.id) {
       const pos = livePosition(d);
@@ -91,13 +115,14 @@ export function Listen() {
   }
 
   // Starting a podcast/album elsewhere pauses this stream (and its button).
-  useChannelLog(audioRef, data, playing);
+  useChannelLog(audioRef, shown, playing);
   useExclusiveAudio("listen", audioRef, !!(data && data.on_air), () => setPlaying(false));
   // Keyed to the item actually in the <audio> element (it trails now_playing
   // while a song is let finish).
-  useOverlayJingles(audioRef, loadedItem, !!(data && data.on_air));
-  useMediaSession(audioRef, radioSessionInfo(data), {
+  useOverlayJingles(audioRef, rw.rewound ? { ...loadedItem, overlays: undefined } : loadedItem, !!(shown && shown.on_air));
+  useMediaSession(audioRef, radioSessionInfo(shown), {
     live: true,
+    onPrevious: rw.canStartOver ? () => rw.startOver() : null,
     onPlay: () => playLive(),
     onPause: () => {
       audioRef.current?.pause();
@@ -116,13 +141,47 @@ export function Listen() {
   });
 
   useEffect(() => {
+    rw.clear();
     setData(null);
     currentItemId.current = null;
     heldBack.current = false;
     setPlaying(false);
   }, [channelSlug]);
   // Polled every 15 s, plus the log's version every 10 s while playing, a 2-hour buffer and scheduled fades.
-  const { refresh } = useStationLog({ channelSlug, pollMs: 15_000, playing, audioRef, loadedItem, setData, setUnreachable });
+  const { refresh } = useStationLog({
+    channelSlug,
+    pollMs: 15_000,
+    playing,
+    audioRef,
+    loadedItem,
+    setData,
+    setUnreachable,
+    earlyEndFade: !rw.rewound,
+  });
+
+  // Rejoining after a replay: the same rule as after letting a song finish.
+  function backToLive() {
+    const audio = audioRef.current;
+    const was = rw.rewoundRef.current;
+    rw.clear();
+    if (!audio) return;
+    const d = dataRef.current;
+    if (was && d?.now_playing?.id === was.airingId) {
+      const pos = livePosition(d);
+      if (pos !== null) {
+        audio.currentTime = pos;
+        fadeIn(audio, 1000);
+        audio.play().catch(() => {});
+        setPlaying(true);
+        return;
+      }
+    }
+    currentItemId.current = null;
+    heldBack.current = true;
+    rejoinFade.current = true;
+    setPlaying(true);
+    void refresh();
+  }
 
   // Only touch the <audio> element when the on-air item actually changes -
   // a poll landing mid-song shouldn't restart playback - nor while the last
@@ -132,6 +191,7 @@ export function Listen() {
     const item = data?.now_playing;
     const audio = audioRef.current;
     if (!item || !audio) return;
+    if (rw.rewoundRef.current) return;
     if (currentItemId.current === item.id) {
       // Loaded elsewhere (useRadioCast, when a cast ends).
       setLoadedItem((l: any) => (l?.id === item.id ? l : item));
@@ -150,7 +210,10 @@ export function Listen() {
     setLoadedItem(item);
     const position = data.position_seconds ?? 0;
     audio.src = mediaUrl(item.audio_url);
-    audio.currentTime = startPosition(item, position, waited, followsOn);
+    const from = startPosition(item, position, waited, followsOn);
+    audio.currentTime = from;
+    if (rejoinFade.current && from > 0) fadeIn(audio, 1000);
+    rejoinFade.current = false;
     if (playing) audio.play().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
@@ -195,18 +258,18 @@ export function Listen() {
     );
   }
 
-  if (!data) return <p>Tuning in...</p>;
-  if (!data.on_air) return <p>{data.channel?.name ?? "This channel"} isn't broadcasting anything published yet.</p>;
+  if (!shown) return <p>Tuning in...</p>;
+  if (!shown.on_air) return <p>{shown.channel?.name ?? "This channel"} isn't broadcasting anything published yet.</p>;
 
   const accent = channelAccent(channelSlug);
   // While this channel is on the Chromecast, the buttons show and drive the device.
   const shownPlaying = castingHere ? !cast.paused : playing;
-  const now = data.now_playing;
+  const now = shown.now_playing;
   const isSong = now?.item_type === "song";
   const voice = now?.voice ? voiceLines(now.voice) : null;
   const artUrl: string | null = now?.artwork_url ? mediaUrl(now.artwork_url) : null;
-  const category = data.channel?.description || data.programme?.title || null;
-  const queue: any[] = data.coming_up ?? (data.up_next ? [data.up_next] : []);
+  const category = shown.channel?.description || shown.programme?.title || null;
+  const queue: any[] = shown.coming_up ?? (shown.up_next ? [shown.up_next] : []);
 
   return (
     <div className={`lp-page${shownPlaying ? " is-playing" : ""}`}>
@@ -217,15 +280,15 @@ export function Listen() {
 
       <div className="lp-top">
         <span className="on-air-badge lp-eyebrow">
-          <span className="on-air-dot" /> On Air &middot; {data.channel.name}
+          <span className="on-air-dot" /> On Air &middot; {shown.channel.name}
           {castingHere && <> &middot; Casting{cast.deviceName ? ` to ${cast.deviceName}` : ""}</>}
         </span>
         <div className="lp-top-actions">
           <CastButtons audioRef={audioRef} channelSlug={channelSlug} ready className="lp-icon-btn" />
           <ShareButton
             path={`/channel/${channelSlug}`}
-            title={`${data.channel.name} - We Are Radio`}
-            text={now?.label ? `Listening to ${now.label} on ${data.channel.name}` : `Live on ${data.channel.name}`}
+            title={`${shown.channel.name} - We Are Radio`}
+            text={now?.label ? `Listening to ${now.label} on ${shown.channel.name}` : `Live on ${shown.channel.name}`}
             className="lp-icon-btn"
             iconOnly
           />
@@ -275,7 +338,7 @@ export function Listen() {
 
         <div className="lp-info">
           {category && <div className="lp-category" style={{ color: `${accent}` }}>{category}</div>}
-          <h1 className="lp-channel-name">{data.channel.name}</h1>
+          <h1 className="lp-channel-name">{shown.channel.name}</h1>
 
           <div className="lp-nowplaying-row">
             <span className="lp-nowplaying-label" style={{ color: accent }}>
@@ -297,6 +360,12 @@ export function Listen() {
             playing={shownPlaying}
             onTogglePlay={togglePlay}
           />
+          {(rw.canStartOver || rw.rewound) && (
+            <div className="so-row lp-rewind-row">
+              {rw.canStartOver && <StartOverButton onClick={rw.startOver} />}
+              {rw.rewound && <BackToLivePill behindSeconds={rw.behindSeconds} onClick={backToLive} />}
+            </div>
+          )}
           <div className="lp-onair-row">
             <SayItOnAirButton onClick={() => setSheetOpen(true)} />
           </div>
@@ -307,7 +376,8 @@ export function Listen() {
 
       {queue.length > 0 && (
         <div className="lp-queue">
-          <div className="lp-queue-label">Up Next on {data.channel.name}</div>
+          {rw.rewound && liveNowItem && <div className="lp-queue-label np-onair-now">On air now: {liveNowItem.label}</div>}
+          <div className="lp-queue-label">Up Next on {shown.channel.name}</div>
           <div className="lp-queue-row">
             {queue.slice(0, 4).map((item, i) => (
               <QueueCard key={item.id ?? i} item={item} accent={accent} next={i === 0} />
@@ -316,11 +386,16 @@ export function Listen() {
         </div>
       )}
 
+      <div className="lp-just-played">
+        <ThatWasChip items={justPlayed} endedAt={liveNowItem?.starts_at ?? null} />
+        <JustPlayed items={justPlayed} />
+      </div>
+
       <p className="lp-offline-link">
-        <Link to={`/offline?channel=${channelSlug}`}>Going somewhere without signal? Download {data.channel.name} for offline listening</Link>
+        <Link to={`/offline?channel=${channelSlug}`}>Going somewhere without signal? Download {shown.channel.name} for offline listening</Link>
       </p>
 
-      <audio ref={audioRef} onEnded={() => void refresh()} />
+      <audio ref={audioRef} onEnded={() => (rw.rewoundRef.current ? backToLive() : void refresh())} />
       {sheetOpen && (
         <OnAirSheet
           channelSlug={channelSlug}

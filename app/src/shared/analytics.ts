@@ -300,3 +300,8 @@ export function useChannelLog(audioRef: RefObject<HTMLAudioElement>, data: any, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 }
+
+/** "Start over" was tapped (handoff_player_upgrades.md §1.5). The replay itself never logs a second play. */
+export function trackRestart(channelId: string, trackId: string, secondsIn: number) {
+  post("/restart", { channel_id: channelId, track_id: trackId, seconds_in: Math.round(secondsIn) });
+}

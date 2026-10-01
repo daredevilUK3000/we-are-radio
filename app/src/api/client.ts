@@ -72,6 +72,11 @@ export const publicApi = {
   /** The Scheduler's live log version (0 for channels still on the old playback). Cheap enough to poll every 10 s. */
   nowPlayingVersion: (channel: string) =>
     request<{ version: number; fallback: boolean }>(`${API_BASE}/now-playing/version?channel=${encodeURIComponent(channel)}`),
+  /** "Just played": the last songs on the channel (newest first). available is false off the Scheduler. */
+  recentlyPlayed: (channel: string, limit = 10) =>
+    request<{ available: boolean; items: { track_id: string; title: string; artist: string | null; artwork_url: string | null; aired_at: number }[] }>(
+      `${API_BASE}/recently-played?channel=${encodeURIComponent(channel)}&limit=${limit}`
+    ),
   /** The channel's running order from now on, each item with its on-air start (unix seconds). */
   schedule: (channel: string, minutes = 60) =>
     request<{ on_air: boolean; position_seconds?: number; channel: any; items: any[] }>(
@@ -266,6 +271,11 @@ export const studioApi = {
     request<{ tracks: any[] }>(`${STUDIO_BASE}/tracks?status=${encodeURIComponent(status)}`),
   deleteTrack: (id: string) => request<{ ok: true }>(`${STUDIO_BASE}/tracks/${id}`, { method: "DELETE" }),
 
+  /** "Start over" taps in the last 7 days, and the 5 most-restarted songs. */
+  analyticsRestarts: () =>
+    request<{ days: number; total: number; top: { track_id: string; title: string | null; artist: string | null; restarts: number }[] }>(
+      `${STUDIO_BASE}/analytics/restarts`
+    ),
   // Listening + visit analytics (days: 1, 7, 30, 90, 365, or 0 for all time).
   analytics: (days: number, group?: string) =>
     request<any>(`${STUDIO_BASE}/analytics?days=${days}${group ? `&group=${group}` : ""}`),

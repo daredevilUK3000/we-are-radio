@@ -271,17 +271,22 @@ export async function loadPinnedJingles(db: D1Database): Promise<PinnedJingle[]>
   return results;
 }
 
-/** Adds each song's artist and album, and the album's artwork when the song has none. */
+/**
+ * Adds each song's artist and album, the album's artwork when the song has
+ * none, and is_contest_entry (tagged creator-contest: the players hide "Start
+ * over" on those while Top 3 voting runs, so extra listens can't be made on air).
+ */
 export async function enrichItems<T extends RotationItem | null>(db: D1Database, items: T[]): Promise<T[]> {
   const trackIds = Array.from(new Set(items.map((i) => i?.track_id).filter((id): id is string => !!id)));
   const albumByTrack = new Map<
     string,
-    { artist: string | null; album_id: string | null; album_title: string | null; album_artwork_url: string | null }
+    { artist: string | null; album_id: string | null; album_title: string | null; album_artwork_url: string | null; is_contest_entry: number }
   >();
   if (trackIds.length > 0) {
     const { results } = await db
       .prepare(
-        `SELECT t.id, t.artist, t.album_id, a.title AS album_title, a.artwork_url AS album_artwork_url
+        `SELECT t.id, t.artist, t.album_id, a.title AS album_title, a.artwork_url AS album_artwork_url,
+                EXISTS (SELECT 1 FROM track_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.track_id = t.id AND g.name = 'creator-contest') AS is_contest_entry
          FROM tracks t LEFT JOIN albums a ON a.id = t.album_id
          WHERE t.id IN (${trackIds.map(() => "?").join(",")})`
       )
@@ -292,6 +297,7 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
         album_id: string | null;
         album_title: string | null;
         album_artwork_url: string | null;
+        is_contest_entry: number;
       }>();
     for (const row of results) albumByTrack.set(row.id, row);
   }
@@ -305,6 +311,7 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
       album_id: album?.album_id ?? null,
       album_title: album?.album_title ?? null,
       artwork_url: item.artwork_url ?? album?.album_artwork_url ?? null,
+      ...(item.item_type === "song" ? { is_contest_entry: !!album?.is_contest_entry } : {}),
     };
   });
 }

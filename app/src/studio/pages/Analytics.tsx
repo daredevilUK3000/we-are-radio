@@ -284,6 +284,8 @@ function Overview({
         />
       </div>
 
+      <StartOverCard />
+
       <section className="an-card">
         <div className="an-card-head">
           <div>
@@ -723,5 +725,40 @@ function VisitorsTab({ data, group }: { data: any; group: string }) {
         <DataTable rows={f.sources} cols={cols} initialSort={{ key: "visits", dir: "desc" }} filename="visit-sources" empty="No visits recorded in this period yet." />
       </section>
     </>
+  );
+}
+
+/**
+ * "Start over" in the radio players: how often listeners restart the song on
+ * air for themselves, and which songs. A useful signal of the songs people love.
+ */
+function StartOverCard() {
+  const [data, setData] = useState<Awaited<ReturnType<typeof studioApi.analyticsRestarts>> | null>(null);
+  useEffect(() => {
+    studioApi.analyticsRestarts().then(setData).catch(() => setData(null));
+  }, []);
+  if (!data) return null;
+  return (
+    <section className="an-card">
+      <div className="an-card-head">
+        <div>
+          <h2>"Start over" taps, last 7 days: {fmt(data.total)}</h2>
+          <p className="an-dim">Listeners restarting the song on air from the beginning, just for themselves. A replay never counts as a second play.</p>
+        </div>
+      </div>
+      {data.top.length === 0 ? (
+        <p className="an-dim">No restarts yet.</p>
+      ) : (
+        <ol className="an-restarts">
+          {data.top.map((r) => (
+            <li key={r.track_id}>
+              <strong>{r.title ?? "A song no longer in the library"}</strong>
+              {r.artist ? <span className="an-dim"> · {r.artist}</span> : null}
+              <span className="an-dim"> · {fmt(r.restarts)} {r.restarts === 1 ? "restart" : "restarts"}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }

@@ -131,6 +131,26 @@ analyticsPublicRoutes.post("/listening", async (c) => {
   return c.json({ logged: results.reduce((sum, r) => sum + (r.meta?.changes ?? 0), 0) });
 });
 
+// "Start over" (handoff_player_upgrades.md §1.5): one row per restart; the replay itself never logs a play.
+analyticsPublicRoutes.post("/restart", async (c) => {
+  const body = await c.req
+    .json<{ channel_id?: string; track_id?: string; seconds_in?: number }>()
+    .catch(() => ({}) as { channel_id?: string; track_id?: string; seconds_in?: number });
+  if (isBot(c.req.header("user-agent"))) return c.json({ logged: 0 });
+  if (tooMany(c.req.header("cf-connecting-ip") ?? "unknown", 1)) return c.json({ error: "slow down" }, 429);
+  const channelId = String(body.channel_id ?? "");
+  const trackId = String(body.track_id ?? "");
+  if (!ID_PATTERN.test(channelId) || !ID_PATTERN.test(trackId)) return c.json({ logged: 0 });
+  const secondsIn = Math.max(0, Math.min(Math.round(Number(body.seconds_in) || 0), 86_400));
+  const r = await c.env.DB.prepare(
+    `INSERT INTO listener_restarts (channel_id, track_id, seconds_in, timestamp)
+     SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM channels WHERE id = ?) AND EXISTS (SELECT 1 FROM tracks WHERE id = ?)`
+  )
+    .bind(channelId, trackId, secondsIn, new Date().toISOString(), channelId, trackId)
+    .run();
+  return c.json({ logged: r.meta.changes ?? 0 });
+});
+
 analyticsPublicRoutes.post("/site", async (c) => {
   const body = await c.req
     .json<{ type?: string; session_id?: string; source?: string }>()
@@ -508,4 +528,20 @@ analyticsStudioRoutes.get("/", async (c) => {
       sources: sources.results,
     },
   });
+});
+
+// The Studio's "Start over" tile: taps in the last 7 days, and the 5 most-restarted songs.
+analyticsStudioRoutes.get("/restarts", async (c) => {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const total = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM listener_restarts WHERE timestamp >= ?")
+    .bind(since)
+    .first<{ n: number }>();
+  const { results: top } = await c.env.DB.prepare(
+    `SELECT r.track_id, t.title, t.artist, COUNT(*) AS restarts
+     FROM listener_restarts r LEFT JOIN tracks t ON t.id = r.track_id
+     WHERE r.timestamp >= ? GROUP BY r.track_id ORDER BY restarts DESC, t.title LIMIT 5`
+  )
+    .bind(since)
+    .all<{ track_id: string; title: string | null; artist: string | null; restarts: number }>();
+  return c.json({ days: 7, total: total?.n ?? 0, top });
 });

@@ -325,6 +325,62 @@ publicRoutes.get("/schedule", async (c) => {
   });
 });
 
+/**
+ * GET /api/recently-played?channel=<slug>&limit=10 - "Just played" in the
+ * players (handoff_player_upgrades.md §2.1). Songs only, from what actually
+ * aired (sched_aired), newest first, each track once at its latest airing;
+ * not the one on air now, nothing that aired for under 30 s, nothing older
+ * than 3 hours, nothing no longer published. Never airing IDs, versions,
+ * voice notes, links or anything from onair_messages. The same for everyone,
+ * so it's cached at the edge for 30 s.
+ */
+publicRoutes.get("/recently-played", async (c) => {
+  const slug = c.req.query("channel") ?? "kizzi-radio";
+  const limit = Math.min(20, Math.max(1, Math.floor(Number(c.req.query("limit")) || 10)));
+  // One cache entry per channel and limit, whatever else is on the address.
+  const cacheKey = new Request(`${new URL(c.req.url).origin}/api/recently-played?channel=${encodeURIComponent(slug)}&limit=${limit}`);
+  const cache = (caches as unknown as { default: Cache }).default;
+  const hit = await cache.match(cacheKey).catch(() => undefined);
+  if (hit) return hit;
+
+  const channel = await liveChannel(c.env.DB, slug);
+  if (!channel) return c.json({ error: "channel not found or not live" }, 404);
+  const sched = await schedState(c.env.DB, channel.id).catch(() => null);
+  let body: { available: boolean; items: unknown[] };
+  if (!sched?.enabled) {
+    // Channels not on the Scheduler have no record of what aired: the players hide the section.
+    body = { available: false, items: [] };
+  } else {
+    const now = Date.now();
+    const { results } = await c.env.DB.prepare(
+      `SELECT a.track_id, t.title, t.artist, COALESCE(t.artwork_url, al.artwork_url) AS artwork_url,
+              MAX(a.starts_at_ms) AS aired_ms
+       FROM sched_aired a
+       JOIN tracks t ON t.id = a.track_id AND t.status = 'published'
+       LEFT JOIN albums al ON al.id = t.album_id
+       WHERE a.channel_id = ?1 AND a.item_type = 'song' AND a.starts_at_ms > ?2 AND a.starts_at_ms <= ?3
+         AND NOT (a.actual_end_ms IS NULL AND a.scheduled_end_ms > ?3)
+         AND COALESCE(a.actual_end_ms, a.scheduled_end_ms) - a.starts_at_ms >= 30000
+       GROUP BY a.track_id ORDER BY aired_ms DESC LIMIT ?4`
+    )
+      .bind(channel.id, now - 3 * 60 * 60 * 1000, now, limit)
+      .all<{ track_id: string; title: string; artist: string | null; artwork_url: string | null; aired_ms: number }>();
+    body = {
+      available: true,
+      items: results.map((r) => ({
+        track_id: r.track_id,
+        title: r.title,
+        artist: r.artist,
+        artwork_url: r.artwork_url,
+        aired_at: Math.round(r.aired_ms / 1000),
+      })),
+    };
+  }
+  const res = c.json(body, 200, { "Cache-Control": "public, max-age=30" });
+  c.executionCtx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {}));
+  return res;
+});
+
 async function liveChannel(db: D1Database, slug: string) {
   return db.prepare("SELECT * FROM channels WHERE slug = ? AND status = 'live'").bind(slug).first<Channel>();
 }

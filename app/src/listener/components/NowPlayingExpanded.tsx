@@ -8,6 +8,19 @@ import { formatClock } from "../lib/audioUtils";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { OnAirSheet, SayItOnAirButton } from "./onair/OnAirSheet";
 import { ListenerVoicePill, voiceLines } from "./onair/voice";
+import { BackToLivePill, StartOverButton } from "./PlayerRewind";
+import { JustPlayed, useJustPlayed } from "./JustPlayed";
+
+/** Start over (handoff_player_upgrades.md §1), from the player that owns the <audio> element. */
+export interface RewindControls {
+  canStartOver: boolean;
+  onStartOver: () => void;
+  rewound: boolean;
+  behindSeconds: number;
+  onBackToLive: () => void;
+  /** While rewound: what the station is playing now (shown as "On air now"). */
+  liveNow: any;
+}
 
 // The Vibe Shift choices, as atmospheres rather than pages. Today they map to
 // the four live channels; new moods (Happy, Energy, Talk...) slot in here as
@@ -77,6 +90,7 @@ function QueueRow({ label, item }: { label: string; item: any }) {
 
 export function NowPlayingExpanded({
   data,
+  rewind,
   audioRef,
   playing,
   switching,
@@ -88,6 +102,7 @@ export function NowPlayingExpanded({
   onVibe,
 }: {
   data: any;
+  rewind?: RewindControls;
   audioRef: RefObject<HTMLAudioElement>;
   playing: boolean;
   switching: boolean;
@@ -110,7 +125,11 @@ export function NowPlayingExpanded({
   const station = data.channel?.name ?? "We Are Radio";
   const programmeTitle: string | null = data.programme?.id ? data.programme.title : null;
   const meta = [now?.artist, now?.album_title, programmeTitle].filter(Boolean).join("  ·  ");
-  const duration: number = now?.duration_seconds ?? 0;
+  // A replay plays the whole file; live, the airing may end early (a fade before a fixed start).
+  const duration: number = (rewind?.rewound ? now?.file_duration_seconds : null) ?? now?.duration_seconds ?? 0;
+  const liveNow = rewind?.rewound ? rewind.liveNow : null;
+  // Refreshed when this view opens and whenever the station moves on.
+  const justPlayed = useJustPlayed(channelSlug, (liveNow ?? now)?.id);
   const voice = now?.voice ? voiceLines(now.voice) : null;
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -165,7 +184,7 @@ export function NowPlayingExpanded({
             </svg>
           </button>
           <span className="np-live">
-            <span className="np-live-dot" /> {switching ? "Switching" : "Live"}
+            <span className="np-live-dot" /> {switching ? "Switching" : rewind?.rewound ? "Replay" : "Live"}
           </span>
           <span className="np-top-spacer" />
         </header>
@@ -229,7 +248,12 @@ export function NowPlayingExpanded({
                   <span className="play-triangle" />
                 )}
               </button>
-              <div className="np-controls-note">{playing ? "You're tuned in" : "Press play to tune in"}</div>
+              {rewind?.canStartOver && <StartOverButton onClick={rewind.onStartOver} />}
+              {rewind?.rewound ? (
+                <BackToLivePill behindSeconds={rewind.behindSeconds} onClick={rewind.onBackToLive} />
+              ) : (
+                <div className="np-controls-note">{playing ? "You're tuned in" : "Press play to tune in"}</div>
+              )}
             </div>
 
             <div className="np-secondary">
@@ -268,12 +292,18 @@ export function NowPlayingExpanded({
             <section className="np-queue" aria-label="On the station">
               <div className="np-eyebrow">On the station</div>
               <ol className="np-queue-list">
-                {now && <QueueRow label="Now" item={now} />}
+                {liveNow ? (
+                  <QueueRow label="On air now" item={liveNow} />
+                ) : (
+                  now && <QueueRow label="Now" item={now} />
+                )}
                 {comingUp[0] && <QueueRow label="Next" item={comingUp[0]} />}
                 {comingUp[1] && <QueueRow label="After that" item={comingUp[1]} />}
               </ol>
             </section>
           )}
+
+          <JustPlayed items={justPlayed} className="np-just-played" />
 
           <section className="np-vibe" aria-label="Vibe Shift">
             <div className="np-eyebrow">Vibe Shift - change the atmosphere</div>
