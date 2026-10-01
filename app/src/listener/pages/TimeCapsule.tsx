@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { publicApi } from "../../api/client";
 
 /**
@@ -178,6 +179,9 @@ export function TimeCapsule() {
         <p className="tc-fine">
           You're not uploading anything: Kizzi records every message herself, so nothing goes out unchecked. It airs at some
           point during your chosen day, not at a promised time.
+        </p>
+        <p className="tc-fine">
+          <Link to="/on-air">Or say it yourself, in your own voice →</Link>
         </p>
       </form>
     </div>

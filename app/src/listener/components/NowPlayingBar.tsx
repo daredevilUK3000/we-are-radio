@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
-import { CATCH_UP_SECONDS, livePosition, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
+import { livePosition, startPosition, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { NowPlayingExpanded } from "./NowPlayingExpanded";
 import { useChannelLog } from "../../shared/analytics";
@@ -15,6 +15,8 @@ import { OfflineBar } from "./OfflineBar";
 import { DownloadButton } from "./DownloadButton";
 import { useOfflineBlocks, useOnline } from "../../shared/offline";
 import { useStationLog } from "../lib/useStationLog";
+import { usePauseForRecording } from "./onair/recording";
+import { voiceLines } from "./onair/voice";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -151,6 +153,17 @@ export function NowPlayingBar() {
     },
   });
 
+  // "Say it on air": quiet while the listener records or plays their take back,
+  // then live again (only if it was playing before).
+  usePauseForRecording({
+    isPlaying: () => playingRef.current && !castRef.current.connected,
+    pause: () => {
+      audioRef.current?.pause();
+      setPlaying(false);
+    },
+    resume: () => playLive(),
+  });
+
   // The landing page's "Vibe Shift" card opens this same control rather
   // than duplicating it.
   useEffect(() => {
@@ -260,6 +273,7 @@ export function NowPlayingBar() {
       heldBack.current = true;
       return;
     }
+    const followsOn = currentItemId.current !== null;
     currentItemId.current = item.id;
     const waited = heldBack.current;
     heldBack.current = false;
@@ -268,7 +282,7 @@ export function NowPlayingBar() {
     setLoadedItem(item);
     const position = data.position_seconds ?? 0;
     audio.src = mediaUrl(item.audio_url);
-    audio.currentTime = waited && position <= CATCH_UP_SECONDS ? 0 : position;
+    audio.currentTime = startPosition(item, position, waited, followsOn);
     if (playing) audio.play().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, switching]);
@@ -361,7 +375,15 @@ export function NowPlayingBar() {
               <span className="mp-onair-dot" /> {castingHere ? `Casting${cast.deviceName ? ` to ${cast.deviceName}` : ""}` : switching ? "Switching..." : "On Air"}
               <span className="mp-station">{station}</span>
             </span>
-            <span className="mp-title">{data.now_playing?.label ?? "We Are Radio"}</span>
+            <span className="mp-title">
+              {data.now_playing?.voice ? (
+                <>
+                  <span className="lv-pill">Listener voice</span> {voiceLines(data.now_playing.voice).title}
+                </>
+              ) : (
+                (data.now_playing?.label ?? "We Are Radio")
+              )}
+            </span>
             <span className="mp-programme">{upNextLabel ? `Next: ${upNextLabel}` : data.programme?.title}</span>
           </span>
           <svg className="mp-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

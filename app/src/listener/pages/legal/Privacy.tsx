@@ -17,6 +17,16 @@ export function Privacy() {
         and reply to your message and, if you agreed, to read it on air with your first name. We keep messages for 24 months, then delete them.
       </p>
 
+      <h2>Send a shout out</h2>
+      <p>
+        When you send us a voice message we keep the recording, the first name and place you give us, who it's for and any song you pick, your
+        note to Kizzi, your email address, and technical details (a scrambled version of your internet address, used only to stop abuse). Kizzi
+        listens to every message before anything is broadcast. We use your email only to tell you whether and when your message goes on air. If it
+        airs, it's broadcast with your first name and where you're listening from. If you ticked the sharing box, the clip may also appear on our
+        website and social media. Unused messages are deleted after 30 days. Aired recordings are kept for 12 months. You can take your message
+        back, or remove an aired clip, at any time using the link in our emails, or by writing to info@weareradio.app.
+      </p>
+
       <h2>Likes</h2>
       <p>
         If you like a song, we set a small cookie with a random code so we remember your like. It doesn't identify you, and we never show anyone

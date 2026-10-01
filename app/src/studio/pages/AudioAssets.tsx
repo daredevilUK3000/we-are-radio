@@ -29,6 +29,14 @@ const TABS = {
       "Spoken links, features and interviews - the talking building blocks of a running order. Links you record in your own voice (an intro, a bridge between songs, a fun fact, an outro) are what make each listener's personal programme sound presented: set what each one is for, and tag the moods it suits.",
     empty: "No spoken audio yet - upload some and it will appear here.",
   },
+  voices: {
+    label: "Listener voices",
+    types: ["link"],
+    upload: "Upload audio",
+    blurb:
+      "Voice notes from listeners (\"Send a shout out\"), as prepared and approved in Listener voices. They're kept out of the other lists so they don't clutter your links, and Radio That Knows You never uses them.",
+    empty: "No listener voice notes have been approved yet.",
+  },
 } as const;
 
 type TabKey = keyof typeof TABS;
@@ -52,9 +60,11 @@ const TYPE_LABELS: Record<string, string> = {
 
 export function AudioAssets() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab: TabKey = searchParams.get("tab") === "spoken" ? "spoken" : "jingles";
+  const tabParam = searchParams.get("tab");
+  const tab: TabKey = tabParam === "spoken" || tabParam === "voices" ? tabParam : "jingles";
 
   const [assets, setAssets] = useState<any[]>([]);
+  const [voiceAssets, setVoiceAssets] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [search, setSearch] = useState("");
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -64,11 +74,13 @@ export function AudioAssets() {
   // Podcast episodes are audio assets too (hundreds of them), but they're
   // managed on the Podcasts page - only files uploaded here belong in this list.
   const load = () =>
-    studioApi.audioAssets({ storage: "r2" }).then((r) => {
-      // Recordings made for a Time Capsule are managed on that page, not here.
-      setAssets(r.audio_assets.filter((a: any) => !a.capsule_count));
-      setLoaded(true);
-    });
+    Promise.all([
+      studioApi.audioAssets({ storage: "r2" }).then((r) => {
+        // Recordings made for a Time Capsule are managed on that page, not here.
+        setAssets(r.audio_assets.filter((a: any) => !a.capsule_count));
+      }),
+      studioApi.audioAssets({ storage: "r2", voices: true }).then((r) => setVoiceAssets(r.audio_assets)),
+    ]).finally(() => setLoaded(true));
   useEffect(() => {
     load();
   }, []);
@@ -85,11 +97,12 @@ export function AudioAssets() {
     load();
   };
 
-  const countFor = (key: TabKey) => assets.filter((a) => (TABS[key].types as readonly string[]).includes(a.type)).length;
+  const listFor = (key: TabKey) => (key === "voices" ? voiceAssets : assets);
+  const countFor = (key: TabKey) => listFor(key).filter((a) => (TABS[key].types as readonly string[]).includes(a.type)).length;
 
   const current = TABS[tab];
   const query = search.trim().toLowerCase();
-  const visible = assets.filter(
+  const visible = listFor(tab).filter(
     (a) =>
       (current.types as readonly string[]).includes(a.type) &&
       (!query || a.title.toLowerCase().includes(query) || tagsFor(a).some((t) => t.toLowerCase().includes(query)))

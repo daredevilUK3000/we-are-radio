@@ -26,16 +26,27 @@ export type ActionName =
   | "insert_jingle"
   | "record_link"
   | "back_on_schedule"
-  | "rollback";
+  | "rollback"
+  | "remove";
 
 export interface ActionRequest {
   action: ActionName;
   expected_version: number;
-  item?: { track_id?: string | null; audio_asset_id?: string | null };
+  item?: ItemRef;
+  /** insert_next: several items, inserted in this order as the head (a voice note, then the song dedicated in it). */
+  items?: ItemRef[];
   airing_id?: string;
   /** rollback only */
   number?: number;
+  /** Who asked: Patrick in the Studio (default), or the system (the voice-note placer in the cron). */
+  actor?: "studio" | "system";
+  /** For actor 'system': the sentence the change log shows, e.g. "Listener voice note from Sarah (approved by you)". */
+  reason?: string;
+  /** The version's one-line summary, when the default ("Insert next: ...") isn't the right words. */
+  summary?: string;
 }
+
+export type ItemRef = { track_id?: string | null; audio_asset_id?: string | null };
 
 export type ActionResult =
   | { ok: true; version: VersionRow; message: string }
@@ -50,12 +61,13 @@ const VERB: Record<ActionName, string> = {
   record_link: "Record a link",
   back_on_schedule: "Back on schedule",
   rollback: "Roll back",
+  remove: "Remove",
 };
 
 const snapshot = (i: PlanItem | null | undefined) => (i ? { label: i.label, track_id: i.trackId, audio_asset_id: i.assetId } : null);
 
 /** A track or asset from the library as something to put on air. */
-export async function playableFor(db: D1Database, ref: ActionRequest["item"], reason: string): Promise<Playable | null> {
+export async function playableFor(db: D1Database, ref: ItemRef | undefined, reason: string): Promise<Playable | null> {
   if (ref?.track_id) {
     const t = await db.prepare("SELECT * FROM tracks WHERE id = ? AND status = 'published'").bind(ref.track_id).first<Track>();
     if (!t?.audio_url || !(t.duration_seconds > 0)) return null;
@@ -100,6 +112,9 @@ export async function runAction(env: Env, channel: Channel, req: ActionRequest, 
   const cur = curIdx >= 0 ? timeline[curIdx] : null;
   const at = parisHHMM(nowMs);
   const verb = VERB[req.action];
+  const actor = req.actor ?? "studio";
+  // What the change log says about who did it.
+  const byWhom = (what: string) => (actor === "system" && req.reason ? req.reason : `${what} by you at ${at}`);
 
   // Rebuild from the plan / copy an old version: no recovery arithmetic needed.
   if (req.action === "back_on_schedule") {
@@ -122,13 +137,13 @@ export async function runAction(env: Env, channel: Channel, req: ActionRequest, 
   let rest: TimelineItem[]; // base items after the change point, in order
   const changes: PendingChange[] = [];
   let endCurrent: "skipped" | "interrupted" | null = null;
-  let kind: VersionKind = req.action;
+  let kind: VersionKind = req.action === "remove" ? "skip" : req.action;
   let summary = "";
   let sourceItems: TimelineItem[] = timeline;
   let rollbackOf: string | null = null;
 
-  const override = async (reason: string) => {
-    const p = recordingAsset ?? (await playableFor(db, req.item, reason));
+  const override = async (reason: string, ref: ItemRef | undefined = req.item) => {
+    const p = recordingAsset ?? (await playableFor(db, ref, reason));
     if (!p) return null;
     const inheritBlock = cur ?? timeline.find((i) => i.startsAt >= nowMs);
     return { ...p, reasons: [reason], blockId: inheritBlock?.blockId ?? null, blockDate: inheritBlock?.blockDate ?? null, startsAt: 0, endsAt: 0, offset: 0 } as PlanItem;
@@ -158,11 +173,25 @@ export async function runAction(env: Env, channel: Channel, req: ActionRequest, 
     case "record_link": {
       S = cur ? Math.min(cur.endsAt, cur.cutAt ?? Infinity) : nowMs;
       rest = timeline.filter((i) => i.startsAt >= S);
-      const o = await override(`Inserted by you at ${at} (${verb})`);
-      if (!o) return { ok: false, status: 400, error: "bad_item", message: "That item can't be played." };
-      head = [o];
-      summary = `${verb}: ${o.label ?? "an item"}`;
-      changes.push({ action: req.action, item: o, after: snapshot(o), reason: `Inserted next by you at ${at}` });
+      const refs = req.action === "insert_next" && req.items?.length ? req.items : [req.item];
+      for (const ref of refs) {
+        const o = await override(actor === "system" && req.reason ? req.reason : `Inserted by you at ${at} (${verb})`, ref);
+        if (!o) return { ok: false, status: 400, error: "bad_item", message: "That item can't be played." };
+        head.push(o);
+        changes.push({ action: req.action, item: o, after: snapshot(o), reason: byWhom("Inserted next") });
+      }
+      summary = req.summary ?? `${verb}: ${head.map((o) => o.label ?? "an item").join(", then ")}`;
+      break;
+    }
+    case "remove": {
+      // One upcoming airing that hasn't started goes; recovery fills its time so the next anchor keeps its start.
+      const target = timeline.find((i) => i.airingId === req.airing_id && i.startsAt > nowMs);
+      if (!target) return { ok: false, status: 404, error: "not_found", message: "That item isn't coming up any more." };
+      S = target.startsAt;
+      rest = timeline.filter((i) => i.startsAt > target.startsAt);
+      kind = "skip";
+      summary = `Removed: ${target.label ?? "an item"}`;
+      changes.push({ action: "skip", airingId: target.airingId, before: snapshot(target), reason: byWhom("Removed") });
       break;
     }
     case "replace": {
@@ -243,7 +272,7 @@ export async function runAction(env: Env, channel: Channel, req: ActionRequest, 
   const published = await publishVersion(db, {
     channelId: channel.id,
     kind,
-    actor: "studio",
+    actor,
     summary,
     effectiveFrom: S,
     items,

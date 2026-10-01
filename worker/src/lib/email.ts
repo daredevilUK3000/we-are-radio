@@ -250,3 +250,88 @@ export const contactTemplates = {
       CONTACT_FOOTER
     ),
 };
+
+// ------------------------------------------------------------- Say it on air
+
+const ON_AIR_FOOTER = "We Are Radio · Send a shout out · weareradio.app/on-air";
+
+/** "shout-out", "dedication"... as a listener would say it. */
+export const KIND_WORD: Record<string, string> = {
+  shoutout: "shout-out",
+  dedication: "dedication",
+  reaction: "message",
+  question: "question",
+};
+
+export const onAirTemplates = {
+  received: (to: string, e: { firstName: string; manageUrl: string }) =>
+    render(
+      to,
+      "Kizzi's got your message",
+      [
+        { p: `Thanks, ${e.firstName}. Kizzi listens to every message himself.` },
+        { p: "If yours is picked, we'll email you when it's going out so you can tune in." },
+        { p: "Changed your mind? You can take it back here:" },
+        { button: { label: "Manage my message", url: e.manageUrl } },
+      ],
+      undefined,
+      ON_AIR_FOOTER
+    ),
+
+  scheduled: (to: string, e: { firstName: string; kindWord: string; channel: string; when: string; listenUrl: string; manageUrl: string }) =>
+    render(
+      to,
+      "You're going on air on We Are Radio",
+      [
+        { p: `${e.firstName}, your ${e.kindWord} is going out on ${e.channel} ${e.when}.` },
+        { button: { label: `Tune in to ${e.channel}`, url: e.listenUrl } },
+        { p: "It might move by a few minutes, because that's live radio." },
+        { small: `Changed your mind? You can still take it back before it airs: ${e.manageUrl}` },
+      ],
+      undefined,
+      ON_AIR_FOOTER
+    ),
+
+  aired: (to: string, e: { firstName: string; channel: string; when: string; listenBackUrl: string | null; shareUrl: string | null; manageUrl: string }) =>
+    render(
+      to,
+      "You were on We Are Radio!",
+      [
+        { p: `${e.firstName}, that was you on ${e.channel} ${e.when}.` },
+        ...(e.listenBackUrl ? [{ button: { label: "Hear it again", url: e.listenBackUrl } } as Block] : []),
+        ...(e.shareUrl ? [{ p: `Share it with your friends: ${e.shareUrl}` } as Block] : []),
+        { p: "Thanks for being part of the station." },
+        { small: `You can remove the recording at any time: ${e.manageUrl}` },
+      ],
+      undefined,
+      ON_AIR_FOOTER
+    ),
+
+  notThisTime: (to: string, e: { firstName: string; reason: string | null }) =>
+    render(
+      to,
+      "About your message to We Are Radio",
+      [
+        { p: `Thanks for recording something for us, ${e.firstName}. We couldn't use this one on air, but please try again.` },
+        ...(e.reason ? [{ quote: e.reason } as Block] : []),
+        { p: "Tips: a quiet room, the phone close to your mouth, and under 30 seconds works best." },
+        { button: { label: "Record another", url: `${SITE}/on-air` } },
+      ],
+      undefined,
+      ON_AIR_FOOTER
+    ),
+
+  /** Patrick's hourly "new voices waiting" alert. Never the note or the audio. */
+  voicesWaiting: (to: string, e: { rows: [string, string][]; count: number }) =>
+    render(
+      to,
+      `${e.count} new ${e.count === 1 ? "voice" : "voices"} waiting`,
+      [
+        { p: `${e.count === 1 ? "A listener has" : `${e.count} listeners have`} recorded something for the station.` },
+        { rows: e.rows },
+        { button: { label: "Open Listener voices", url: `${SITE}/studio/on-air` } },
+      ],
+      undefined,
+      ON_AIR_FOOTER
+    ),
+};

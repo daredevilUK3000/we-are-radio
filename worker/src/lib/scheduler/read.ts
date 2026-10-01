@@ -4,6 +4,7 @@ import { locateInLoop } from "../radioBrain";
 import { enrichItems } from "../station";
 import { cachedWindow, itemsBetween, locate, type TimelineItem } from "./timeline";
 import type { GridBlock } from "./grid";
+import { voiceFor } from "../onAir";
 
 /**
  * /api/now-playing and /api/schedule for a channel the Scheduler drives
@@ -96,7 +97,7 @@ export async function nowPlayingFromLog(env: Env, channel: Channel, st: SchedSta
         programme: await programmeFor(env.DB, channel, cur),
         on_air: true,
         position_seconds: Math.floor((cur.offset + nowMs - cur.startsAt) / 1000),
-        now_playing: nowE,
+        now_playing: await withVoice(env.DB, nowE),
         up_next: nextE,
         coming_up: upE,
         log_version: cur.versionNumber,
@@ -131,7 +132,7 @@ export async function scheduleFromLog(env: Env, channel: Channel, st: SchedState
         position_seconds: Math.floor((cur.offset + nowMs - cur.startsAt) / 1000),
         log_version: cur.versionNumber,
         // Overlay jingles are played by the listener's browser over a song; a queue can't, so they're left out.
-        items: enriched.map((e) => ({ ...e, overlays: undefined })),
+        items: await Promise.all(enriched.map((e) => withVoice(env.DB, { ...e, overlays: undefined }))),
       };
     }
   } catch (err) {
@@ -149,6 +150,17 @@ export async function scheduleFromLog(env: Env, channel: Channel, st: SchedState
     startsAt += item.duration_seconds;
   }
   return { channel, programme: { id: null, title: channel.name, description: channel.description }, on_air: true, fallback: true, position_seconds, items: await enrichItems(env.DB, out) };
+}
+
+/**
+ * A listener's voice note on air carries `voice` (first name, place, kind, who
+ * it's for) for the players' "Listener voice" badge and the Chromecast's
+ * metadata. Nothing else about the message is ever added.
+ */
+async function withVoice<T extends Record<string, any> | null>(db: D1Database, item: T): Promise<T> {
+  if (!item || item.item_type !== "link" || !item.audio_asset_id) return item;
+  const voice = await voiceFor(db, item.audio_asset_id);
+  return voice ? { ...item, voice } : item;
 }
 
 async function setFallback(db: D1Database, channelId: string, since: number | null) {

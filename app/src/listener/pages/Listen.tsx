@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { mediaUrl } from "../../api/client";
-import { useExclusiveAudio, formatClock, livePosition, stillFinishing, CATCH_UP_SECONDS } from "../lib/audioUtils";
+import { useExclusiveAudio, formatClock, livePosition, stillFinishing, startPosition } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "../components/ShareButton";
@@ -14,6 +14,9 @@ import { useRadioCast } from "../lib/useRadioCast";
 import { CastButtons } from "../components/CastButtons";
 import { playDownloads, useOfflineBlocks, useOnline } from "../../shared/offline";
 import { useStationLog } from "../lib/useStationLog";
+import { usePauseForRecording } from "../components/onair/recording";
+import { OnAirSheet, SayItOnAirButton } from "../components/onair/OnAirSheet";
+import { ListenerVoicePill, voiceLines } from "../components/onair/voice";
 
 const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark", "we-are-instrumental"]);
 
@@ -54,6 +57,9 @@ export function Listen() {
   // The station moved on while the previous song was still finishing.
   const heldBack = useRef(false);
   const [loadedItem, setLoadedItem] = useState<any>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
 
   const { cast, castingHere } = useRadioCast({ audioRef, channelSlug, currentItemId, setData, setPlaying });
 
@@ -99,6 +105,16 @@ export function Listen() {
     },
   });
 
+  // "Say it on air": quiet while the listener records or plays their take back.
+  usePauseForRecording({
+    isPlaying: () => playingRef.current && !castingHere,
+    pause: () => {
+      audioRef.current?.pause();
+      setPlaying(false);
+    },
+    resume: () => playLive(),
+  });
+
   useEffect(() => {
     setData(null);
     currentItemId.current = null;
@@ -125,6 +141,7 @@ export function Listen() {
       heldBack.current = true;
       return;
     }
+    const followsOn = currentItemId.current !== null;
     currentItemId.current = item.id;
     const waited = heldBack.current;
     heldBack.current = false;
@@ -133,7 +150,7 @@ export function Listen() {
     setLoadedItem(item);
     const position = data.position_seconds ?? 0;
     audio.src = mediaUrl(item.audio_url);
-    audio.currentTime = waited && position <= CATCH_UP_SECONDS ? 0 : position;
+    audio.currentTime = startPosition(item, position, waited, followsOn);
     if (playing) audio.play().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
@@ -186,6 +203,7 @@ export function Listen() {
   const shownPlaying = castingHere ? !cast.paused : playing;
   const now = data.now_playing;
   const isSong = now?.item_type === "song";
+  const voice = now?.voice ? voiceLines(now.voice) : null;
   const artUrl: string | null = now?.artwork_url ? mediaUrl(now.artwork_url) : null;
   const category = data.channel?.description || data.programme?.title || null;
   const queue: any[] = data.coming_up ?? (data.up_next ? [data.up_next] : []);
@@ -261,7 +279,7 @@ export function Listen() {
 
           <div className="lp-nowplaying-row">
             <span className="lp-nowplaying-label" style={{ color: accent }}>
-              {isSong ? "Now Playing" : "On Air Now"}
+              {voice ? <ListenerVoicePill /> : isSong ? "Now Playing" : "On Air Now"}
             </span>
             <span className="lp-eq" aria-hidden="true">
               <span style={{ background: accent }} />
@@ -269,7 +287,8 @@ export function Listen() {
               <span style={{ background: accent }} />
             </span>
           </div>
-          <div className="lp-track-title">{now?.label ?? "We Are Radio"}</div>
+          <div className="lp-track-title">{voice ? voice.title : (now?.label ?? "We Are Radio")}</div>
+          {voice?.sub && <div className="lv-sub lp-voice-sub">{voice.sub}</div>}
 
           <FlagshipPlayer
             audioRef={audioRef}
@@ -278,6 +297,9 @@ export function Listen() {
             playing={shownPlaying}
             onTogglePlay={togglePlay}
           />
+          <div className="lp-onair-row">
+            <SayItOnAirButton onClick={() => setSheetOpen(true)} />
+          </div>
         </div>
       </div>
 
@@ -299,6 +321,13 @@ export function Listen() {
       </p>
 
       <audio ref={audioRef} onEnded={() => void refresh()} />
+      {sheetOpen && (
+        <OnAirSheet
+          channelSlug={channelSlug}
+          nowPlaying={now ? { label: now.label ?? null, track_id: now.track_id ?? null, item_type: now.item_type ?? null } : null}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
     </div>
   );
 }

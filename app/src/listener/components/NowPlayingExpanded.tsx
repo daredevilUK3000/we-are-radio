@@ -6,6 +6,8 @@ import { LikeButton, useLikes } from "./LikeButton";
 import { ShareButton } from "./ShareButton";
 import { formatClock } from "../lib/audioUtils";
 import { useActiveChannel } from "../context/ActiveChannelContext";
+import { OnAirSheet, SayItOnAirButton } from "./onair/OnAirSheet";
+import { ListenerVoicePill, voiceLines } from "./onair/voice";
 
 // The Vibe Shift choices, as atmospheres rather than pages. Today they map to
 // the four live channels; new moods (Happy, Energy, Talk...) slot in here as
@@ -109,6 +111,8 @@ export function NowPlayingExpanded({
   const programmeTitle: string | null = data.programme?.id ? data.programme.title : null;
   const meta = [now?.artist, now?.album_title, programmeTitle].filter(Boolean).join("  ·  ");
   const duration: number = now?.duration_seconds ?? 0;
+  const voice = now?.voice ? voiceLines(now.voice) : null;
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // Focus, Escape to close, and no scrolling of the page behind.
   useEffect(() => {
@@ -197,11 +201,11 @@ export function NowPlayingExpanded({
             </div>
 
             <div className="np-block np-block-current">
-              <div className="np-eyebrow">{isSong ? "Now playing" : "On air now"}</div>
+              <div className="np-eyebrow">{voice ? <ListenerVoicePill /> : isSong ? "Now playing" : "On air now"}</div>
               <h1 className="np-title" key={now?.id}>
-                {now?.label ?? "We Are Radio"}
+                {voice ? voice.title : (now?.label ?? "We Are Radio")}
               </h1>
-              {meta && <div className="np-meta">{meta}</div>}
+              {voice?.sub ? <div className="np-meta lv-sub">{voice.sub}</div> : meta && <div className="np-meta">{meta}</div>}
             </div>
 
             <Waveform playing={playing} seed={`${now?.id ?? ""}${now?.label ?? ""}`} />
@@ -229,6 +233,7 @@ export function NowPlayingExpanded({
             </div>
 
             <div className="np-secondary">
+              <SayItOnAirButton onClick={() => setSheetOpen(true)} />
               {isSong && now.track_id && (
                 <>
                   <LikeButton liked={likes.isLiked(now.track_id)} onToggle={() => likes.toggle(now.track_id)} className="np-chip" />
@@ -289,6 +294,13 @@ export function NowPlayingExpanded({
           </section>
         </div>
       </div>
+      {sheetOpen && (
+        <OnAirSheet
+          channelSlug={channelSlug}
+          nowPlaying={now ? { label: now.label ?? null, track_id: now.track_id ?? null, item_type: now.item_type ?? null } : null}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
     </div>
   );
 }

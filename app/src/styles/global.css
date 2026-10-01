@@ -5561,3 +5561,18 @@ main.studio-wide {
     gap: 0 22px;
   }
 }
+
+/* Studio nav: "Listener voices" waiting count. */
+.nav-count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}

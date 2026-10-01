@@ -149,3 +149,55 @@ shareLinkRoutes.get("/top3/:id{[0-9]+}", async (c) => {
     url: canonical(c.req.raw),
   });
 });
+
+// ---- Say it on air ----
+//
+// One static image for every voice-note page (Patrick supplies
+// /on-air-og.jpg, 1200x630; until then, the site default). The share page
+// never shows an email, a note or a surname: only the first name and place
+// the listener gave to be read on air.
+async function onAirImage(c: { env: Env; req: { raw: Request } }): Promise<string> {
+  const url = new URL("/on-air-og.jpg", c.req.raw.url);
+  const res = await c.env.ASSETS.fetch(new Request(url, { method: "HEAD" }));
+  return res.ok && (res.headers.get("content-type") ?? "").startsWith("image/") ? url.toString() : defaultImage(c.req.raw);
+}
+
+shareLinkRoutes.get("/on-air", async (c) =>
+  pageWithOg(c.env, c.req.raw, {
+    title: "Send a shout out · We Are Radio",
+    description: "Your voice. On the radio. Record a shout-out or a dedication, and Kizzi could play it on air.",
+    image: await onAirImage(c),
+    url: `${new URL(c.req.raw.url).origin}/on-air`,
+  })
+);
+
+// The private listen-back page: never indexed.
+shareLinkRoutes.get("/on-air/m/:id", async (c) => {
+  const res = await pageWithOg(c.env, c.req.raw, {
+    title: "Your message on We Are Radio",
+    description: "Hear your message again.",
+    image: await onAirImage(c),
+    url: `${new URL(c.req.raw.url).origin}/on-air`,
+  });
+  const html = (await res.text()).replace("</head>", `  <meta name="robots" content="noindex, nofollow" />\n  </head>`);
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex, nofollow" } });
+});
+
+shareLinkRoutes.get("/on-air/:publicId{[A-Za-z0-9]{10}}", async (c) => {
+  const clip = await c.env.DB.prepare(
+    `SELECT m.first_name, m.place, m.kind, m.for_name, m.aired_at_ms, ch.name AS channel_name
+     FROM onair_messages m JOIN audio_assets a ON a.id = m.audio_asset_id AND a.status != 'archived'
+     LEFT JOIN channels ch ON ch.id = m.air_channel_id
+     WHERE m.public_id = ? AND m.status = 'aired' AND m.consent_share = 1`
+  )
+    .bind(c.req.param("publicId"))
+    .first<{ first_name: string; place: string; kind: string; for_name: string; aired_at_ms: number; channel_name: string | null }>();
+  if (!clip) return pageWithOg(c.env, c.req.raw, siteDefault(c.req.raw));
+  const kind = clip.kind === "dedication" && clip.for_name ? `A dedication for ${clip.for_name}` : clip.kind === "question" ? "A question for Kizzi" : "A shout-out";
+  return pageWithOg(c.env, c.req.raw, {
+    title: `${clip.first_name}${clip.place ? ` from ${clip.place}` : ""} was on We Are Radio`,
+    description: `${kind}, on ${clip.channel_name ?? "We Are Radio"}. Listen, then send a shout out yourself.`,
+    image: await onAirImage(c),
+    url: canonical(c.req.raw),
+  });
+});

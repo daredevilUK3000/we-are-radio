@@ -4,16 +4,19 @@ import { catalogueDigest, channelFingerprint, gridDigests, tickChannel, type Sch
 import { channelHealth, gridStatus, sendAlerts } from "./health";
 import { DAY, HOUR } from "./time";
 import { clearTimelineCache } from "./timeline";
+import { onAirAlert, onAirMinute, onAirRetention } from "../onAir";
 
 /**
  * The Scheduler's minute (a Cron Trigger, "* * * * *"). Each step is wrapped
  * so one failing can't stop the others:
- * 1. the aired recorder (channels on air through the Scheduler);
+ * 1. the aired recorder (channels on air through the Scheduler), then
+ *    listener voice notes: verify what's placed, place what's due;
  * 2. per channel: regenerate on changed inputs, extend when short, and the
  *    shadow comparison for channels still in shadow;
  * 3. health and alerts, at most every 5 minutes ("playing what the grid
  *    says" every minute for channels on air);
- * 4. retention, at most hourly.
+ * 4. retention, at most hourly (the Scheduler's and the voice notes'), and
+ *    the hourly "new voices waiting" alert.
  */
 export async function runMinute(env: Env, nowMs = Date.now(), test: { forceThrow?: boolean } = {}) {
   const report: Record<string, unknown> = {};
@@ -36,6 +39,9 @@ export async function runMinute(env: Env, nowMs = Date.now(), test: { forceThrow
   for (const ch of channels) {
     if (scRows.get(ch.id)?.enabled) await step(`aired:${ch.slug}`, () => recordAired(env.DB, ch.id, nowMs));
   }
+
+  // 1b. Listener voice notes: verify what's placed, place what's due (lib/onAir.ts).
+  await step("onair", () => onAirMinute(env, nowMs));
 
   // 2. Generation and shadow.
   let catalogue = "";
@@ -78,7 +84,12 @@ export async function runMinute(env: Env, nowMs = Date.now(), test: { forceThrow
   }
 
   // 4. Retention.
-  if (await due(env, "sched:retention", HOUR, nowMs)) await step("retention", () => retention(env.DB, nowMs));
+  if (await due(env, "sched:retention", HOUR, nowMs)) {
+    await step("retention", () => retention(env.DB, nowMs));
+    await step("onair-retention", () => onAirRetention(env, nowMs));
+  }
+  // "New voices waiting" to the studio, at most hourly and only when there's something new.
+  await step("onair-alert", () => onAirAlert(env, nowMs));
   return report;
 }
 

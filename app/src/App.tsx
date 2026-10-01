@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { trackVisit } from "./shared/analytics";
 import { Home } from "./listener/pages/Home";
@@ -23,6 +23,7 @@ import { ContestConfirm, ContestNotifyConfirm, ContestUnsubscribe } from "./list
 import { Contact } from "./listener/pages/contact/Contact";
 import { Legal } from "./listener/pages/legal/Legal";
 import { Privacy } from "./listener/pages/legal/Privacy";
+import { OnAir, OnAirListenBack, OnAirManage, OnAirShare } from "./listener/pages/OnAir";
 import { SiteFooter } from "./listener/components/SiteFooter";
 import { rememberPage } from "./shared/navHistory";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
@@ -58,6 +59,8 @@ import { Contest } from "./studio/pages/Contest";
 import { Likes } from "./studio/pages/Likes";
 import { MasterControl } from "./studio/scheduler/MasterControl";
 import { WeeklyGrid } from "./studio/scheduler/WeeklyGrid";
+import { OnAirInbox } from "./studio/pages/OnAirInbox";
+import { onAirStudioApi } from "./api/onAir";
 
 function ListenerLayout({ children }: { children: React.ReactNode }) {
   // One "visit" per browser tab session, with where it came from (a YouTube link, a newsletter...).
@@ -116,11 +119,30 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** "Listener voices" in the Studio nav, with how many are waiting (refreshed every minute). */
+function VoicesNavLink() {
+  const [pending, setPending] = useState(0);
+  const path = useLocation().pathname;
+  useEffect(() => {
+    const load = () => onAirStudioApi.summary().then((r) => setPending(r.pending)).catch(() => {});
+    load();
+    const id = setInterval(load, 60_000);
+    return () => clearInterval(id);
+  }, [path]);
+  return (
+    <NavLink to="/studio/on-air">
+      Listener voices
+      {pending > 0 && <span className="nav-count">{pending}</span>}
+    </NavLink>
+  );
+}
+
 function StudioLayout({ children }: { children: React.ReactNode }) {
   const { logout } = useStudioAuth();
   // Analytics and the Top 3 review queue are sections of their own and use the whole width of the screen.
   const path = useLocation().pathname;
-  const wide = path.startsWith("/studio/analytics") || path.startsWith("/studio/contest") || path.startsWith("/studio/scheduler");
+  const wide =
+    path.startsWith("/studio/analytics") || path.startsWith("/studio/contest") || path.startsWith("/studio/scheduler") || path.startsWith("/studio/on-air");
   return (
     <div className="app-shell">
       <header className="top-nav">
@@ -130,6 +152,7 @@ function StudioLayout({ children }: { children: React.ReactNode }) {
             Dashboard
           </NavLink>
           <NavLink to="/studio/scheduler">Scheduler</NavLink>
+          <VoicesNavLink />
           <NavLink to="/studio/contest">Top 3</NavLink>
           <NavLink to="/studio/analytics">Analytics</NavLink>
           <NavLink to="/studio/likes">Likes</NavLink>
@@ -169,6 +192,7 @@ function StudioApp() {
         <Route path="/" element={<Dashboard />} />
         <Route path="scheduler" element={<MasterControl />} />
         <Route path="scheduler/grid" element={<WeeklyGrid />} />
+        <Route path="on-air" element={<OnAirInbox />} />
         <Route path="contest" element={<Contest />} />
         <Route path="likes" element={<Likes />} />
         <Route path="analytics" element={<Analytics />} />
@@ -236,6 +260,10 @@ export default function App() {
                     <Route path="top3/unsubscribe" element={<ContestUnsubscribe />} />
                     <Route path="top3/:id" element={<ContestSong />} />
                     <Route path="contact" element={<Contact />} />
+                    <Route path="on-air" element={<OnAir />} />
+                    <Route path="on-air/manage" element={<OnAirManage />} />
+                    <Route path="on-air/m/:id" element={<OnAirListenBack />} />
+                    <Route path="on-air/:publicId" element={<OnAirShare />} />
                     <Route path="legal" element={<Legal />} />
                     <Route path="privacy" element={<Privacy />} />
                   </Routes>

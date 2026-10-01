@@ -52,6 +52,24 @@ export function stillFinishing(audio: HTMLAudioElement, hadItem: boolean): boole
 // player rejoins the live point so listeners don't drift ever later.
 export const CATCH_UP_SECONDS = 15;
 
+/**
+ * Where to start the item that has just come on air.
+ * - After letting the last song finish (waited): from the top if the station
+ *   is at most CATCH_UP_SECONDS in, else at the live point.
+ * - A spoken item (a listener's voice note, a link, a station ID) following
+ *   one this player was already playing: from the top too. The player only
+ *   hears about the change a second or so after it happens (the refresh, then
+ *   the network; the server's position is in whole seconds), which on a
+ *   six-second shout-out was its first word. Songs keep joining live.
+ * - Otherwise (tuning in, switching channel): the live point.
+ */
+export function startPosition(item: any, position: number, waited: boolean, followsOn: boolean): number {
+  if (position > CATCH_UP_SECONDS) return position;
+  if (waited) return 0;
+  if (followsOn && item?.item_type && item.item_type !== "song") return 0;
+  return position;
+}
+
 // Several places on the site have their own <audio> element (the fixed
 // mini-player, a podcast or programme page, an album page). Without this,
 // starting one would leave the others playing underneath it. Whenever one

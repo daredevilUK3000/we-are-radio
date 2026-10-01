@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { onAirStudioApi } from "../../api/onAir";
 import { Link } from "react-router-dom";
 import { ApiError, mediaUrl } from "../../api/client";
 import { recordingToWav } from "../lib/wav";
@@ -8,6 +9,7 @@ import { LibraryPicker } from "./LibraryPicker";
 import { FallbackEditor } from "./FallbackEditor";
 import { AiringHistory, VersionHistory } from "./History";
 import "./scheduler.css";
+import "../pages/onair-studio.css";
 
 /**
  * Studio -> Scheduler -> Master Control (/studio/scheduler): every channel at
@@ -92,6 +94,20 @@ export function MasterControl() {
   }, [now, timeline, loadTimeline]);
 
   const channel = overview?.find((c) => c.slug === focus) ?? null;
+  // Listener voice notes approved for this channel and waiting to be played (the Voices drawer).
+  const [voices, setVoices] = useState<any[]>([]);
+  const loadVoices = useCallback(() => {
+    if (!channel?.id) return setVoices([]);
+    onAirStudioApi
+      .voices(channel.id)
+      .then((r) => setVoices(r.voices))
+      .catch(() => setVoices([]));
+  }, [channel?.id]);
+  useEffect(() => {
+    loadVoices();
+    const id = window.setInterval(loadVoices, 30_000);
+    return () => window.clearInterval(id);
+  }, [loadVoices]);
   const counts = {
     red: health?.filter((h) => h.level === "red").length ?? 0,
     amber: health?.filter((h) => h.level === "amber").length ?? 0,
@@ -193,6 +209,16 @@ export function MasterControl() {
               <button type="button" className="sch-version" onClick={() => setModal({ kind: "versions" })} disabled={!channel.live_version}>
                 {channel.enabled ? "LIVE" : "SHADOW"} · v{timeline?.channel.slug === channel.slug ? timeline.live_version : channel.live_version}
               </button>
+              {voices.length > 0 && (
+                <button
+                  type="button"
+                  className="sch-version sch-voices-count"
+                  onClick={() => document.getElementById("sch-voices")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                  title="Listener voice notes waiting to be played"
+                >
+                  🎙 {voices.length} {voices.length === 1 ? "voice" : "voices"}
+                </button>
+              )}
               <ChannelMenu
                 enabled={channel.enabled}
                 onFallback={() => setModal({ kind: "fallback" })}
@@ -228,6 +254,20 @@ export function MasterControl() {
               />
             ) : (
               <ShadowPanel channel={channel} onEnable={() => setModal({ kind: "enable", on: true })} />
+            )}
+            {channel.enabled && (
+              <VoicesDrawer
+                voices={voices}
+                channelId={channel.id}
+                busy={busy}
+                onDone={(message) => {
+                  setToast({ message, tone: "info" });
+                  loadVoices();
+                  loadTimeline();
+                  loadOverview();
+                }}
+                onError={onError}
+              />
             )}
             <HealthRail checks={health} focus={focus} onFocus={setFocus} onRefresh={() => loadHealth(true)} onFallback={(slug) => { setFocus(slug); setModal({ kind: "fallback" }); }} onVersions={(slug) => { setFocus(slug); setModal({ kind: "versions" }); }} />
           </aside>
@@ -641,6 +681,57 @@ function LiveControls({
       <button type="button" className="sch-btn sch-btn-block" disabled={off} onClick={onBack}>
         Back on schedule
       </button>
+    </section>
+  );
+}
+
+/** Approved listener voice notes for this channel, each with Play next (handoff_say_it_on_air.md §10). */
+function VoicesDrawer({ voices, channelId, busy, onDone, onError }: { voices: any[]; channelId: string; busy: boolean; onDone: (message: string) => void; onError: (e: unknown) => void }) {
+  const [working, setWorking] = useState<string | null>(null);
+  const playNext = async (v: any) => {
+    setWorking(v.id);
+    try {
+      const r = await onAirStudioApi.approve(v.id, { channel_id: channelId, when: "next", play_song_after: !!v.play_song_after });
+      onDone(`${v.first_name}: ${r.message}`);
+    } catch (err) {
+      onError(err);
+    } finally {
+      setWorking(null);
+    }
+  };
+  return (
+    <section className="sch-card" id="sch-voices" aria-labelledby="sch-voices-h">
+      <h3 id="sch-voices-h" className="sch-eyebrow">
+        Voices {voices.length ? `(${voices.length})` : ""}
+      </h3>
+      {voices.length === 0 ? (
+        <p className="sch-dim">
+          No approved voice notes waiting. <Link to="/studio/on-air">Listener voices →</Link>
+        </p>
+      ) : (
+        <div className="oas-drawer">
+          {voices.map((v) => (
+            <div key={v.id} className="oas-drawer-row">
+              <span>
+                <strong>
+                  {v.first_name}
+                  {v.place ? ` in ${v.place}` : ""}
+                </strong>
+                <span className="sch-dim">
+                  {" "}
+                  · {v.seconds ? `${v.seconds} s` : ""}
+                  {v.kind === "dedication" && v.for_name ? ` · for ${v.for_name}` : ""}
+                  {v.play_song_after && v.requested_track_title ? ` · then ${v.requested_track_title}` : ""}
+                </span>
+                {v.flag && <span className="oas-flag"> {v.flag}</span>}
+              </span>
+              <button type="button" className="sch-btn" disabled={busy || working !== null} onClick={() => void playNext(v)}>
+                {working === v.id ? "Placing..." : "Play next"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

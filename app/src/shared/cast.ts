@@ -193,8 +193,10 @@ function toQueueItem(item: any, channel: any, startTime = 0) {
   const meta = new chrome.cast.media.MusicTrackMediaMetadata();
   const station = channel?.name ?? "We Are Radio";
   const isSong = item.item_type === "song";
-  meta.title = item.label ?? station;
-  meta.artist = isSong ? item.artist || "Kizzi" : station;
+  // A listener's voice note: "Sarah in Leeds", "Listener voice · Dedication for Mum" (now_playing.voice, from the Worker).
+  const v = item.voice;
+  meta.title = v ? `${v.first_name}${v.place ? ` in ${v.place}` : ""}` : (item.label ?? station);
+  meta.artist = v ? `Listener voice${v.kind === "dedication" && v.for_name ? ` · Dedication for ${v.for_name}` : ""}` : isSong ? item.artist || "Kizzi" : station;
   meta.albumName = (isSong && item.album_title) || station;
   meta.images = [new chrome.cast.Image(absolute(item.artwork_url ? mediaUrl(item.artwork_url) : "/icons/icon-512.png"))];
   info.metadata = meta;

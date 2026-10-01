@@ -15,9 +15,16 @@ mediaRoutes.get("/*", async (c) => {
   // The Studio hears pending songs through its own authenticated route.
   if (key.startsWith("contest/") && !key.startsWith("contest/approved/")) return c.notFound();
 
+  // "Say it on air": a listener's raw recording is never served publicly, key
+  // or no key. Kizzi hears it through the Studio's own authenticated route;
+  // only the audio he prepares and approves (audio/onair-*.wav) is public.
+  if (key.startsWith("onair/")) return c.notFound();
+
   // Approved contest files can still be withdrawn later, so they're only
   // cached for an hour rather than a year.
-  const cacheControl = key.startsWith("contest/") ? "public, max-age=3600" : "public, max-age=31536000, immutable";
+  // Voice notes too: a listener can remove their clip after it has aired.
+  const cacheControl =
+    key.startsWith("contest/") || key.startsWith("audio/onair-") ? "public, max-age=3600" : "public, max-age=31536000, immutable";
   const res = await streamR2Object(c.env.MEDIA, key, c.req.header("Range"), cacheControl);
   return res ?? c.notFound();
 });

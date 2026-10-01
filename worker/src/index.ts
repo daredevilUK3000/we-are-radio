@@ -27,6 +27,8 @@ import { contestPublicRoutes } from "./routes/contest";
 import { contestStudioRoutes } from "./routes/contestStudio";
 import { likePublicRoutes, likeStudioRoutes } from "./routes/likes";
 import { contactRoutes } from "./routes/contact";
+import { onAirPublicRoutes } from "./routes/onAir";
+import { onAirStudioRoutes } from "./routes/onAirStudio";
 import { schedulerDevRoutes } from "./routes/schedulerDev";
 import { runMinute } from "./lib/scheduler/cron";
 import { schedulerRoutes } from "./routes/scheduler";
@@ -62,6 +64,8 @@ app.route("/api/contest", contestPublicRoutes);
 app.route("/api/likes", likePublicRoutes);
 // The contact page (/contact) - public for the same reason.
 app.route("/api/contact", contactRoutes);
+// "Say it on air" voice notes (/on-air) - public for the same reason.
+app.route("/api/on-air", onAirPublicRoutes);
 // Local-only Scheduler test hooks (404 unless SCHED_DEV = "1").
 app.route("/dev/scheduler", schedulerDevRoutes);
 
@@ -99,6 +103,7 @@ studio.route("/analytics", analyticsStudioRoutes);
 studio.route("/contest", contestStudioRoutes);
 studio.route("/likes", likeStudioRoutes);
 studio.route("/scheduler", schedulerRoutes);
+studio.route("/on-air", onAirStudioRoutes);
 app.route("/studio/api", studio);
 
 // Streams audio straight out of R2 - not gated on Studio auth, since

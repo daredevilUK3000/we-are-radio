@@ -350,8 +350,14 @@ export const studioApi = {
       body: JSON.stringify({ items }),
     }),
 
-  audioAssets: (opts?: { storage?: "r2" | "external" }) =>
-    request<{ audio_assets: any[] }>(`${STUDIO_BASE}/audio-assets${opts?.storage ? `?storage=${opts.storage}` : ""}`),
+  /** voices: only listener voice notes ("Say it on air"), which the default list leaves out. */
+  audioAssets: (opts?: { storage?: "r2" | "external"; voices?: boolean }) => {
+    const qs = new URLSearchParams();
+    if (opts?.storage) qs.set("storage", opts.storage);
+    if (opts?.voices) qs.set("voices", "1");
+    const query = qs.toString();
+    return request<{ audio_assets: any[] }>(`${STUDIO_BASE}/audio-assets${query ? `?${query}` : ""}`);
+  },
   createAudioAsset: (data: Record<string, unknown>) =>
     request<{ id: string }>(`${STUDIO_BASE}/audio-assets`, { method: "POST", body: JSON.stringify(data) }),
   timeCapsules: () => request<{ capsules: any[]; today: string }>(`${STUDIO_BASE}/time-capsules`),

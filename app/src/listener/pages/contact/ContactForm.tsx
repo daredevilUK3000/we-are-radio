@@ -295,6 +295,12 @@ export function ContactForm({ topic: topicKey }: { topic: TopicKey }) {
 
         {topic.fields.map(extraInput)}
 
+        {topic.key === "request" && (
+          <p className="c3p-field is-full c3p-onair-note">
+            Want to say it in your own voice? <Link to="/on-air">Record it here.</Link>
+          </p>
+        )}
+
         <label className="c3p-field is-full">
           <span className="c3p-label">Your message</span>
           <textarea

@@ -129,6 +129,17 @@ export async function channelHealth(env: Env, channel: Channel, sc: SchedChannel
     } else if (g.hasGrid) add("grid_now", "green", "Playing what the grid says", g.now ? `${g.now.block.name} is on.` : "Channel default is on.");
   }
   out.push(...(await gridFillChecks(env.DB, channel, blocks, nowMs)));
+
+  // Listener voice notes the placer has given up on (3 failed tries): shown only when there are some.
+  const stuck = await env.DB.prepare(
+    "SELECT first_name, flag FROM onair_messages WHERE air_channel_id = ? AND status = 'scheduled' AND flag LIKE 'Couldn''t place%' LIMIT 5"
+  )
+    .bind(channel.id)
+    .all<{ first_name: string; flag: string }>()
+    .catch(() => ({ results: [] as { first_name: string; flag: string }[] }));
+  if (stuck.results.length) {
+    add("voice_notes", "amber", "Voice notes can't be placed", stuck.results.map((r) => `${r.first_name}: ${r.flag.replace(/^Couldn't place this: /, "")}`).join(" · "));
+  }
   return out;
 }
 

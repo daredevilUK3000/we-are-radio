@@ -26,6 +26,10 @@ audioAssetRoutes.get("/", async (c) => {
     sql += " AND storage = ?";
     params.push(storage);
   }
+  // Listener voice notes ("Say it on air") would clutter the links library:
+  // hidden by default, and the only thing shown with ?voices=1.
+  const voices = "aa.id IN (SELECT audio_asset_id FROM onair_messages WHERE audio_asset_id IS NOT NULL)";
+  sql += c.req.query("voices") === "1" ? ` AND ${voices}` : ` AND NOT ${voices}`;
   sql += " ORDER BY created_at DESC LIMIT 200";
 
   const { results } = await c.env.DB.prepare(sql).bind(...params).all<AudioAsset & { tag_names: string | null; pin_count: number; pin_titles: string | null; capsule_count: number }>();
