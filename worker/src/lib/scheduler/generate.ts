@@ -1,5 +1,5 @@
 import type { Channel, Env } from "../types";
-import { hashSeed } from "../radioBrain";
+import { hashSeed, ROTATION_RULES } from "../radioBrain";
 import { loadGridBlocks } from "./grid";
 import { Planner, PlanError } from "./plan";
 import { liveMax, logChange, publishVersion, type PublishResult, type VersionKind, type VersionRow } from "./store";
@@ -77,7 +77,8 @@ export async function catalogueDigest(db: D1Database): Promise<string> {
 }
 
 export function channelFingerprint(channel: Channel, catalogue: string, gridDigest: string): string {
-  return `${catalogue}|${hashSeed(
+  // ROTATION_RULES: changing the rules (how often jingles play) rebuilds every channel's log too.
+  return `${catalogue}|${ROTATION_RULES}|${hashSeed(
     [channel.programming_mode, channel.catalogue_rules ?? "", channel.name, channel.description ?? "", channel.status].join("|")
   )}|${gridDigest}`;
 }

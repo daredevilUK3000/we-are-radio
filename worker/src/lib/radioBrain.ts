@@ -137,6 +137,16 @@ export function seededShuffle<T>(arr: T[], seed: number): T[] {
 }
 
 const STATION_ID_TARGET_SECONDS = 17.5 * 60; // midpoint of the brief's 15-20 min
+
+/**
+ * The station rotation's jingle rule: one after every this many songs (Kizzi,
+ * 1 Oct 2026: "every other song" - every 15-20 minutes sounded like a
+ * playlist). Sequenced jingles play between songs; "over the music" ones are
+ * voiced over the next song's intro.
+ */
+export const STATION_JINGLE_EVERY_SONGS = 2;
+/** Bumped whenever the rotation rules change, so cached rotations and the Scheduler's logs are rebuilt. */
+export const ROTATION_RULES = `jingles-every-${STATION_JINGLE_EVERY_SONGS}-songs-no-double`;
 const ENERGY_TIERS = ["low", "medium", "high"];
 
 /**
@@ -197,7 +207,9 @@ export function buildRotation(
     artwork_url: t.artwork_url,
   }));
 
-  return insertStationIds(withPinnedJingles(songItems, pins), stationIds, hashSeed(seedKey + ":ids"));
+  // The jingles in a seeded order, so they don't always come round in upload order.
+  const ids = seededShuffle(stationIds, hashSeed(seedKey + ":id-order"));
+  return insertStationIds(withPinnedJingles(songItems, pins), ids, hashSeed(seedKey + ":ids"), { everySongs: STATION_JINGLE_EVERY_SONGS });
 }
 
 // Rejection-based local smoothing: if two adjacent tracks share an album,
@@ -244,13 +256,22 @@ function alternateEnergy(tracks: Track[]): Track[] {
   return out;
 }
 
+/** A pinned jingle starting within this many seconds of a song counts as that song's intro jingle. */
+const PINNED_INTRO_SECONDS = 30;
+
+function opensWithPinnedJingle(item: RotationItem | undefined): boolean {
+  return !!item && item.item_type === "song" && !!item.overlays?.some((o) => o.start_offset_seconds <= PINNED_INTRO_SECONDS);
+}
+
 export function insertStationIds(
   items: RotationItem[],
   stationIds: AudioAsset[],
   seed: number,
-  opts: { leading?: boolean } = {}
+  /** everySongs: one jingle after every N songs, instead of every 15-20 minutes. */
+  opts: { leading?: boolean; everySongs?: number } = {}
 ): RotationItem[] {
   if (stationIds.length === 0) return items;
+  let songsSinceId = 0;
 
   const rand = mulberry32(seed);
   const out: RotationItem[] = [];
@@ -268,6 +289,7 @@ export function insertStationIds(
       pendingOverlay = asset;
       nextIdIndex++;
       sinceLastId = 0;
+      songsSinceId = 0;
       return;
     }
     out.push({
@@ -282,12 +304,13 @@ export function insertStationIds(
     });
     nextIdIndex++;
     sinceLastId = 0;
+    songsSinceId = 0;
   };
 
   if (opts.leading) pushStationId();
 
-  for (const source of items) {
-    let item = source;
+  for (let index = 0; index < items.length; index++) {
+    let item = items[index];
     // A song that already carries pinned jingles waits: the rotation jingle goes on the next song.
     if (pendingOverlay && item.item_type === "song" && !item.overlays?.length) {
       const asset: AudioAsset = pendingOverlay;
@@ -310,6 +333,18 @@ export function insertStationIds(
       };
     }
     out.push(item);
+    if (opts.everySongs) {
+      // A jingle waiting to go over the next intro already counts as this gap's jingle.
+      if (item.item_type === "song") songsSinceId++;
+      if (songsSinceId >= opts.everySongs && !pendingOverlay) {
+        // The next song opens with its own pinned jingle: that is this gap's
+        // jingle, so the rotation doesn't play one too (two in a row, often
+        // the same one, sounded doubled).
+        if (opensWithPinnedJingle(items[index + 1])) songsSinceId = 0;
+        else pushStationId();
+      }
+      continue;
+    }
     sinceLastId += item.duration_seconds;
     // 15-20 minutes, randomised (but seeded) per insertion so it doesn't
     // feel metronomic.

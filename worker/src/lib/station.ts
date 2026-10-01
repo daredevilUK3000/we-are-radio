@@ -1,6 +1,6 @@
 import type { AudioAsset, Channel, Programme, Track } from "./types";
 import { loadCapsulesFor, loadTodaysCapsules, stationToday, withCapsules, type CapsuleClip } from "./capsules";
-import { buildRotation, hashSeed, withPinnedJingles, type PinnedJingle, type RotationItem } from "./radioBrain";
+import { buildRotation, hashSeed, ROTATION_RULES, withPinnedJingles, type PinnedJingle, type RotationItem } from "./radioBrain";
 
 /**
  * A channel's loop: what /now-playing has always played, and what the
@@ -200,7 +200,8 @@ async function loadAutopilotLoop(db: D1Database, kv: KVNamespace, channel: Chann
   const pins = await loadPinnedJingles(db);
   // The day's time capsules are part of the rotation, so which ones are due is part of the key too.
   const capsuleConfig = capsules.map((cp) => cp.id).join(",");
-  const hash = hashSeed(fingerprint + "|" + playbackConfig + "|" + pinsConfig(pins) + "|" + capsuleConfig);
+  // ROTATION_RULES: a change to the rules themselves (how often jingles play) rebuilds every cached rotation.
+  const hash = hashSeed(fingerprint + "|" + playbackConfig + "|" + pinsConfig(pins) + "|" + capsuleConfig + "|" + ROTATION_RULES);
   const cacheKey = `radio-brain:${channel.id}:${hash}`;
 
   let items = await kv.get<RotationItem[]>(cacheKey, "json");
