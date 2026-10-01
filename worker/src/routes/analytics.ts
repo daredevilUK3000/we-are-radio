@@ -70,7 +70,11 @@ interface ListeningEventInput {
   source?: string;
   wildcard?: boolean;
   listened_seconds?: number | null;
+  platform?: string | null;
 }
+
+const PLATFORMS = ["tv", "firetv"];
+const TV_EVENT_TYPES = ["tv_open", "tv_channel_change", "tv_lean_back", "tv_shout_out_qr_shown"];
 
 analyticsPublicRoutes.post("/listening", async (c) => {
   const body = await c.req.json<{ events?: ListeningEventInput[] }>().catch(() => ({}) as { events?: ListeningEventInput[] });
@@ -109,8 +113,8 @@ analyticsPublicRoutes.post("/listening", async (c) => {
     statements.push(
       c.env.DB.prepare(
         `INSERT INTO listening_events
-           (event_type, content_type, content_id, channel_id, mood, source, is_wildcard, listened_seconds, timestamp)
-         SELECT ?,?,?,?,?,?,?,?,?
+           (event_type, content_type, content_id, channel_id, mood, source, is_wildcard, listened_seconds, timestamp, platform)
+         SELECT ?,?,?,?,?,?,?,?,?,?
          WHERE ${checks.length > 0 ? checks.join(" AND ") : "1"}`
       ).bind(
         e.type,
@@ -122,6 +126,7 @@ analyticsPublicRoutes.post("/listening", async (c) => {
         e.wildcard ? 1 : null,
         listened,
         ts,
+        PLATFORMS.includes(String(e.platform)) ? String(e.platform) : null,
         ...checkParams
       )
     );
@@ -149,6 +154,21 @@ analyticsPublicRoutes.post("/restart", async (c) => {
     .bind(channelId, trackId, secondsIn, new Date().toISOString(), channelId, trackId)
     .run();
   return c.json({ logged: r.meta.changes ?? 0 });
+});
+
+// TV-only moments (handoff_tv_firetv.md §A11).
+analyticsPublicRoutes.post("/tv", async (c) => {
+  const body = await c.req
+    .json<{ type?: string; platform?: string; channel_id?: string | null }>()
+    .catch(() => ({}) as { type?: string; platform?: string; channel_id?: string | null });
+  if (!TV_EVENT_TYPES.includes(String(body.type)) || !PLATFORMS.includes(String(body.platform))) return c.json({ logged: 0 });
+  if (isBot(c.req.header("user-agent"))) return c.json({ logged: 0 });
+  if (tooMany(c.req.header("cf-connecting-ip") ?? "unknown", 1)) return c.json({ error: "slow down" }, 429);
+  const channelId = body.channel_id && ID_PATTERN.test(String(body.channel_id)) ? String(body.channel_id) : null;
+  await c.env.DB.prepare("INSERT INTO tv_events (event_type, platform, channel_id, timestamp) VALUES (?,?,?,?)")
+    .bind(body.type, body.platform, channelId, new Date().toISOString())
+    .run();
+  return c.json({ logged: 1 });
 });
 
 analyticsPublicRoutes.post("/site", async (c) => {

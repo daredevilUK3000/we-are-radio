@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>We Are Radio</title>
+<style>
+  /* Bundled in the app: shown when weareradio.app can't be reached (no network, or a page error). */
+  html, body { margin: 0; height: 100%; background: #08080a; color: #f5f4f0; font-family: "Work Sans", Arial, sans-serif; cursor: none; overflow: hidden; }
+  main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4vh; text-align: center; padding: 5vh 5vw; box-sizing: border-box; }
+  img { width: 28vw; max-width: 520px; height: auto; }
+  h1 { margin: 0; font-family: Oswald, Arial Narrow, Arial, sans-serif; font-weight: 600; font-size: 4.2vw; }
+  p { margin: 0; font-size: 2vw; color: #c9c7c1; max-width: 60vw; line-height: 1.4; }
+  button { margin-top: 2vh; font: 600 2.1vw "Work Sans", Arial, sans-serif; padding: 1.6vw 4vw; border-radius: 999px; border: none; background: #e11d2e; color: #fff; }
+  button:focus { outline: none; background: #f5f4f0; color: #08080a; box-shadow: 0 0 0 0.5vw rgba(245, 244, 240, 0.25); }
+  .small { font-size: 1.4vw; color: #a9a7a1; }
+</style>
+</head>
+<body>
+<main>
+  <img src="logo.png" alt="We Are Radio">
+  <h1>We can't reach We Are Radio right now.</h1>
+  <p>Check your internet connection.</p>
+  <button id="retry" type="button">Try again</button>
+  <p class="small">We'll keep trying every 15 seconds.</p>
+</main>
+<script>
+  // The app retries on its own too (every 15 s, and as soon as the network returns).
+  var retry = document.getElementById("retry");
+  retry.focus();
+  retry.addEventListener("click", function () { if (window.WeAreRadioNative && WeAreRadioNative.retry) WeAreRadioNative.retry(); });
+</script>
+</body>
+</html>

@@ -98,6 +98,9 @@ function visitSource(): string {
     if (params.get("ref") === "share") return "shared link";
     const utm = params.get("utm_source");
     if (utm) return utm;
+    // The TV's shout-out QR code links to /on-air?src=tv.
+    const src = params.get("src");
+    if (src === "tv") return "tv";
     if (document.referrer) {
       const host = new URL(document.referrer).hostname.replace(/^www\./, "");
       if (host && host !== location.hostname.replace(/^www\./, "")) return host;
@@ -140,6 +143,18 @@ export interface PlayInfo {
 
 type EventType = "play_started" | "play_completed" | "play_skipped";
 
+/** Set once by the TV app (/tv): every play from this page is tagged with it. */
+let platform: "tv" | "firetv" | null = null;
+export function setAnalyticsPlatform(p: "tv" | "firetv" | null) {
+  platform = p;
+}
+
+/** TV-only moments (handoff_tv_firetv.md §A11). */
+export function trackTv(type: "tv_open" | "tv_channel_change" | "tv_lean_back" | "tv_shout_out_qr_shown", channelId?: string | null) {
+  if (!platform) return;
+  post("/tv", { type, platform, channel_id: channelId ?? null });
+}
+
 let buffer: Record<string, unknown>[] = [];
 let timer: number | undefined;
 
@@ -160,6 +175,7 @@ function log(type: EventType, info: PlayInfo, listenedSeconds?: number) {
     source: info.source,
     wildcard: info.wildcard ? true : undefined,
     listened_seconds: listenedSeconds,
+    ...(platform ? { platform } : {}),
   });
   if (type === "play_started") trackFirstPlay();
   if (timer === undefined && typeof window !== "undefined") timer = window.setTimeout(flush, 400);

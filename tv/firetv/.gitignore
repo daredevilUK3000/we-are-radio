@@ -1,0 +1,12 @@
+# Never commit the signing key or its passwords (see README.md).
+keystore.properties
+*.jks
+*.keystore
+# Build output and local machine files
+build/
+.gradle/
+local.properties
+.idea/
+*.iml
+captures/
+.kotlin/

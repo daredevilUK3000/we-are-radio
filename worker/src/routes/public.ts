@@ -4,6 +4,7 @@ import { findNeed, NEEDS, NEED_KEYS } from "../lib/needs";
 import { addDays, parseCapsuleFields, stationToday } from "../lib/capsules";
 import { enrichItems, loadPinnedJingles, loadStation } from "../lib/station";
 import { nowPlayingFromLog, scheduleFromLog, schedState } from "../lib/scheduler/read";
+import { blocksAround, buildGuide } from "../lib/guide";
 import { newId, nowIso } from "../lib/id";
 import {
   buildRotation,
@@ -249,30 +250,85 @@ publicRoutes.get("/now-playing/version", async (c) => {
   return c.json({ version: row.enabled ? row.live : 0, fallback: !!(row.enabled && row.on_fallback_since_ms) });
 });
 
-publicRoutes.get("/now-playing", async (c) => {
-  const channel = await liveChannel(c.env.DB, c.req.query("channel") ?? "kizzi-radio");
-  if (!channel) return c.json({ error: "channel not found or not live" }, 404);
-
+/** What /now-playing answers for one live channel: the log when the Scheduler drives it, else the old loop. */
+async function nowPlayingFor(env: Env, channel: Channel, waitUntil: (p: Promise<unknown>) => void): Promise<any> {
   // Scheduler on air for this channel: the log (or its emergency playlist).
-  const sched = await schedState(c.env.DB, channel.id).catch(() => null);
+  const sched = await schedState(env.DB, channel.id).catch(() => null);
   if (sched?.enabled) {
-    const body = await nowPlayingFromLog(c.env, channel, sched, Date.now(), (p) => c.executionCtx.waitUntil(p));
-    if (body) return c.json(body);
+    const body = await nowPlayingFromLog(env, channel, sched, Date.now(), waitUntil);
+    if (body) return body;
   }
 
-  const station = await loadStation(c.env.DB, c.env.CONFIG, channel);
+  const station = await loadStation(env.DB, env.CONFIG, channel);
   if (!station.items) {
-    return c.json({ channel, ...(station.programme ? { programme: station.programme } : {}), on_air: false });
+    return { channel, ...(station.programme ? { programme: station.programme } : {}), on_air: false };
   }
   const { currentIndex, position_seconds } = locateInLoop(station.items, station.elapsed);
 
-  return c.json({
+  return {
     channel,
     programme: station.programme,
     on_air: true,
     position_seconds,
-    ...(await describePlayback(c.env.DB, station.items, currentIndex)),
-  });
+    ...(await describePlayback(env.DB, station.items, currentIndex)),
+  };
+}
+
+publicRoutes.get("/now-playing", async (c) => {
+  const channel = await liveChannel(c.env.DB, c.req.query("channel") ?? "kizzi-radio");
+  if (!channel) return c.json({ error: "channel not found or not live" }, 404);
+  return c.json(await nowPlayingFor(c.env, channel, (p) => c.executionCtx.waitUntil(p)));
+});
+
+/**
+ * GET /api/now-playing/all - every live channel at once, for the TV Home
+ * screen (handoff_tv_firetv.md §A3): what's on, how far in, the block on now
+ * and the next one. No audio URLs. The same for everyone: cached 10 s.
+ */
+publicRoutes.get("/now-playing/all", async (c) => {
+  const cacheKey = new Request(`${new URL(c.req.url).origin}/api/now-playing/all`);
+  const cache = (caches as unknown as { default: Cache }).default;
+  const hit = await cache.match(cacheKey).catch(() => undefined);
+  if (hit) return hit;
+
+  const { results: channels } = await c.env.DB.prepare(
+    `SELECT ch.*, COALESCE(sc.enabled, 0) AS sched_enabled FROM channels ch
+     LEFT JOIN sched_channels sc ON sc.channel_id = ch.id WHERE ch.status = 'live' ORDER BY ch.created_at ASC`
+  ).all<Channel & { sched_enabled: number }>();
+  const now = Date.now();
+  const rows = await Promise.all(
+    channels.map(async ({ sched_enabled, ...ch }) => {
+      const np = await nowPlayingFor(c.env, ch, (p) => c.executionCtx.waitUntil(p)).catch(() => null);
+      const item = np?.on_air ? np.now_playing : null;
+      const blocks = sched_enabled ? await blocksAround(c.env, ch.id, now).catch(() => null) : null;
+      return {
+        slug: ch.slug,
+        on_air: !!np?.on_air,
+        title: item?.label ?? null,
+        artist: item?.artist ?? null,
+        artwork_url: item?.artwork_url ?? null,
+        item_type: item?.item_type ?? null,
+        position_seconds: np?.on_air ? (np.position_seconds ?? 0) : null,
+        duration_seconds: item?.duration_seconds ?? null,
+        // A listener's voice note: only the public details the players show.
+        voice: item?.voice ?? null,
+        block: blocks?.block ?? null,
+        next_block: blocks?.next_block ?? null,
+      };
+    })
+  );
+  const res = c.json({ generated_at: Math.round(now / 1000), channels: rows }, 200, { "Cache-Control": "public, max-age=10" });
+  c.executionCtx.waitUntil(cache.put(cacheKey, res.clone()).catch(() => {}));
+  return res;
+});
+
+/**
+ * GET /api/guide?days=7 - the week's programme guide for the TV What's on
+ * screen (and Release 2's public /schedule page). See lib/guide.ts.
+ */
+publicRoutes.get("/guide", async (c) => {
+  const days = Math.min(7, Math.max(1, Math.floor(Number(c.req.query("days")) || 7)));
+  return c.json(await buildGuide(c.env, days), 200, { "Cache-Control": "public, max-age=300" });
 });
 
 /**

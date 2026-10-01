@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { trackVisit } from "./shared/analytics";
 import { Home } from "./listener/pages/Home";
@@ -61,6 +61,9 @@ import { MasterControl } from "./studio/scheduler/MasterControl";
 import { WeeklyGrid } from "./studio/scheduler/WeeklyGrid";
 import { OnAirInbox } from "./studio/pages/OnAirInbox";
 import { onAirStudioApi } from "./api/onAir";
+
+// We Are Radio on TV (handoff_tv_firetv.md): its own code-split bundle, so phones never download it.
+const TvApp = lazy(() => import("./tv/TvApp"));
 
 function ListenerLayout({ children }: { children: React.ReactNode }) {
   // One "visit" per browser tab session, with where it came from (a YouTube link, a newsletter...).
@@ -228,6 +231,15 @@ export default function App() {
           <StudioAuthProvider>
             <StudioApp />
           </StudioAuthProvider>
+        }
+      />
+      {/* Outside the listener layout: no site nav, footer, install card or mini-player. */}
+      <Route
+        path="/tv/*"
+        element={
+          <Suspense fallback={<div style={{ position: "fixed", inset: 0, background: "#08080a" }} />}>
+            <TvApp />
+          </Suspense>
         }
       />
       <Route

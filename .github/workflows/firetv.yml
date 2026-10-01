@@ -1,0 +1,40 @@
+# Builds the Fire TV app's DEBUG APK (tv/firetv) on demand, so Patrick can
+# sideload it without Android Studio. Release builds are signed with his own
+# key and stay on his machine (see tv/firetv/README.md).
+name: Fire TV debug APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tv/firetv
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Android Gradle Plugin 8.11 needs Gradle 8.13 or later.
+          gradle-version: "8.14.3"
+
+      - name: Build the debug APK
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: we-are-radio-tv-debug
+          path: tv/firetv/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
