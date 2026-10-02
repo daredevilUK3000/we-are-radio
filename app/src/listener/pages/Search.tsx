@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { publicApi } from "../../api/client";
+import { publicApi, mediaUrl } from "../../api/client";
 
 export function Search() {
   const [q, setQ] = useState("");
@@ -32,9 +32,24 @@ export function Search() {
             <section>
               <h3>Songs</h3>
               {results.tracks.map((t) => (
-                <div key={t.id} className="card" style={{ marginBottom: 8 }}>
-                  {t.title}
-                </div>
+                <Link
+                  key={t.id}
+                  to={`/track/${t.id}`}
+                  className="card"
+                  style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}
+                >
+                  {t.artwork_url ? (
+                    <img src={mediaUrl(t.artwork_url)} alt="" width={40} height={40} style={{ objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
+                  ) : null}
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block" }}>{t.title}</span>
+                    {(t.artist || t.album_title) && (
+                      <span style={{ display: "block", fontSize: "0.85em", color: "var(--text-dim)" }}>
+                        {[t.artist, t.album_title].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </span>
+                </Link>
               ))}
             </section>
           )}

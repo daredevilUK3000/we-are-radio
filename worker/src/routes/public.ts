@@ -742,10 +742,13 @@ publicRoutes.get("/search", async (c) => {
   const like = `%${q}%`;
 
   const [tracks, albums, programmes] = await Promise.all([
+    // Artist and artwork (the album's when the track has none) so a result can be shown and opened like a song anywhere else.
     c.env.DB.prepare(
-      "SELECT id, title, genre FROM tracks WHERE status='published' AND (title LIKE ? OR description LIKE ?) LIMIT 20"
+      `SELECT t.id, t.title, t.genre, t.artist, al.title AS album_title, COALESCE(t.artwork_url, al.artwork_url) AS artwork_url
+       FROM tracks t LEFT JOIN albums al ON al.id = t.album_id
+       WHERE t.status='published' AND (t.title LIKE ? OR t.description LIKE ? OR t.artist LIKE ?) LIMIT 20`
     )
-      .bind(like, like)
+      .bind(like, like, like)
       .all(),
     c.env.DB.prepare("SELECT id, title, genre FROM albums WHERE title LIKE ? OR description LIKE ? LIMIT 20")
       .bind(like, like)
