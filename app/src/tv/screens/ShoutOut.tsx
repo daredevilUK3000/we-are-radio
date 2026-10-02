@@ -28,8 +28,9 @@ export function ShoutOut() {
         </div>
         <div className="tv-shout-panel">
           <div className="tv-shout-left">
-            <div className="tv-shout-eyebrow">{Icon.mic} Send a shout out</div>
-            <h1 className="tv-shout-title">Say it on air</h1>
+            {/* "Send a shout out" everywhere, at Kizzi's request (1 Oct 2026), rather than the handoff's "Say it on air". */}
+            <div className="tv-shout-eyebrow">{Icon.mic} On We Are Radio</div>
+            <h1 className="tv-shout-title">Send a shout out</h1>
             <p className="tv-shout-line">Record a shout out, a dedication or your take on a song, in your own voice.</p>
             <ol className="tv-shout-steps">
               <li>Scan the code with your phone</li>

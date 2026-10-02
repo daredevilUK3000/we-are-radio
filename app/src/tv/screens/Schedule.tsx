@@ -196,7 +196,8 @@ export function Schedule() {
 
         <div ref={grid.ref} className={`tv-grid${gridFocused ? " is-focused" : ""}`}>
           <div className="tv-ruler" style={{ marginLeft: 296 }}>
-            {ruler.map((t) => (
+            {/* A time under the red "now" tag is hidden rather than drawn half-covered. */}
+            {ruler.filter((t) => Math.abs(xOf(t) - xOf(nowMs)) > 60 || nowMs < winStart || nowMs > winEnd).map((t) => (
               <span key={t} style={{ left: xOf(t) }}>
                 {clockText(t)}
               </span>

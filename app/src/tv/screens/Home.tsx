@@ -143,7 +143,10 @@ export function Home() {
               <OnAirPill />
               <span className="tv-hero-block">{blockLine}</span>
             </div>
-            <h1 className="tv-hero-name">{hero.name}</h1>
+            {/* One line always: long names ("We Are Instrumental") step down from 128 px so the buttons keep their place. */}
+            <h1 className="tv-hero-name" style={{ fontSize: hero.name.length > 16 ? 92 : hero.name.length > 12 ? 110 : 128 }}>
+              {hero.name}
+            </h1>
             {hero.description && <p className="tv-hero-desc">{hero.description}</p>}
             <div className="tv-np-card">
               <div className="tv-np-art">
@@ -203,7 +206,7 @@ export function Home() {
             <h2 className="tv-row-title">More from We Are Radio</h2>
             <Row focusKey="tv-more-row">
               <MoreTile focusKey="tile-schedule" tone="schedule" title="What's on" sub="The week on every channel" onPress={() => navigate("/tv/schedule")} onFocus={() => setMoreFocused(true)} />
-              <MoreTile focusKey="tile-shout" tone="shout" title="Send a shout out" sub="Say it on air from your phone" onPress={() => navigate("/tv/shout-out")} onFocus={() => setMoreFocused(true)} />
+              <MoreTile focusKey="tile-shout" tone="shout" title="Send a shout out" sub="Record yours on your phone" onPress={() => navigate("/tv/shout-out")} onFocus={() => setMoreFocused(true)} />
               <MoreTile focusKey="tile-lean" tone="lean" title="Lean back" sub="Just the music, and the time" onPress={() => ui.enterLeanBack()} onFocus={() => setMoreFocused(true)} />
             </Row>
           </section>
