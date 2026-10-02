@@ -17,6 +17,7 @@ import { useOfflineBlocks, useOnline } from "../../shared/offline";
 import { useStationLog } from "../lib/useStationLog";
 import { usePauseForRecording } from "./onair/recording";
 import { voiceLines } from "./onair/voice";
+import { GoodOnAirPill, isGood } from "./good/GoodOnAir";
 import { fadeIn, useRewind } from "../lib/useRewind";
 import { BackToLivePill } from "./PlayerRewind";
 
@@ -454,11 +455,27 @@ export function NowPlayingBar() {
                 <>
                   <span className="lv-pill">Listener voice</span> {voiceLines(shown.now_playing.voice).title}
                 </>
+              ) : isGood(shown.now_playing) ? (
+                <>
+                  <GoodOnAirPill small /> {shown.now_playing.label}
+                </>
               ) : (
                 (shown.now_playing?.label ?? "We Are Radio")
               )}
             </span>
-            <span className="mp-programme">{upNextLabel ? `Next: ${upNextLabel}` : shown.programme?.title}</span>
+            <span className="mp-programme">
+              {upNextLabel ? (
+                isGood(shown.up_next) ? (
+                  <>
+                    Next: <span className="afg-green">{upNextLabel}</span>
+                  </>
+                ) : (
+                  `Next: ${upNextLabel}`
+                )
+              ) : (
+                shown.programme?.title
+              )}
+            </span>
           </span>
           <svg className="mp-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 15l6-6 6 6" />

@@ -8,6 +8,7 @@ import { formatClock } from "../lib/audioUtils";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { OnAirSheet, SayItOnAirButton } from "./onair/OnAirSheet";
 import { ListenerVoicePill, voiceLines } from "./onair/voice";
+import { GOOD_ON_AIR_SUB, GoodOnAirPill, GoodOnAirTitle, isGood } from "./good/GoodOnAir";
 import { BackToLivePill, StartOverButton } from "./PlayerRewind";
 import { JustPlayed, useJustPlayed } from "./JustPlayed";
 
@@ -82,7 +83,9 @@ function QueueRow({ label, item }: { label: string; item: any }) {
   return (
     <li className="np-queue-row">
       <span className="np-queue-label">{label}</span>
-      <span className="np-queue-title">{item.label ?? "We Are Radio"}</span>
+      <span className="np-queue-title">
+        {isGood(item) && <GoodOnAirPill small />} {item.label ?? "We Are Radio"}
+      </span>
       {item.album_title && <span className="np-queue-sub">{item.album_title}</span>}
     </li>
   );
@@ -131,6 +134,7 @@ export function NowPlayingExpanded({
   // Refreshed when this view opens and whenever the station moves on.
   const justPlayed = useJustPlayed(channelSlug, (liveNow ?? now)?.id);
   const voice = now?.voice ? voiceLines(now.voice) : null;
+  const good = !voice && isGood(now);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // Focus, Escape to close, and no scrolling of the page behind.
@@ -220,11 +224,17 @@ export function NowPlayingExpanded({
             </div>
 
             <div className="np-block np-block-current">
-              <div className="np-eyebrow">{voice ? <ListenerVoicePill /> : isSong ? "Now playing" : "On air now"}</div>
+              <div className="np-eyebrow">{voice ? <ListenerVoicePill /> : good ? <GoodOnAirPill /> : isSong ? "Now playing" : "On air now"}</div>
               <h1 className="np-title" key={now?.id}>
-                {voice ? voice.title : (now?.label ?? "We Are Radio")}
+                {voice ? voice.title : good ? <GoodOnAirTitle item={now} onNavigate={onClose} /> : (now?.label ?? "We Are Radio")}
               </h1>
-              {voice?.sub ? <div className="np-meta lv-sub">{voice.sub}</div> : meta && <div className="np-meta">{meta}</div>}
+              {voice?.sub ? (
+                <div className="np-meta lv-sub">{voice.sub}</div>
+              ) : good ? (
+                <div className="np-meta afg-onair-sub">{GOOD_ON_AIR_SUB}</div>
+              ) : (
+                meta && <div className="np-meta">{meta}</div>
+              )}
             </div>
 
             <Waveform playing={playing} seed={`${now?.id ?? ""}${now?.label ?? ""}`} />

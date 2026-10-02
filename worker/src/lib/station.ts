@@ -302,6 +302,22 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
     for (const row of results) albumByTrack.set(row.id, row);
   }
 
+  // Advertising For Good ads on air (migrations/0022) carry `good`, so the
+  // players can label them. slug is null when the ad is hidden from the site:
+  // still labelled, just with nothing to link to.
+  const assetIds = Array.from(new Set(items.map((i) => (i && !i.track_id ? i.audio_asset_id : null)).filter((id): id is string => !!id)));
+  const goodByAsset = new Map<string, { slug: string | null }>();
+  if (assetIds.length > 0) {
+    const { results } = await db
+      .prepare(
+        `SELECT id, CASE WHEN afg_published = 1 AND status = 'published' THEN afg_slug END AS slug
+         FROM audio_assets WHERE afg = 1 AND id IN (${assetIds.map(() => "?").join(",")})`
+      )
+      .bind(...assetIds)
+      .all<{ id: string; slug: string | null }>();
+    for (const row of results) goodByAsset.set(row.id, { slug: row.slug });
+  }
+
   return items.map((item) => {
     if (!item) return item;
     const album = item.track_id ? albumByTrack.get(item.track_id) : undefined;
@@ -312,6 +328,7 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
       album_title: album?.album_title ?? null,
       artwork_url: item.artwork_url ?? album?.album_artwork_url ?? null,
       ...(item.item_type === "song" ? { is_contest_entry: !!album?.is_contest_entry } : {}),
+      ...(!item.track_id && item.audio_asset_id && goodByAsset.has(item.audio_asset_id) ? { good: goodByAsset.get(item.audio_asset_id) } : {}),
     };
   });
 }

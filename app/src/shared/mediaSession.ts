@@ -205,7 +205,8 @@ export function radioSessionInfo(data: any): MediaSessionInfo | null {
   const art = now?.artwork_url ? mediaUrl(now.artwork_url) : STATION_ARTWORK;
   return {
     title: now?.label ?? station,
-    artist: isSong ? now?.artist || "Kizzi" : station,
+    // An Advertising For Good ad shows as that on the lock screen, not as the station.
+    artist: isSong ? now?.artist || "Kizzi" : now?.good ? "Advertising For Good" : station,
     album: (isSong && now?.album_title) || station,
     artworkUrl: new URL(art, window.location.href).href,
   };

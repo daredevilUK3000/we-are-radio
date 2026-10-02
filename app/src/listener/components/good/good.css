@@ -327,6 +327,50 @@
   color: var(--good);
 }
 
+/* ---------------------------------------------------------------- on air (players) */
+
+/* Sits where the gold "Listener voice" pill does (onair.css .lv-pill). */
+.afg-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--good);
+  color: var(--good-ink);
+  font-family: "Oswald", -apple-system, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.afg-pill-small {
+  gap: 4px;
+  padding: 1px 7px;
+  font-size: 9px;
+  margin-right: 4px;
+}
+
+.afg-onair-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--good-line);
+  text-underline-offset: 0.12em;
+}
+
+.afg-onair-link:hover,
+.afg-onair-link:focus-visible {
+  color: var(--good);
+}
+
+.afg-onair-sub,
+.listener-shell .np-meta.afg-onair-sub {
+  color: var(--good);
+}
+
 /* ---------------------------------------------------------------- /good */
 
 .afg-page {
