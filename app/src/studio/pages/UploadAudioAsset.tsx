@@ -47,6 +47,10 @@ export function UploadAudioAsset() {
   const [description, setDescription] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  // Advertising For Good (from the Audio page's For Good tab it starts ticked):
+  // it airs as an ordinary jingle and also shows on the site, last in order.
+  const fromGood = searchParams.get("kind") === "good";
+  const [afg, setAfg] = useState(fromGood);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
@@ -74,6 +78,11 @@ export function UploadAudioAsset() {
       });
 
       if (type === "link" && linkNeeds.length > 0) await studioApi.setAudioAssetTags(created.id, linkNeeds);
+      if (goesLive && afg) {
+        await studioApi.updateGoodAd(created.id, { afg: true });
+        navigate("/studio/audio?tab=good");
+        return;
+      }
       // Straight back to the section it was uploaded into.
       navigate(spoken ? "/studio/audio?tab=spoken" : "/studio/audio");
     } catch (err) {
@@ -85,7 +94,7 @@ export function UploadAudioAsset() {
 
   return (
     <div style={{ maxWidth: 480 }}>
-      <h1>{spoken ? "Upload spoken audio" : "Upload jingle"}</h1>
+      <h1>{spoken ? "Upload spoken audio" : fromGood ? "Upload an Advertising For Good ad" : "Upload jingle"}</h1>
       <form onSubmit={submit}>
         <div className="form-row">
           <label>Type</label>
@@ -134,6 +143,18 @@ export function UploadAudioAsset() {
           <label>Description</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         </div>
+        {goesLive && (
+          <div className="form-row">
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="checkbox" checked={afg} onChange={(e) => setAfg(e.target.checked)} style={{ width: "auto" }} />
+              Advertising For Good
+            </label>
+            <p style={{ color: "var(--text-dim)", fontSize: "0.85rem", margin: "4px 0 0" }}>
+              Also shows it on the site (/good and the landing page), last in order. You can feature it, reorder it or hide it from
+              the For Good tab.
+            </p>
+          </div>
+        )}
         <div className="form-row">
           <label>Audio file</label>
           <input type="file" accept="audio/*" onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)} required />

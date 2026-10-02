@@ -5,6 +5,7 @@ import { ChipPicker } from "../components/ChipPicker";
 import { JingleSettings, JinglePreviewButton, PreviewSongPicker } from "../components/JingleSettings";
 import { MOOD_OPTIONS } from "../lib/presets";
 import { LINK_KINDS } from "./RecordLink";
+import { GoodAdsPanel } from "../components/GoodAdsPanel";
 
 // The Audio library is split in two so a jingle is never lost among the
 // spoken material: each type belongs to exactly one section, so anything
@@ -62,6 +63,8 @@ export function AudioAssets() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const tab: TabKey = tabParam === "spoken" || tabParam === "voices" ? tabParam : "jingles";
+  // Advertising For Good: its own tab, with its own list (components/GoodAdsPanel.tsx).
+  const goodTab = tabParam === "good";
 
   const [assets, setAssets] = useState<any[]>([]);
   const [voiceAssets, setVoiceAssets] = useState<any[]>([]);
@@ -108,8 +111,9 @@ export function AudioAssets() {
       (!query || a.title.toLowerCase().includes(query) || tagsFor(a).some((t) => t.toLowerCase().includes(query)))
   );
 
-  const switchTab = (key: TabKey) => {
+  const switchTab = (key: TabKey | "good") => {
     setSearchParams(key === "jingles" ? {} : { tab: key });
+    if (key === "good") return;
     setSearch("");
     setPlayingId(null);
     setEditingTagsId(null);
@@ -129,21 +133,34 @@ export function AudioAssets() {
               ● Record a link
             </Link>
           )}
+          {goodTab ? (
+            <Link to="/studio/audio/upload?kind=good" className="btn primary">
+              Upload an Advertising For Good ad
+            </Link>
+          ) : (
           <Link to={`/studio/audio/upload?kind=${tab}`} className={tab === "spoken" ? "btn" : "btn primary"}>
             {current.upload}
           </Link>
+          )}
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         {(Object.keys(TABS) as TabKey[]).map((key) => (
-          <button key={key} className={`chip${tab === key ? " selected" : ""}`} onClick={() => switchTab(key)}>
+          <button key={key} className={`chip${tab === key && !goodTab ? " selected" : ""}`} onClick={() => switchTab(key)}>
             {TABS[key].label}
             {loaded ? ` (${countFor(key)})` : ""}
           </button>
         ))}
+        <button className={`chip${goodTab ? " selected" : ""}`} onClick={() => switchTab("good")}>
+          For Good{loaded ? ` (${assets.filter((a) => a.afg).length})` : ""}
+        </button>
       </div>
 
+      {goodTab ? (
+        <GoodAdsPanel jingles={assets} onChanged={load} />
+      ) : (
+      <>
       <p style={{ color: "var(--text-dim)" }}>{current.blurb}</p>
 
       <div className="form-row" style={{ maxWidth: 320 }}>
@@ -172,7 +189,14 @@ export function AudioAssets() {
           {visible.map((a) => (
             <Fragment key={a.id}>
               <tr>
-                <td>{a.title}</td>
+                <td>
+                  {a.title}
+                  {a.afg ? (
+                    <span className="badge live" style={{ marginLeft: 6 }}>
+                      For Good
+                    </span>
+                  ) : null}
+                </td>
                 <td>
                   <span className="badge">{TYPE_LABELS[a.type] ?? a.type}</span>
                 </td>
@@ -248,6 +272,18 @@ export function AudioAssets() {
                       {editingPlaybackId === a.id ? "Close" : "Playback settings"}
                     </button>
                   )}
+                  {showPlaybackColumn && !a.afg && (
+                    <button
+                      className="btn"
+                      title="Show it on the site as Advertising For Good (it keeps airing as it does now)"
+                      onClick={async () => {
+                        await studioApi.updateGoodAd(a.id, { afg: true });
+                        load();
+                      }}
+                    >
+                      Add to For Good
+                    </button>
+                  )}
                   {a.status !== "published" && (
                     <button className="btn" onClick={() => setStatus(a.id, "published")}>
                       Publish
@@ -293,6 +329,8 @@ export function AudioAssets() {
           )}
         </tbody>
       </table>
+      </>
+      )}
     </div>
   );
 }

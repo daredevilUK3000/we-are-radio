@@ -1,0 +1,517 @@
+/* Advertising For Good (handoff_advertising_for_good.md). Its own green
+   (--good tokens in global.css .listener-shell) so it reads apart from the
+   red on-air look and the gold Top 3. The card is a sibling of Radio That
+   Knows You (.kyu): same radius, padding and eyebrow pill, tinted green. */
+
+/* ---------------------------------------------------------------- hero line */
+
+.afg-hero-line {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  min-height: 44px;
+  margin-top: 22px;
+  padding: 6px 6px;
+  color: #d6d6da;
+  font-size: 15px;
+  line-height: 1.4;
+  text-decoration: none;
+  text-align: left;
+}
+
+.afg-hero-line b {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.afg-hero-line:hover span:last-child,
+.afg-hero-line:focus-visible span:last-child {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.afg-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--good);
+}
+
+/* ---------------------------------------------------------------- the card */
+
+.afg-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  padding: 56px 60px 40px;
+  background: radial-gradient(circle at 12% 12%, var(--good-soft), transparent 55%), var(--bg-raised);
+  border: 1px solid var(--good-line);
+}
+
+.afg-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.afg-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: var(--good-soft);
+  border: 1px solid var(--good-line);
+  color: var(--good);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.afg-heading {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
+  line-height: 1.02;
+  letter-spacing: -0.005em;
+  margin: 22px 0 18px;
+}
+
+.afg-green {
+  color: var(--good);
+}
+
+.afg-body {
+  margin: 0 0 14px;
+  max-width: 500px;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.afg-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--good);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.afg-more:hover,
+.afg-more:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------- players */
+
+.afg-play {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--good-line);
+  background: var(--good-soft);
+  color: var(--good);
+  cursor: pointer;
+}
+
+.afg-play:hover {
+  border-color: var(--good);
+}
+
+.afg-play:focus-visible,
+.afg-share:focus-visible,
+.afg-cta:focus-visible {
+  outline: 2px solid var(--good);
+  outline-offset: 3px;
+}
+
+.afg-play-big {
+  width: 68px;
+  height: 68px;
+  border: none;
+  background: var(--good);
+  color: var(--good-ink);
+}
+
+.afg-featured {
+  padding: 22px 22px 20px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--border);
+}
+
+.afg-featured-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.afg-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--good);
+}
+
+.afg-time {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.afg-featured-main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.afg-featured-text {
+  min-width: 0;
+}
+
+.afg-featured-title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+
+.afg-featured-sub {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.afg-wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 40px;
+  margin-top: 20px;
+}
+
+.afg-wave-bar {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background-color 0.2s ease;
+}
+
+.afg-wave-bar.is-done {
+  background: var(--good);
+}
+
+.afg-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.afg-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 18px 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.afg-row-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+.afg-row-time {
+  color: var(--text-dim);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.afg-row-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--good);
+}
+
+.afg-list-all a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 0 18px;
+  color: var(--good);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.afg-list-all a:hover,
+.afg-list-all a:focus-visible {
+  background: var(--good-soft);
+}
+
+.afg-points {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: 36px 0 0;
+  padding: 24px 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.afg-points li {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.afg-points li::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--good);
+}
+
+/* ---------------------------------------------------------------- nav + footer */
+
+.listener-shell .top-nav nav a.afg-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--good-line);
+  border-radius: 999px;
+  color: var(--good);
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.listener-shell .top-nav nav a.afg-nav-pill:hover,
+.listener-shell .top-nav nav a.afg-nav-pill.active {
+  background: var(--good-soft);
+  border-color: var(--good);
+}
+
+.site-footer nav a.afg-footer-link {
+  color: var(--good);
+}
+
+/* ---------------------------------------------------------------- /good */
+
+.afg-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 48px 20px 60px;
+}
+
+.afg-page-title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: clamp(2.4rem, 7vw, 4rem);
+  line-height: 1.02;
+  margin: 22px 0 16px;
+}
+
+.afg-page-sub {
+  max-width: 620px;
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.afg-page-section {
+  margin-top: 44px;
+}
+
+.afg-page-section h2 {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1.6rem;
+  margin: 0 0 12px;
+}
+
+.afg-page-section p {
+  max-width: 640px;
+  margin: 0 0 12px;
+  line-height: 1.65;
+  color: var(--text-dim);
+}
+
+.afg-page-dim {
+  color: var(--text-muted);
+}
+
+.afg-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.afg-ad {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 14px 14px 14px;
+  border-radius: 16px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  scroll-margin: 90px;
+}
+
+.afg-ad.is-highlighted {
+  border-color: var(--good);
+  background: linear-gradient(var(--good-soft), var(--good-soft)), var(--bg-raised);
+  box-shadow: 0 0 0 3px var(--good-soft);
+}
+
+.afg-ad-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.afg-ad-title {
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+.afg-ad-time {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.afg-share {
+  min-height: 44px;
+  padding: 0 14px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.afg-share:hover {
+  border-color: var(--good-line);
+  color: var(--good);
+}
+
+.afg-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  margin-top: 6px;
+  padding: 12px 24px;
+  border-radius: 999px;
+  background: var(--good);
+  color: var(--good-ink);
+  font-weight: 700;
+  text-decoration: none;
+  line-height: 1.3;
+}
+
+/* ---------------------------------------------------------------- phones */
+
+@media (max-width: 860px) {
+  .afg-card {
+    padding: 36px 22px 28px;
+    border-radius: 22px;
+  }
+  .afg-cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+  }
+  .afg-points {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .afg-hero-line {
+    font-size: 14px;
+    margin-top: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  .afg-card {
+    padding: 30px 16px 24px;
+  }
+  .afg-eyebrow {
+    padding: 6px 12px;
+    gap: 8px;
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+  }
+  .afg-featured {
+    padding: 16px 14px;
+  }
+  .afg-featured-main {
+    gap: 12px;
+  }
+  .afg-play-big {
+    width: 56px;
+    height: 56px;
+  }
+  .afg-featured-title {
+    font-size: 1.3rem;
+  }
+  .afg-wave {
+    gap: 2px;
+  }
+  .afg-wave-bar {
+    min-width: 0;
+  }
+  .afg-row {
+    gap: 10px;
+    padding: 10px 12px 10px 10px;
+  }
+  .afg-list-all a {
+    padding: 0 12px;
+    gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .afg-wave-bar {
+    transition: none;
+  }
+}

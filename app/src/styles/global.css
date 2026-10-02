@@ -273,6 +273,11 @@ td {
   --text-muted: #6c6c74;
   --accent: #e11d2e;
   --accent-dim: rgba(225, 29, 46, 0.35);
+  /* Advertising For Good: its own green, apart from on-air red and Top 3 gold. */
+  --good: #2fc28f;
+  --good-soft: rgba(47, 194, 143, 0.14);
+  --good-line: rgba(47, 194, 143, 0.45);
+  --good-ink: #06231a;
   --font-display: "Oswald", -apple-system, sans-serif;
   --font-body: "Work Sans", -apple-system, sans-serif;
   background: var(--bg);

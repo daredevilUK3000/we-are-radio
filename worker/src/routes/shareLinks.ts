@@ -201,3 +201,37 @@ shareLinkRoutes.get("/on-air/:publicId{[A-Za-z0-9]{10}}", async (c) => {
     url: canonical(c.req.raw),
   });
 });
+
+// ---- Advertising For Good ----
+//
+// /good and each ad's own link, /good/<slug>. One static image for all of
+// them (/good-og.jpg, 1200x630, when Kizzi supplies one; until then, the site default).
+async function goodImage(c: { env: Env; req: { raw: Request } }): Promise<string> {
+  const url = new URL("/good-og.jpg", c.req.raw.url);
+  const res = await c.env.ASSETS.fetch(new Request(url, { method: "HEAD" }));
+  return res.ok && (res.headers.get("content-type") ?? "").startsWith("image/") ? url.toString() : defaultImage(c.req.raw);
+}
+
+const goodHomeTags = async (c: { env: Env; req: { raw: Request } }) => ({
+  title: "Advertising For Good · We Are Radio",
+  description: "Ads that ask you to be kind, not to buy. Short messages between the songs on We Are Radio.",
+  image: await goodImage(c),
+  url: `${new URL(c.req.raw.url).origin}/good`,
+});
+
+shareLinkRoutes.get("/good", async (c) => pageWithOg(c.env, c.req.raw, await goodHomeTags(c)));
+
+shareLinkRoutes.get("/good/:slug{[a-z0-9-]{1,80}}", async (c) => {
+  const ad = await c.env.DB.prepare(
+    "SELECT title FROM audio_assets WHERE afg_slug = ? AND afg = 1 AND afg_published = 1 AND status = 'published'"
+  )
+    .bind(c.req.param("slug"))
+    .first<{ title: string }>();
+  if (!ad) return pageWithOg(c.env, c.req.raw, await goodHomeTags(c));
+  return pageWithOg(c.env, c.req.raw, {
+    title: `${ad.title} · Advertising For Good · We Are Radio`,
+    description: "A short message that asks you to be kind, not to buy. Have a listen, and pass it on.",
+    image: await goodImage(c),
+    url: `${new URL(c.req.raw.url).origin}/good/${c.req.param("slug")}`,
+  });
+});

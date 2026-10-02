@@ -762,3 +762,20 @@ publicRoutes.get("/search", async (c) => {
 
   return c.json({ tracks: tracks.results, albums: albums.results, programmes: programmes.results });
 });
+
+// Advertising For Good (migrations/0022): the ads on the site, in display
+// order. Only ads that are both on air (status 'published') and shown on the
+// site; nothing else about them is exposed. The featured one falls back to
+// the first in order if the featured ad has been hidden.
+publicRoutes.get("/good", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, afg_slug AS slug, title, duration_seconds, audio_url, afg_featured AS featured, afg_order AS display_order
+     FROM audio_assets
+     WHERE afg = 1 AND afg_published = 1 AND status = 'published' AND afg_slug IS NOT NULL
+     ORDER BY afg_order IS NULL, afg_order ASC, created_at ASC`
+  ).all<{ id: string; slug: string; title: string; duration_seconds: number; audio_url: string; featured: number; display_order: number | null }>();
+  const ads = results.map((r) => ({ ...r, featured: r.featured === 1 }));
+  if (ads.length > 0 && !ads.some((a) => a.featured)) ads[0].featured = true;
+  const cause = (await c.env.CONFIG.get("afg:cause_enabled")) === "1";
+  return c.json({ ads, cause_enabled: cause });
+});

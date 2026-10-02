@@ -171,6 +171,21 @@ analyticsPublicRoutes.post("/tv", async (c) => {
   return c.json({ logged: 1 });
 });
 
+// An Advertising For Good preview played on the site (migrations/0022). Not a
+// station play: kept out of listening_events, Just played, likes and the Top 3.
+analyticsPublicRoutes.post("/afg", async (c) => {
+  const body = await c.req.json<{ id?: string }>().catch(() => ({}) as { id?: string });
+  if (!ID_PATTERN.test(String(body.id))) return c.json({ logged: 0 });
+  if (isBot(c.req.header("user-agent"))) return c.json({ logged: 0 });
+  if (tooMany(c.req.header("cf-connecting-ip") ?? "unknown", 1)) return c.json({ error: "slow down" }, 429);
+  const ad = await c.env.DB.prepare("SELECT id FROM audio_assets WHERE id = ? AND afg = 1").bind(body.id).first();
+  if (!ad) return c.json({ logged: 0 });
+  await c.env.DB.prepare("INSERT INTO afg_preview_events (audio_asset_id, timestamp) VALUES (?, ?)")
+    .bind(body.id, new Date().toISOString())
+    .run();
+  return c.json({ logged: 1 });
+});
+
 analyticsPublicRoutes.post("/site", async (c) => {
   const body = await c.req
     .json<{ type?: string; session_id?: string; source?: string }>()

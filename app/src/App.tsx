@@ -25,6 +25,8 @@ import { Legal } from "./listener/pages/legal/Legal";
 import { Privacy } from "./listener/pages/legal/Privacy";
 import { OnAir, OnAirListenBack, OnAirManage, OnAirShare } from "./listener/pages/OnAir";
 import { SiteFooter } from "./listener/components/SiteFooter";
+import { Good } from "./listener/pages/Good";
+import { GoodNavPill } from "./listener/components/good/GoodSection";
 import { rememberPage } from "./shared/navHistory";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
 import { Top3AnnouncementBar } from "./listener/components/contest/Top3AnnouncementBar";
@@ -103,6 +105,7 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
             <IconTrophy size={12} />
             Top 3
           </NavLink>
+          <GoodNavPill />
           <NavLink to="/my-mood">My Mood</NavLink>
           <NavLink to="/search">Search</NavLink>
           <NavLink to="/my-radio">My Radio</NavLink>
@@ -278,6 +281,8 @@ export default function App() {
                     <Route path="on-air/:publicId" element={<OnAirShare />} />
                     <Route path="legal" element={<Legal />} />
                     <Route path="privacy" element={<Privacy />} />
+                    <Route path="good" element={<Good />} />
+                    <Route path="good/:slug" element={<Good />} />
                   </Routes>
                 </ListenerLayout>
               </ActiveChannelProvider>

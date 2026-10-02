@@ -174,3 +174,122 @@ audioAssetRoutes.put("/:id/pins", async (c) => {
   await c.env.DB.batch(statements);
   return c.json({ ok: true });
 });
+
+// ---- Advertising For Good (migrations/0022) ----
+//
+// AFG ads are ordinary jingles with afg = 1: they air exactly as before, and
+// these routes only manage how they appear on the site (/good, the landing
+// page). The listener-facing list is GET /api/good (routes/public.ts).
+
+const AFG_CAUSE_KEY = "afg:cause_enabled";
+
+function slugify(title: string): string {
+  return (
+    title
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "ad"
+  );
+}
+
+// A slug nobody else has: "be-kind", then "be-kind-2", ...
+async function freeSlug(db: D1Database, title: string, selfId: string): Promise<string> {
+  const base = slugify(title);
+  for (let n = 1; n < 100; n++) {
+    const slug = n === 1 ? base : `${base}-${n}`;
+    const taken = await db.prepare("SELECT id FROM audio_assets WHERE afg_slug = ? AND id != ?").bind(slug, selfId).first();
+    if (!taken) return slug;
+  }
+  return `${base}-${selfId.slice(-6)}`;
+}
+
+// Every AFG ad in display order (on the site or not), with the cause switch.
+audioAssetRoutes.get("/afg", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT aa.id, aa.title, aa.audio_url, aa.duration_seconds, aa.status, aa.afg_slug, aa.afg_order,
+            aa.afg_featured, aa.afg_published,
+            (SELECT COUNT(*) FROM afg_preview_events e WHERE e.audio_asset_id = aa.id
+              AND e.timestamp >= datetime('now', '-30 days')) AS previews_30d
+     FROM audio_assets aa WHERE aa.afg = 1
+     ORDER BY aa.afg_order IS NULL, aa.afg_order ASC, aa.created_at ASC`
+  ).all();
+  const cause = (await c.env.CONFIG.get(AFG_CAUSE_KEY)) === "1";
+  return c.json({ ads: results, cause_enabled: cause });
+});
+
+audioAssetRoutes.put("/afg/settings", async (c) => {
+  const body = await c.req.json<{ cause_enabled?: boolean }>().catch(() => ({}) as { cause_enabled?: boolean });
+  if (typeof body.cause_enabled !== "boolean") return c.json({ error: "cause_enabled must be true or false" }, 400);
+  await c.env.CONFIG.put(AFG_CAUSE_KEY, body.cause_enabled ? "1" : "0");
+  return c.json({ ok: true });
+});
+
+// The whole display order at once: ids in the order they should appear.
+audioAssetRoutes.put("/afg/order", async (c) => {
+  const { ids } = await c.req.json<{ ids?: string[] }>().catch(() => ({}) as { ids?: string[] });
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 200 || ids.some((id) => typeof id !== "string")) {
+    return c.json({ error: "ids must be a list of ad ids" }, 400);
+  }
+  await c.env.DB.batch(
+    ids.map((id, i) => c.env.DB.prepare("UPDATE audio_assets SET afg_order = ? WHERE id = ? AND afg = 1").bind(i + 1, id))
+  );
+  return c.json({ ok: true });
+});
+
+// Mark or unmark as AFG, retitle, or show/hide on the site.
+// Marking gives it a link (kept from before if it had one), puts it last, and
+// shows it on the site straight away.
+audioAssetRoutes.patch("/:id/afg", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req
+    .json<{ afg?: boolean; title?: string; afg_published?: boolean }>()
+    .catch(() => ({}) as { afg?: boolean; title?: string; afg_published?: boolean });
+  const asset = await c.env.DB.prepare("SELECT id, type, title, afg, afg_slug FROM audio_assets WHERE id = ?")
+    .bind(id)
+    .first<{ id: string; type: string; title: string; afg: number; afg_slug: string | null }>();
+  if (!asset) return c.json({ error: "not found" }, 404);
+
+  if (body.title !== undefined) {
+    const title = String(body.title).trim();
+    if (!title || title.length > 80) return c.json({ error: "A title is needed, up to 80 characters." }, 400);
+    await c.env.DB.prepare("UPDATE audio_assets SET title = ? WHERE id = ?").bind(title, id).run();
+    asset.title = title;
+  }
+
+  if (body.afg === true && !asset.afg) {
+    if (!["jingle", "station_id", "promo"].includes(asset.type)) {
+      return c.json({ error: "Only jingles, station IDs and promos can be Advertising For Good." }, 400);
+    }
+    const slug = asset.afg_slug ?? (await freeSlug(c.env.DB, asset.title, id));
+    const last = await c.env.DB.prepare("SELECT MAX(afg_order) AS n FROM audio_assets WHERE afg = 1").first<{ n: number | null }>();
+    await c.env.DB.prepare("UPDATE audio_assets SET afg = 1, afg_slug = ?, afg_order = ?, afg_published = 1 WHERE id = ?")
+      .bind(slug, (last?.n ?? 0) + 1, id)
+      .run();
+  } else if (body.afg === false && asset.afg) {
+    // The slug is kept, so marking it again later brings the same link back.
+    await c.env.DB.prepare("UPDATE audio_assets SET afg = 0, afg_published = 0, afg_featured = 0, afg_order = NULL WHERE id = ?")
+      .bind(id)
+      .run();
+  }
+
+  if (typeof body.afg_published === "boolean") {
+    await c.env.DB.prepare("UPDATE audio_assets SET afg_published = ? WHERE id = ? AND afg = 1")
+      .bind(body.afg_published ? 1 : 0, id)
+      .run();
+  }
+  return c.json({ ok: true });
+});
+
+// Make this the featured ad (the landing page's "Hear one" player).
+audioAssetRoutes.post("/:id/afg/feature", async (c) => {
+  const id = c.req.param("id");
+  const asset = await c.env.DB.prepare("SELECT id FROM audio_assets WHERE id = ? AND afg = 1").bind(id).first();
+  if (!asset) return c.json({ error: "not found" }, 404);
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE audio_assets SET afg_featured = 0 WHERE afg_featured = 1"),
+    c.env.DB.prepare("UPDATE audio_assets SET afg_featured = 1 WHERE id = ?").bind(id),
+  ]);
+  return c.json({ ok: true });
+});

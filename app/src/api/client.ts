@@ -47,6 +47,18 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 // ---- Public / listener API ----
 
+/** An Advertising For Good ad, as GET /api/good returns it. */
+export interface GoodAd {
+  id: string;
+  slug: string;
+  title: string;
+  duration_seconds: number;
+  audio_url: string;
+  featured: boolean;
+  display_order: number | null;
+}
+
+
 export const publicApi = {
   channels: () => request<{ channels: any[] }>(`${API_BASE}/channels`),
   channel: (slug: string) => request<{ channel: any }>(`${API_BASE}/channels/${slug}`),
@@ -67,6 +79,8 @@ export const publicApi = {
   podcasts: (limit?: number) =>
     request<{ podcasts: any[] }>(`${API_BASE}/podcasts${limit ? `?limit=${limit}` : ""}`),
   featuredAlbum: () => request<{ album: any | null; tracks: any[] }>(`${API_BASE}/featured-album`),
+  /** Advertising For Good: the ads on the site, in display order (migrations/0022). */
+  good: () => request<{ ads: GoodAd[]; cause_enabled: boolean }>(`${API_BASE}/good`),
   nowPlaying: (channel = "kizzi-radio") =>
     request<any>(`${API_BASE}/now-playing?channel=${encodeURIComponent(channel)}`),
   /** The Scheduler's live log version (0 for channels still on the old playback). Cheap enough to poll every 10 s. */
@@ -398,6 +412,15 @@ export const studioApi = {
     request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   setAudioAssetTags: (id: string, tags: string[]) =>
     request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/tags`, { method: "PUT", body: JSON.stringify({ tags }) }),
+  /** Advertising For Good: every AFG ad (on the site or not) and the "Got a cause?" switch. */
+  goodAds: () => request<{ ads: any[]; cause_enabled: boolean }>(`${STUDIO_BASE}/audio-assets/afg`),
+  updateGoodAd: (id: string, data: { afg?: boolean; title?: string; afg_published?: boolean }) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/afg`, { method: "PATCH", body: JSON.stringify(data) }),
+  featureGoodAd: (id: string) => request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/afg/feature`, { method: "POST" }),
+  orderGoodAds: (ids: string[]) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/afg/order`, { method: "PUT", body: JSON.stringify({ ids }) }),
+  setGoodSettings: (data: { cause_enabled: boolean }) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/afg/settings`, { method: "PUT", body: JSON.stringify(data) }),
 
   tags: () => request<{ tags: any[] }>(`${STUDIO_BASE}/tags`),
 

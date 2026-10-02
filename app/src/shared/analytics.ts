@@ -121,6 +121,11 @@ export function trackListenNow() {
   if (firstTime("listen_now")) post("/site", { type: "listen_now", session_id: sessionId() });
 }
 
+/** An Advertising For Good preview was played. Its own event: never a station play, so it can't touch history, Just played, likes or the Top 3. */
+export function trackGoodPreview(adId: string) {
+  post("/afg", { id: adId });
+}
+
 function trackFirstPlay() {
   if (firstTime("first_play")) post("/site", { type: "first_play", session_id: sessionId() });
 }
