@@ -70,6 +70,37 @@ export function startPosition(item: any, position: number, waited: boolean, foll
   return position;
 }
 
+/**
+ * When a song ends, what to play next, worked out from what the player already
+ * knows - so the next song starts inside the "ended" event itself.
+ *
+ * Waiting for the server first (the old way) broke on phones: with the screen
+ * locked, the page only keeps running while audio plays, so in the gap between
+ * the song ending and the answer arriving the phone suspended it and the radio
+ * went silent until the listener came back and pressed play (3 Oct 2026).
+ *
+ * - Held back (the station moved on while this song finished): now_playing is
+ *   already the next item.
+ * - Otherwise the song ended on time: up_next, at how far the station is into
+ *   it (from when this answer arrived, not the phone's clock).
+ * Null when it can't tell; the caller then asks the server as before.
+ */
+export function nextOnEnded(data: any, currentId: string | null, nowMs = Date.now()): { item: any; from: number } | null {
+  if (!data?.on_air || !data.received_at_ms) return null;
+  const now = data.now_playing;
+  if (now && now.id !== currentId) {
+    const pos = livePosition(data);
+    if (pos === null || !now.audio_url) return null;
+    return { item: now, from: startPosition(now, pos, true, true) };
+  }
+  const next = data.up_next;
+  if (!now || !next || next.id === currentId || !next.audio_url) return null;
+  const intoNext = (data.position_seconds ?? 0) + (nowMs - data.received_at_ms) / 1000 - (Number(now.duration_seconds) || 0);
+  const pos = Math.max(0, intoNext);
+  if (Number(next.duration_seconds) && pos >= Number(next.duration_seconds) - 1) return null;
+  return { item: next, from: startPosition(next, pos, true, true) };
+}
+
 // Several places on the site have their own <audio> element (the fixed
 // mini-player, a podcast or programme page, an album page). Without this,
 // starting one would leave the others playing underneath it. Whenever one

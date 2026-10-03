@@ -37,6 +37,7 @@ audioAssetRoutes.get("/", async (c) => {
 });
 
 const LINK_KINDS = ["intro", "transition", "fun_fact", "observation", "outro"];
+const NEW_JINGLE_DUCK_LEVEL = 0.11;
 
 audioAssetRoutes.post("/", async (c) => {
   const body = await c.req.json<Partial<AudioAsset>>();
@@ -48,8 +49,8 @@ audioAssetRoutes.post("/", async (c) => {
   }
   const id = newId("aa");
   await c.env.DB.prepare(
-    `INSERT INTO audio_assets (id, type, title, audio_url, duration_seconds, description, status, link_kind, created_at)
-     VALUES (?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO audio_assets (id, type, title, audio_url, duration_seconds, description, status, link_kind, duck_level, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`
   )
     .bind(
       id,
@@ -61,6 +62,9 @@ audioAssetRoutes.post("/", async (c) => {
       // Jingles go live on upload unless a status is given explicitly.
       body.status ?? (["jingle", "station_id", "promo"].includes(body.type) ? "published" : "draft"),
       body.type === "link" ? body.link_kind ?? null : null,
+      // Music level while a jingle talks over a song: 11%, so the voice is clear
+      // (Kizzi, 3 Oct 2026; the column's own default is the older 28%).
+      NEW_JINGLE_DUCK_LEVEL,
       nowIso()
     )
     .run();

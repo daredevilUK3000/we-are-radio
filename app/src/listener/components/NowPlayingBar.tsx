@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
-import { livePosition, startPosition, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
+import { livePosition, nextOnEnded, startPosition, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
 import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { NowPlayingExpanded } from "./NowPlayingExpanded";
 import { useChannelLog } from "../../shared/analytics";
@@ -252,6 +252,26 @@ export function NowPlayingBar() {
     earlyEndFade: !rw.rewound,
   });
 
+  // A song ended: start the next one right now, inside the "ended" event,
+  // from what this player already knows (nextOnEnded) - a locked phone
+  // suspends the page in any silent gap, so it can't wait for the server.
+  // The refresh after it confirms (or corrects) the choice.
+  const justFinished = useRef<string | null>(null);
+  const assumed = useRef<string | null>(null);
+  function playNextNow() {
+    const audio = audioRef.current;
+    const next = nextOnEnded(dataRef.current, currentItemId.current);
+    justFinished.current = currentItemId.current;
+    if (!audio || !next) return;
+    currentItemId.current = next.item.id;
+    assumed.current = next.item.id;
+    heldBack.current = false;
+    setLoadedItem(next.item);
+    audio.src = mediaUrl(next.item.audio_url);
+    audio.currentTime = next.from;
+    if (playingRef.current) audio.play().catch(() => {});
+  }
+
   // "Back to live" (or the replay ending): rejoin the station by the same rule
   // as after letting a song finish - the load path below, with waited set.
   function backToLive() {
@@ -336,11 +356,17 @@ export function NowPlayingBar() {
     // Replaying a song (Start over): nothing new loads until it ends or "Back to live".
     if (rw.rewoundRef.current) return;
     if (currentItemId.current === item.id) {
+      assumed.current = null;
       // Loaded elsewhere (useRadioCast, when a cast ends).
       setLoadedItem((l: any) => (l?.id === item.id ? l : item));
       return;
     }
-    if (stillFinishing(audio, currentItemId.current !== null)) {
+    // The song that has just finished, still on air by the server's clock: don't load it again.
+    if (item.id === justFinished.current) return;
+    // The station has something else on than the item playNextNow assumed: switch straight to it.
+    const wrongGuess = assumed.current !== null && assumed.current === currentItemId.current;
+    assumed.current = null;
+    if (!wrongGuess && stillFinishing(audio, currentItemId.current !== null)) {
       heldBack.current = true;
       return;
     }
@@ -529,7 +555,11 @@ export function NowPlayingBar() {
         </button>
         <audio
           ref={audioRef}
-          onEnded={() => (rw.rewoundRef.current ? backToLive() : void refresh())}
+          onEnded={() => {
+            if (rw.rewoundRef.current) return backToLive();
+            playNextNow();
+            void refresh();
+          }}
         />
       </div>
 

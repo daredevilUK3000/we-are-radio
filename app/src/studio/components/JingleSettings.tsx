@@ -167,7 +167,7 @@ export function JinglePreviewButton({ asset }: { asset: any }) {
       asset,
       {
         mode: asset.play_mode ?? "sequenced",
-        levelPct: Math.round((asset.duck_level ?? 0.28) * 100),
+        levelPct: Math.round((asset.duck_level ?? 0.11) * 100),
         fadeMs: asset.duck_fade_ms ?? 400,
       },
       track
@@ -193,7 +193,7 @@ export function JinglePreviewButton({ asset }: { asset: any }) {
  */
 export function JingleSettings({ asset, onSaved }: { asset: any; onSaved: () => void }) {
   const [mode, setMode] = useState<PlayMode>(asset.play_mode ?? "sequenced");
-  const [levelPct, setLevelPct] = useState(Math.round((asset.duck_level ?? 0.28) * 100));
+  const [levelPct, setLevelPct] = useState(Math.round((asset.duck_level ?? 0.11) * 100));
   const [fadeMs, setFadeMs] = useState<number>(asset.duck_fade_ms ?? 400);
   const { track, trackId } = usePreviewTrack(asset.id);
   const [saving, setSaving] = useState(false);
