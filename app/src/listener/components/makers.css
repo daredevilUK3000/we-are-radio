@@ -1,0 +1,65 @@
+/* "From the makers of We Are Radio" (MakersSection.tsx). The cards are the
+   "Two Other Ways to Listen" cards (.wl-card, .wl-icon, .wl-title, .wl-desc in
+   global.css) in a three-column grid; nothing here touches those rules. */
+
+.mk-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 720px) {
+  .mk-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.mk-card {
+  min-height: 44px;
+}
+
+.mk-card:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: 3px;
+  border-color: var(--tint);
+}
+
+.mk-visit {
+  margin-top: auto;
+  padding-top: 8px;
+  color: var(--tint);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Footer: its own row under the existing footer links, so they don't move. */
+.mk-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 20px;
+  max-width: 1248px;
+  margin: 0 auto;
+  padding: 12px 20px 0;
+}
+
+.mk-footer-label {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.site-footer .mk-footer nav a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  .mk-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 8px 16px 0;
+  }
+}

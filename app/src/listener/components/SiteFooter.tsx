@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { GoodFooterLink } from "./good/GoodSection";
+import { MakersFooter } from "./MakersSection";
 
 /** The footer on every listener page (ListenerLayout). The Studio has none. */
 export function SiteFooter() {
@@ -19,6 +20,7 @@ export function SiteFooter() {
           <Link to="/legal">Legal notice</Link>
         </nav>
       </div>
+      <MakersFooter />
     </footer>
   );
 }

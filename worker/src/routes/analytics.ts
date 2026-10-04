@@ -171,6 +171,20 @@ analyticsPublicRoutes.post("/tv", async (c) => {
   return c.json({ logged: 1 });
 });
 
+// A click through to one of the maker's other products (migrations/0024).
+const OUTBOUND_TARGETS = ["human-radio", "personality-blueprint", "purpose-dna"];
+const OUTBOUND_PLACEMENTS = ["card", "footer"];
+analyticsPublicRoutes.post("/outbound", async (c) => {
+  const body = await c.req.json<{ target?: string; placement?: string }>().catch(() => ({}) as { target?: string; placement?: string });
+  if (!OUTBOUND_TARGETS.includes(String(body.target)) || !OUTBOUND_PLACEMENTS.includes(String(body.placement))) return c.json({ logged: 0 });
+  if (isBot(c.req.header("user-agent"))) return c.json({ logged: 0 });
+  if (tooMany(c.req.header("cf-connecting-ip") ?? "unknown", 1)) return c.json({ error: "slow down" }, 429);
+  await c.env.DB.prepare("INSERT INTO outbound_clicks (target, placement, timestamp) VALUES (?,?,?)")
+    .bind(body.target, body.placement, new Date().toISOString())
+    .run();
+  return c.json({ logged: 1 });
+});
+
 // The radio player's audio got stuck, or it recovered (migrations/0023). Only a
 // coarse device ("Android Chrome"), never the full user agent or anything else
 // that could pick a listener out.

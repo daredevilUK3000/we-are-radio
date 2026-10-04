@@ -121,6 +121,11 @@ export function trackListenNow() {
   if (firstTime("listen_now")) post("/site", { type: "listen_now", session_id: sessionId() });
 }
 
+/** A click through to one of the maker's other products ("From the makers", MakersSection.tsx). */
+export function trackOutbound(target: "human-radio" | "personality-blueprint" | "purpose-dna", placement: "card" | "footer") {
+  post("/outbound", { target, placement });
+}
+
 /** The radio player's audio got stuck, errored, or was brought back (lib/useStallRecovery.ts). */
 export function trackPlayerIssue(
   type: "stall" | "error" | "recovered" | "gave_up",

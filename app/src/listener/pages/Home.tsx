@@ -12,6 +12,7 @@ import { trackListenNow } from "../../shared/analytics";
 import { Top3HeroButton, Top3HeroPill } from "../components/contest/Top3HeroPill";
 import { Top3FeatureBand } from "../components/contest/Top3FeatureBand";
 import { GoodHeroLine, GoodSection } from "../components/good/GoodSection";
+import { MakersSection } from "../components/MakersSection";
 import {
   FeaturedAlbumSection,
   PodcastShowcase,
@@ -189,6 +190,7 @@ export function Home() {
       {podcasts && podcasts.recent.length > 0 && <PodcastShowcase shows={podcasts.shows} recent={podcasts.recent} />}
       <WaysToListen channels={channels} />
       <TimeCapsuleBanner />
+      <MakersSection />
     </div>
   );
 }
