@@ -3,7 +3,8 @@ import { useLocation } from "react-router-dom";
 import { publicApi, mediaUrl } from "../../api/client";
 import { useActiveChannel } from "../context/ActiveChannelContext";
 import { livePosition, nextOnEnded, startPosition, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
-import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
+import { cancelOverlay, unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
+import { isBroken, useStallRecovery } from "../lib/useStallRecovery";
 import { NowPlayingExpanded } from "./NowPlayingExpanded";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "./ShareButton";
@@ -154,6 +155,12 @@ export function NowPlayingBar() {
       setPlaying(true);
       return;
     }
+    // A broken element (the connection to the file dropped): Play reopens it at the live point.
+    if (isBroken(audio)) {
+      setPlaying(true);
+      reloadLive();
+      return;
+    }
     const d = dataRef.current;
     if (d?.now_playing && currentItemId.current === d.now_playing.id) {
       const pos = livePosition(d);
@@ -271,6 +278,26 @@ export function NowPlayingBar() {
     audio.currentTime = next.from;
     if (playingRef.current) audio.play().catch(() => {});
   }
+
+  // Stuck audio (lib/useStallRecovery.ts): reopen what's on air at the live
+  // point - what switching channel and back used to be the only cure for.
+  function reloadLive() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    cancelOverlay(audio);
+    audio.volume = 1;
+    currentItemId.current = null;
+    heldBack.current = false;
+    justFinished.current = null;
+    assumed.current = null;
+    void refresh();
+  }
+  useStallRecovery(audioRef, {
+    active: playing && !castingHere && !rw.rewound,
+    recover: reloadLive,
+    channelId: data?.channel?.id ?? null,
+    label: loadedItem?.label ?? null,
+  });
 
   // "Back to live" (or the replay ending): rejoin the station by the same rule
   // as after letting a song finish - the load path below, with waited set.

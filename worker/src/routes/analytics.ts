@@ -171,6 +171,32 @@ analyticsPublicRoutes.post("/tv", async (c) => {
   return c.json({ logged: 1 });
 });
 
+// The radio player's audio got stuck, or it recovered (migrations/0023). Only a
+// coarse device ("Android Chrome"), never the full user agent or anything else
+// that could pick a listener out.
+const PLAYER_EVENT_TYPES = ["stall", "error", "recovered", "gave_up"];
+function deviceClass(ua: string): string {
+  const os = /iPhone|iPad|iPod/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "other";
+  const browser = /EdgA?\//.test(ua) ? "Edge" : /SamsungBrowser/.test(ua) ? "Samsung" : /Firefox|FxiOS/.test(ua) ? "Firefox" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "other";
+  return `${os} ${browser}`;
+}
+analyticsPublicRoutes.post("/player", async (c) => {
+  const body = await c.req
+    .json<{ type?: string; channel_id?: string | null; label?: string | null; detail?: unknown }>()
+    .catch(() => ({}) as { type?: string; channel_id?: string | null; label?: string | null; detail?: unknown });
+  if (!PLAYER_EVENT_TYPES.includes(String(body.type))) return c.json({ logged: 0 });
+  const ua = c.req.header("user-agent") ?? "";
+  if (isBot(ua)) return c.json({ logged: 0 });
+  if (tooMany(c.req.header("cf-connecting-ip") ?? "unknown", 1)) return c.json({ error: "slow down" }, 429);
+  const channelId = body.channel_id && ID_PATTERN.test(String(body.channel_id)) ? String(body.channel_id) : null;
+  const label = body.label ? String(body.label).slice(0, 120) : null;
+  const detail = body.detail && typeof body.detail === "object" ? JSON.stringify(body.detail).slice(0, 600) : null;
+  await c.env.DB.prepare("INSERT INTO player_events (event_type, channel_id, item_label, detail, user_agent, timestamp) VALUES (?,?,?,?,?,?)")
+    .bind(body.type, channelId, label, detail, deviceClass(ua), new Date().toISOString())
+    .run();
+  return c.json({ logged: 1 });
+});
+
 // An Advertising For Good preview played on the site (migrations/0022). Not a
 // station play: kept out of listening_events, Just played, likes and the Top 3.
 analyticsPublicRoutes.post("/afg", async (c) => {

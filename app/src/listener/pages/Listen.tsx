@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { mediaUrl } from "../../api/client";
 import { useExclusiveAudio, formatClock, livePosition, nextOnEnded, stillFinishing, startPosition } from "../lib/audioUtils";
-import { unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
+import { cancelOverlay, unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
+import { isBroken, useStallRecovery } from "../lib/useStallRecovery";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "../components/ShareButton";
 import { FlagshipPlayer } from "../components/FlagshipPlayer";
@@ -100,6 +101,12 @@ export function Listen() {
       setPlaying(true);
       return;
     }
+    // A broken element (the connection to the file dropped): Play reopens it at the live point.
+    if (isBroken(audio)) {
+      setPlaying(true);
+      reloadLive();
+      return;
+    }
     const d = dataRef.current;
     if (d?.now_playing && currentItemId.current === d.now_playing.id) {
       const pos = livePosition(d);
@@ -180,6 +187,27 @@ export function Listen() {
     setUnreachable,
     earlyEndFade: !rw.rewound,
   });
+
+  // Stuck audio (lib/useStallRecovery.ts): reopen what's on air at the live
+  // point - what switching channel and back used to be the only cure for.
+  function reloadLive() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    cancelOverlay(audio);
+    audio.volume = 1;
+    currentItemId.current = null;
+    heldBack.current = false;
+    justFinished.current = null;
+    assumed.current = null;
+    void refresh();
+  }
+  useStallRecovery(audioRef, {
+    active: playing && !castingHere && !rw.rewound,
+    recover: reloadLive,
+    channelId: data?.channel?.id ?? null,
+    label: loadedItem?.label ?? null,
+  });
+
 
   // Rejoining after a replay: the same rule as after letting a song finish.
   function backToLive() {

@@ -121,6 +121,14 @@ export function trackListenNow() {
   if (firstTime("listen_now")) post("/site", { type: "listen_now", session_id: sessionId() });
 }
 
+/** The radio player's audio got stuck, errored, or was brought back (lib/useStallRecovery.ts). */
+export function trackPlayerIssue(
+  type: "stall" | "error" | "recovered" | "gave_up",
+  info: { channelId?: string | null; label?: string | null; detail?: Record<string, unknown> }
+) {
+  post("/player", { type, channel_id: info.channelId ?? null, label: info.label ?? null, detail: info.detail ?? null });
+}
+
 /** An Advertising For Good preview was played. Its own event: never a station play, so it can't touch history, Just played, likes or the Top 3. */
 export function trackGoodPreview(adId: string) {
   post("/afg", { id: adId });
