@@ -119,7 +119,8 @@ export function Listen() {
       }
       if (Math.abs(audio.currentTime - pos) > 2) audio.currentTime = pos;
     }
-    audio.play().catch(() => {});
+    // If the element won't start as it is, reopen the song at the live point.
+    audio.play().catch(() => reloadLive());
     setPlaying(true);
   }
 
@@ -203,6 +204,7 @@ export function Listen() {
   }
   useStallRecovery(audioRef, {
     active: playing && !castingHere && !rw.rewound,
+    endAt: loadedItem?.file_duration_seconds > loadedItem?.duration_seconds ? loadedItem.duration_seconds : null,
     recover: reloadLive,
     channelId: data?.channel?.id ?? null,
     label: loadedItem?.label ?? null,
@@ -281,7 +283,8 @@ export function Listen() {
     }
     const audio = audioRef.current;
     if (!audio) return;
-    if (playing) {
+    // Showing "playing" but silent (the phone paused it): one tap plays again.
+    if (playing && !audio.paused) {
       audio.pause();
       setPlaying(false);
     } else {

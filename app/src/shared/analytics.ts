@@ -128,7 +128,7 @@ export function trackOutbound(target: "human-radio" | "personality-blueprint" | 
 
 /** The radio player's audio got stuck, errored, or was brought back (lib/useStallRecovery.ts). */
 export function trackPlayerIssue(
-  type: "stall" | "error" | "recovered" | "gave_up",
+  type: "stall" | "error" | "recovered" | "gave_up" | "paused_after_jingle" | "paused_by_phone",
   info: { channelId?: string | null; label?: string | null; detail?: Record<string, unknown> }
 ) {
   post("/player", { type, channel_id: info.channelId ?? null, label: info.label ?? null, detail: info.detail ?? null });

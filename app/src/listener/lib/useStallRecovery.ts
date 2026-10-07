@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { trackPlayerIssue } from "../../shared/analytics";
+import { overlayRecent } from "../../shared/duckEngine";
 
 /**
  * Keeps a radio player going when its audio gets stuck (4 Oct 2026).
@@ -19,8 +20,11 @@ import { trackPlayerIssue } from "../../shared/analytics";
  * case is reported (trackPlayerIssue) so the next "it just stopped" can be
  * traced to a cause.
  *
- * A pause the phone makes itself (a call, headphones out) is left alone: the
- * element is paused, not stuck.
+ * A pause the player didn't ask for (7 Oct 2026): if it comes while a jingle
+ * is talking over the song or just after one ends - phones have paused the
+ * music right then - the music is started again straight away. Any other
+ * pause is the phone's own (a call, headphones out) and is left alone; the
+ * play button then resumes with one tap. Both are reported.
  */
 
 const CHECK_MS = 2000;
@@ -50,6 +54,8 @@ export function useStallRecovery(
   opts: {
     /** Meant to be playing live (not paused, not casting, not replaying a song). */
     active: boolean;
+    /** Where the airing is scheduled to end (seconds into the file): the player pauses there itself. */
+    endAt?: number | null;
     recover: () => void;
     channelId: string | null;
     label: string | null;
@@ -91,6 +97,33 @@ export function useStallRecovery(
       o.recover();
     };
 
+    // A pause nobody here asked for. The player's own pauses (the button, the
+    // lock screen, another player starting, recording a shout-out) set it to
+    // not-playing first, which ends this effect, so by the time the check runs
+    // they're gone; so is a new song's src taking over.
+    let pauseCheck: number | undefined;
+    let resumedAfterJingle = 0;
+    const onPause = () => {
+      if (audio.ended) return;
+      const jingle = overlayRecent(audio);
+      window.clearTimeout(pauseCheck);
+      pauseCheck = window.setTimeout(() => {
+        const o = latest.current;
+        if (!o.active || !audio.paused || audio.ended) return;
+        // The scheduled early end: the player paused there on purpose and is loading the next item.
+        if (o.endAt && audio.currentTime >= o.endAt - 2) return;
+        const detail = { ...audioState(audio), jingle };
+        if (jingle && resumedAfterJingle < 3) {
+          resumedAfterJingle++;
+          trackPlayerIssue("paused_after_jingle", { channelId: o.channelId, label: o.label, detail });
+          audio.play().catch(() => o.recover());
+        } else {
+          trackPlayerIssue("paused_by_phone", { channelId: o.channelId, label: o.label, detail });
+        }
+      }, 1500);
+    };
+    audio.addEventListener("pause", onPause);
+
     const onError = () => {
       if (!gaveUp) tryRecover("error");
     };
@@ -119,6 +152,8 @@ export function useStallRecovery(
 
     return () => {
       audio.removeEventListener("error", onError);
+      audio.removeEventListener("pause", onPause);
+      window.clearTimeout(pauseCheck);
       window.clearInterval(id);
     };
   }, [audioRef, opts.active]);

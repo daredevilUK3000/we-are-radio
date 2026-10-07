@@ -41,6 +41,19 @@ const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAI
 const jingleElements = new WeakMap<HTMLAudioElement, HTMLAudioElement>();
 const cancelers = new WeakMap<HTMLAudioElement, () => void>();
 const volumeRamps = new WeakMap<HTMLAudioElement, number>();
+const overlayEndedAt = new WeakMap<HTMLAudioElement, number>();
+
+/**
+ * A jingle is talking over this music element now, or stopped within `withinMs`.
+ * The players use it to tell a pause caused by a jingle ending (phones have
+ * paused the music right then - 4 and 6 Oct 2026) from one the listener or
+ * the phone meant (lib/useStallRecovery.ts).
+ */
+export function overlayRecent(music: HTMLAudioElement, withinMs = 4000): boolean {
+  if (cancelers.has(music)) return true;
+  const at = overlayEndedAt.get(music);
+  return at !== undefined && Date.now() - at <= withinMs;
+}
 
 let volumeSupport: boolean | null = null;
 /** iPhones and iPads ignore an <audio> element's volume; everything else obeys it. */
@@ -122,6 +135,7 @@ export function playOverlay(music: HTMLAudioElement, overlay: Overlay): Promise<
       music.removeEventListener("pause", onMusicPause);
       music.removeEventListener("play", onMusicPlay);
       cancelers.delete(music);
+      overlayEndedAt.set(music, Date.now());
       jingle.pause();
       rampVolume(music, restoreVolume, overlay.duck_fade_ms);
       resolve();

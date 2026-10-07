@@ -188,7 +188,7 @@ analyticsPublicRoutes.post("/outbound", async (c) => {
 // The radio player's audio got stuck, or it recovered (migrations/0023). Only a
 // coarse device ("Android Chrome"), never the full user agent or anything else
 // that could pick a listener out.
-const PLAYER_EVENT_TYPES = ["stall", "error", "recovered", "gave_up"];
+const PLAYER_EVENT_TYPES = ["stall", "error", "recovered", "gave_up", "paused_after_jingle", "paused_by_phone"];
 function deviceClass(ua: string): string {
   const os = /iPhone|iPad|iPod/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "other";
   const browser = /EdgA?\//.test(ua) ? "Edge" : /SamsungBrowser/.test(ua) ? "Samsung" : /Firefox|FxiOS/.test(ua) ? "Firefox" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "other";
