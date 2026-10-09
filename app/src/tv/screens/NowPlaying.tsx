@@ -144,12 +144,21 @@ export function NowPlaying() {
           </div>
           <div className="tv-np-details">
             <div className="tv-np-eyebrow">
-              {voice ? <span className="tv-voice-pill">Listener voice</span> : "Now playing"} <EqBars still={!player.playing} />
+              {voice ? (
+                <span className="tv-voice-pill">Listener voice</span>
+              ) : now?.good ? (
+                <span className="tv-good-pill">Advertising For Good</span>
+              ) : (
+                "Now playing"
+              )}{" "}
+              <EqBars still={!player.playing} />
             </div>
             <h1 className="tv-np-title" style={{ fontSize: titleSize(title) }}>
               {title}
             </h1>
-            <div className="tv-np-artist">{voice ? voice.sub : (now?.artist ?? "")}</div>
+            <div className={`tv-np-artist${now?.good && !voice ? " is-good" : ""}`}>
+              {voice ? voice.sub : now?.good ? "A short message that asks you to be kind, not to buy" : (now?.artist ?? "")}
+            </div>
             {meta?.block && (
               <div className="tv-block-row">
                 <span className="tv-block-chip">{meta.block.name}</span>
@@ -203,7 +212,7 @@ export function NowPlaying() {
               <div key={i.id ?? k} className="tv-up-card">
                 <div className="tv-up-when">
                   {i.starts_at ? `${clockText(i.starts_at * 1000)} · ` : ""}
-                  {i.item_type === "song" ? "Song" : i.voice ? "Listener voice" : "On air"}
+                  {i.item_type === "song" ? "Song" : i.voice ? "Listener voice" : i.good ? "Advertising For Good" : "On air"}
                 </div>
                 <div className="tv-up-title">{i.voice ? `${i.voice.first_name}${i.voice.place ? ` in ${i.voice.place}` : ""}` : i.label}</div>
                 <div className="tv-up-sub">{i.artist ?? ""}</div>

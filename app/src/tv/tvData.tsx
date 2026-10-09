@@ -25,6 +25,8 @@ export interface ChannelNow {
   position_seconds: number | null;
   duration_seconds: number | null;
   voice: { first_name: string; place: string; kind: string; for_name: string } | null;
+  /** An Advertising For Good ad on air (slug null when it's hidden from the site). */
+  good?: { slug: string | null } | null;
   block: { name: string; description: string; starts_at: number; ends_at: number } | null;
   next_block: { name: string; starts_at: number; ends_at?: number } | null;
   /** When this answer arrived (ms), so progress can advance locally between polls. */

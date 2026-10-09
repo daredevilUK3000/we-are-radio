@@ -12,6 +12,9 @@ import { NowPlaying } from "./screens/NowPlaying";
 import { Schedule } from "./screens/Schedule";
 import { ShoutOut } from "./screens/ShoutOut";
 import { LeanBack } from "./screens/LeanBack";
+import { OnDemand } from "./screens/OnDemand";
+import { TimeCapsuleQr, Top3Qr } from "./screens/QrInfo";
+import { OnDemandProvider, useOnDemand } from "./TvOnDemand";
 import "./tv.css";
 
 /**
@@ -55,6 +58,9 @@ function TvShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const player = useTvPlayer();
+  const od = useOnDemand();
+  const odRef = useRef(od);
+  odRef.current = od;
   const [leanBack, setLeanBack] = useState(false);
   const lastKey = useRef(Date.now());
   const leanRef = useRef(leanBack);
@@ -99,10 +105,16 @@ function TvShell() {
   }, [player.playing, leanBack, leaveLeanBack]);
 
   const isHome = location.pathname.replace(/\/+$/, "") === "/tv";
+  const onPlayScreen = location.pathname.replace(/\/+$/, "") === "/tv/play";
 
   const back = useCallback((): "handled" | "exit" => {
     if (leanRef.current) {
       leaveLeanBack();
+      return "handled";
+    }
+    // Playing something on demand: Back gives the TV back to the radio (the screen then closes itself).
+    if (onPlayScreen && odRef.current.queue) {
+      odRef.current.stop();
       return "handled";
     }
     if (!isHome) {
@@ -110,11 +122,21 @@ function TvShell() {
       return "handled";
     }
     return "exit";
-  }, [isHome, leaveLeanBack, navigate]);
+  }, [isHome, onPlayScreen, leaveLeanBack, navigate]);
 
   const media = useCallback(
     (key: MediaKey) => {
       const p = playerRef.current;
+      // While something plays on demand, the media keys are its own.
+      const o = odRef.current;
+      if (o.queue) {
+        if (key === "playpause" || key === "play" || key === "pause") {
+          if (key === "playpause" || (key === "play") !== o.playing) o.toggle();
+          return;
+        }
+        if (key === "fastforward") return o.next();
+        if (key === "rewind") return o.previous();
+      }
       switch (key) {
         case "playpause":
           p.toggle();
@@ -191,6 +213,9 @@ function TvShell() {
             <Route path="listen/:slug" element={<NowPlaying />} />
             <Route path="schedule" element={<Schedule />} />
             <Route path="shout-out" element={<ShoutOut />} />
+            <Route path="play" element={<OnDemand />} />
+            <Route path="time-capsule" element={<TimeCapsuleQr />} />
+            <Route path="top3" element={<Top3Qr />} />
             <Route path="*" element={<Home />} />
           </Routes>
         </div>
@@ -218,7 +243,9 @@ export default function TvApp() {
   return (
     <TvDataProvider>
       <TvPlayerProvider initialSlug={lastTvChannel() ?? "kizzi-radio"}>
-        <TvShell />
+        <OnDemandProvider>
+          <TvShell />
+        </OnDemandProvider>
       </TvPlayerProvider>
     </TvDataProvider>
   );

@@ -312,6 +312,8 @@ publicRoutes.get("/now-playing/all", async (c) => {
         duration_seconds: item?.duration_seconds ?? null,
         // A listener's voice note: only the public details the players show.
         voice: item?.voice ?? null,
+        // An Advertising For Good ad on air: the TV labels it in green (as the site's players do).
+        good: item?.good ?? null,
         block: blocks?.block ?? null,
         next_block: blocks?.next_block ?? null,
       };
