@@ -15,6 +15,7 @@ import {
 import { fitToWindow } from "./fit";
 import { blockReason, blockTags, occurrencesBetween, type GridBlock, type Occurrence } from "./grid";
 import { addDaysTo, DAY, HOUR, mmss, parisHHMM, stationDate, stationDayStartMs } from "./time";
+import { allowedIn, bandDistance, daypartReason, daypartsApply, daypartsBetween, daypartSeconds, MIN_DAYPART_SONGS, songBands, type TimeBand } from "./dayparts";
 import { contentKey, REPEAT_WINDOW_MS, type ItemSource, type PlanItem, type Playable } from "./types";
 
 /**
@@ -95,8 +96,9 @@ export class Planner {
       artworkUrl: ri.artwork_url,
       fileMs: ri.duration_seconds * 1000,
       overlays: ri.overlays,
-      blockId: occ?.block.id ?? null,
-      blockDate: occ?.date ?? null,
+      // A time-of-day day-part isn't a block: its songs are plain channel music to everything else.
+      blockId: occ && !occ.daypart ? occ.block.id : null,
+      blockDate: occ && !occ.daypart ? occ.date : null,
       source: capsule ? "capsule" : source,
       sourceRef: capsule ? capsule[1] : sourceRef,
       reasons: capsule ? [`Time capsule: ${ri.label ?? "a message"}`] : reasons,
@@ -156,7 +158,9 @@ export class Planner {
     const b = occ.block;
     const capsules = await loadCapsulesFor(this.db, stationDate(occ.startMs));
     const pins = await loadPinnedJingles(this.db);
-    const reasons = [blockReason(occ)];
+    const reasons = [occ.daypart ? daypartReason(occ) : blockReason(occ)];
+
+    if (occ.daypart) return this.loadDaypartContent(occ, capsules, pins, reasons);
 
     if (b.fill_kind === "programme") {
       const programme = b.programme_id
@@ -185,6 +189,46 @@ export class Planner {
     return { items: rotation, pool: [...pool, ...(await this.stationFillers("autopilot", ref, occ))], source: "autopilot", sourceRef: ref };
   }
 
+  private bands: Promise<Map<string, Set<TimeBand>>> | null = null;
+
+  /**
+   * A time-of-day day-part: the channel's songs allowed then (untagged, or
+   * tagged with that time of day), shuffled afresh each day. Fewer than
+   * MIN_DAYPART_SONGS allowed (a themed channel), and it tops up with the
+   * channel's other songs, nearest time of day first, so it never loops a
+   * handful of songs for hours. The day's time capsules go in the afternoon only,
+   * spread through the hours it actually plays, so each airs once.
+   */
+  private async loadDaypartContent(occ: Occurrence, capsules: Awaited<ReturnType<typeof loadCapsulesFor>>, pins: Awaited<ReturnType<typeof loadPinnedJingles>>, reasons: string[]): Promise<BlockContent> {
+    const band = occ.daypart as TimeBand;
+    this.bands ??= songBands(this.db);
+    const bands = await this.bands;
+    const all = await autopilotTracks(this.db, channelTags(this.channel));
+    if (all.length === 0) throw new PlanError(`No published songs match ${this.channel.name}'s tags`);
+    const allowed = all.filter((t) => allowedIn(bands.get(t.id), band));
+    let tracks = allowed;
+    if (allowed.length < MIN_DAYPART_SONGS) {
+      // all is in id order, so the top-up is the same every time for the same catalogue.
+      const others = all
+        .filter((t) => !allowedIn(bands.get(t.id), band))
+        .sort((a, b) => bandDistance(bands.get(a.id), band) - bandDistance(bands.get(b.id), band));
+      tracks = [...allowed, ...others.slice(0, MIN_DAYPART_SONGS - allowed.length)];
+    }
+    let rotation = buildRotation(`${this.channel.id}:${occ.block.id}:${occ.date}`, tracks, await stationIdAssets(this.db), pins);
+    if (capsules.length && band === "afternoon") {
+      const length = daypartSeconds(occ);
+      let acc = 0;
+      let cut = rotation.findIndex((ri) => (acc += ri.duration_seconds) >= length);
+      if (cut < 0) cut = rotation.length - 1;
+      rotation = [...withCapsules(rotation.slice(0, cut + 1), capsules), ...rotation.slice(cut + 1)];
+    }
+    const ref = `rotation:${occ.block.id}:${occ.date}`;
+    const pool = rotation
+      .map((ri) => (ri.item_type === "song" ? this.playable(ri, "autopilot", ref, reasons, occ) : null))
+      .filter((x): x is Playable => !!x);
+    return { items: rotation, pool: [...pool, ...(await this.stationFillers("autopilot", ref))], source: "autopilot", sourceRef: ref };
+  }
+
   // ------------------------------------------------------------ the plan
 
   /**
@@ -197,8 +241,18 @@ export class Planner {
   async build(fromMs: number, toMs: number, opts: { avoidFirst?: string | null } = {}): Promise<{ items: PlanItem[]; toMs: number }> {
     this.avoidFirst = opts.avoidFirst ?? null;
     const occs = occurrencesBetween(this.blocks, fromMs - 8 * DAY, toMs + 2 * DAY);
+    // Autopilot channels: the time no block covers is split into time-of-day day-parts (dayparts.ts).
+    const parts = daypartsApply(this.channel) ? daypartsBetween(this.channel, fromMs - 8 * DAY, toMs + 2 * DAY) : [];
+    // The day-part covering t, ending where it ends or where the next block starts. It keeps its own
+    // start, so after a block it carries on as it was laid out (like a block resuming).
+    const daypartAt = (t: number): Occurrence | null => {
+      const dp = parts.find((o) => o.startMs <= t && t < o.endMs);
+      if (!dp) return null;
+      const nextBlock = occs.find((o) => o.startMs > t && o.startMs < dp.endMs);
+      return nextBlock ? { ...dp, endMs: nextBlock.startMs } : dp;
+    };
     const windowEndAfter = (t: number) => {
-      const inBlock = occs.find((o) => o.startMs <= t && t < o.endMs);
+      const inBlock = occs.find((o) => o.startMs <= t && t < o.endMs) ?? daypartAt(t);
       if (inBlock) return inBlock.endMs;
       return occs.find((o) => o.startMs > t)?.startMs ?? Infinity;
     };
@@ -208,7 +262,7 @@ export class Planner {
     const out: PlanItem[] = [];
     let t = fromMs;
     for (let guard = 0; t < toMs && guard < 200; guard++) {
-      const occ = occs.find((o) => o.startMs <= t && t < o.endMs);
+      const occ = occs.find((o) => o.startMs <= t && t < o.endMs) ?? daypartAt(t);
       const next = occ ? occ.endMs : occs.find((o) => o.startMs > t)?.startMs ?? Infinity;
       const items = occ ? await this.blockWindow(occ, t, toMs, out) : await this.defaultWindow(t, next, toMs, occs, out);
       if (items.length === 0) {
@@ -229,7 +283,7 @@ export class Planner {
   /** A block's items from `t` (its start, or later when resuming) up to its end - or past `limit` if that comes first. */
   private async blockWindow(occ: Occurrence, t: number, limit: number, before: PlanItem[]): Promise<PlanItem[]> {
     const content = await this.contentFor(occ);
-    const reasons = [blockReason(occ)];
+    const reasons = [occ.daypart ? daypartReason(occ) : blockReason(occ)];
     const seq = content.items
       .map((ri, i) =>
         this.playable(

@@ -25,6 +25,8 @@ export interface Occurrence {
   date: string;
   startMs: number;
   endMs: number;
+  /** Set on a channel's time-of-day day-part (dayparts.ts), which isn't a real block. */
+  daypart?: import("./dayparts").TimeBand;
 }
 
 export async function loadGridBlocks(db: D1Database, channelId: string, includeInactive = false): Promise<GridBlock[]> {

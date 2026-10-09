@@ -30,6 +30,32 @@ async function oldAt(env: Env, channel: Channel, t: number) {
   return { key: it.track_id ? `t:${it.track_id}` : `a:${it.audio_asset_id}`, pos: position_seconds, label: it.label };
 }
 
+// GET /dayparts?channel=<slug>&from=<ms>&hours=48 - the plan with each song's time-of-day tags,
+// and every song that starts in a time of day it isn't tagged for (should be none).
+schedulerDevRoutes.get("/dayparts", async (c) => {
+  const channel = await c.env.DB.prepare("SELECT * FROM channels WHERE slug = ?").bind(c.req.query("channel")).first<Channel>();
+  if (!channel) return c.json({ error: "no such channel" }, 404);
+  const from = Number(c.req.query("from")) || Date.now();
+  const hours = Math.min(96, Number(c.req.query("hours")) || 48);
+  const { songBands, TIME_BANDS } = await import("../lib/scheduler/dayparts");
+  const { wallClock } = await import("../lib/scheduler/time");
+  const bands = await songBands(c.env.DB);
+  const bandAt = (ms: number) => {
+    const h = Math.floor(wallClock(ms, "Europe/Paris").minutes / 60);
+    return h >= 5 && h < 12 ? "morning" : h >= 12 && h < 17 ? "afternoon" : h >= 17 && h < 22 ? "evening" : "night";
+  };
+  const planner = new Planner(c.env.DB, c.env.CONFIG, channel, await loadGridBlocks(c.env.DB, channel.id), from);
+  const { items } = await planner.build(from, from + hours * 3_600_000);
+  const rows = items.map((i) => {
+    const tags = i.trackId ? [...(bands.get(i.trackId) ?? [])] : [];
+    const band = bandAt(i.startsAt);
+    return { at: wallClock(i.startsAt, "Europe/Paris"), type: i.itemType, label: i.label, tags, band, ok: tags.length === 0 || tags.includes(band as never), blockId: i.blockId };
+  });
+  const songs = rows.filter((r) => r.type === "song");
+  const perBand = Object.fromEntries(TIME_BANDS.map((b) => [b, new Set(songs.filter((r) => r.band === b).map((r) => r.label)).size]));
+  return c.json({ items: rows.length, songs: songs.length, wrong_time: songs.filter((r) => !r.ok), distinct_songs_per_band: perBand, sample: rows.slice(0, 400) });
+});
+
 // GET /equivalence?now=<ms>&samples=500[&stored=1]
 // stored=1 reads itemAt() from the published log instead of the in-memory plan.
 schedulerDevRoutes.get("/equivalence", async (c) => {

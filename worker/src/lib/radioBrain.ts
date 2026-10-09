@@ -146,7 +146,7 @@ const STATION_ID_TARGET_SECONDS = 17.5 * 60; // midpoint of the brief's 15-20 mi
  */
 export const STATION_JINGLE_EVERY_SONGS = 2;
 /** Bumped whenever the rotation rules change, so cached rotations and the Scheduler's logs are rebuilt. */
-export const ROTATION_RULES = `jingles-every-${STATION_JINGLE_EVERY_SONGS}-songs-no-double`;
+export const ROTATION_RULES = `jingles-every-${STATION_JINGLE_EVERY_SONGS}-songs-no-double-dayparts`;
 const ENERGY_TIERS = ["low", "medium", "high"];
 
 /**
