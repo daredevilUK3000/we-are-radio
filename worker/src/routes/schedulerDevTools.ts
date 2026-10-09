@@ -15,7 +15,7 @@ export function registerDevTools(r: Hono<{ Bindings: Env }>) {
 
   // Wipe every Scheduler table.
   r.post("/reset", async (c) => {
-    for (const t of ["sched_log_items", "sched_versions", "sched_aired", "sched_changes", "sched_fallback_items", "sched_grid_blocks", "sched_runs"]) {
+    for (const t of ["sched_log_items", "sched_versions", "sched_aired", "sched_changes", "sched_fallback_items", "sched_block_exceptions", "sched_blocks", "sched_plans", "sched_runs"]) {
       await c.env.DB.prepare(`DELETE FROM ${t}`).run();
     }
     await c.env.DB.prepare(
@@ -100,21 +100,30 @@ export function registerDevTools(r: Hono<{ Bindings: Env }>) {
     return c.json({ checks: await channelHealth(c.env, ch, sc as never, now) });
   });
 
-  // Replace a channel's grid directly (the Studio API validates and versions; this doesn't).
+  // Replace a channel's blocks directly and publish them as its next plan (the Studio API validates and versions; this doesn't).
   r.post("/grid", async (c) => {
     const ch = await chan(c.env, c.req.query("channel"));
     if (!ch) return c.json({ error: "no channel" }, 404);
     const blocks = await c.req.json<Record<string, unknown>[]>();
-    await c.env.DB.prepare("DELETE FROM sched_grid_blocks WHERE channel_id = ?").bind(ch.id).run();
+    await c.env.DB.prepare("DELETE FROM sched_blocks WHERE channel_id = ?").bind(ch.id).run();
     const now = Date.now();
     for (const b of blocks) {
       await c.env.DB.prepare(
-        `INSERT INTO sched_grid_blocks (id, channel_id, name, description, days_mask, start_min, end_min, fill_kind, programme_id, tags_any_json, colour, active, created_at_ms, updated_at_ms)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?)`
-      ).bind(b.id, ch.id, b.name, b.description ?? "Test", b.days_mask ?? 127, b.start_min, b.end_min, b.fill_kind ?? "autopilot",
-        b.programme_id ?? null, b.tags_any_json ?? null, b.colour ?? "blue", now, Number(b.updated_at_ms) || now).run();
+        `INSERT INTO sched_blocks (id, channel_id, name, description, recurrence, days_mask, once_date, monthly_rule, date_from, date_to,
+           start_min, end_min, layer, start_mode, end_mode, priority, fill_kind, programme_id, tags_any_json, colour, public, active, created_at_ms, updated_at_ms)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`
+      ).bind(b.id, ch.id, b.name, b.description ?? "Test", b.recurrence ?? "weekly", b.recurrence && b.recurrence !== "weekly" ? null : (b.days_mask ?? 127),
+        b.once_date ?? null, b.monthly_rule ?? null, b.date_from ?? null, b.date_to ?? null,
+        b.start_min, b.end_min, b.layer ?? 1, b.start_mode ?? "hard", b.end_mode ?? "hard", b.priority ?? "normal", b.fill_kind ?? "autopilot",
+        b.programme_id ?? null, b.tags_any_json ?? null, b.colour ?? "blue", b.public ?? 1, now, Number(b.updated_at_ms) || now).run();
+      for (const d of (b.exceptions as string[] | undefined) ?? []) {
+        await c.env.DB.prepare("INSERT OR IGNORE INTO sched_block_exceptions (block_id, date) VALUES (?, ?)").bind(b.id, d).run();
+      }
     }
-    return c.json({ ok: true, count: blocks.length });
+    const { insertPlan, snapshotWorkingCopy, latestPlanRow } = await import("../lib/scheduler/plans");
+    const prev = await latestPlanRow(c.env.DB, ch.id);
+    const plan = await insertPlan(c.env.DB, { channelId: ch.id, snapshot: await snapshotWorkingCopy(c.env.DB, ch.id), summary: "Test grid", actor: "studio", effectiveFromMs: now, versionId: null, basedOn: prev?.number ?? null });
+    return c.json({ ok: true, count: blocks.length, plan: plan.number });
   });
 
   // The governing timeline between two instants.

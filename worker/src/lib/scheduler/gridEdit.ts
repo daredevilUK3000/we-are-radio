@@ -54,7 +54,7 @@ function weekIntervals(b: Pick<GridBlock, "days_mask" | "start_min" | "end_min">
   const out: [number, number][] = [];
   const len = blockLengthMin(b);
   for (let d = 0; d < 7; d++) {
-    if (!(b.days_mask & (1 << d))) continue;
+    if (!((b.days_mask ?? 0) & (1 << d))) continue;
     const s = d * 1440 + b.start_min;
     const e = s + len;
     if (e <= 10080) out.push([s, e]);
@@ -86,7 +86,7 @@ export async function validateBlock(
   if (input.active) {
     const clash = overlapWith(input, others);
     if (clash) {
-      const days = WEEKDAY_SHORT.filter((_, i) => clash.days_mask & input.days_mask & (1 << i)).join(", ");
+      const days = WEEKDAY_SHORT.filter((_, i) => (clash.days_mask ?? 0) & input.days_mask & (1 << i)).join(", ");
       errors.push({ field: "start_min", message: `Overlaps ${clash.name} (${hhmm(clash.start_min)}–${hhmm(clash.end_min)}${days ? `, ${days}` : ""}).` });
     }
   }

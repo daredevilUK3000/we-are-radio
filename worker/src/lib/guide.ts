@@ -1,5 +1,5 @@
 import type { Channel, Env } from "./types";
-import { loadGridBlocks, occurrencesBetween, type Occurrence } from "./scheduler/grid";
+import { loadGridBlocks, occurrencesBetween, type GridBlock, type Occurrence } from "./scheduler/grid";
 import { addDaysTo, DAY, HOUR, parisDate, parisWallClockToUtcMs } from "./scheduler/time";
 
 /**
@@ -52,6 +52,27 @@ export function recurringLabel(daysMask: number): string {
   return `${plural.slice(0, -1).join(", ")} and ${plural[plural.length - 1]}`;
 }
 
+const ORDINAL = ["", "First", "Second", "Third", "Fourth", "Fifth"];
+const nth = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
+
+/** How a block repeats, for the guide: weekly days, monthly rules, or null for a one-off. */
+export function blockRecurringLabel(b: GridBlock): string | null {
+  const recurrence = b.recurrence ?? "weekly";
+  if (recurrence === "once") return null;
+  if (recurrence === "monthly") {
+    try {
+      const rule = JSON.parse(b.monthly_rule ?? "{}") as { day?: number; nth?: number; weekday?: number };
+      if (typeof rule.day === "number") return `Every month on the ${nth(rule.day)}`;
+      if (typeof rule.nth === "number" && typeof rule.weekday === "number")
+        return `${rule.nth === -1 ? "Last" : ORDINAL[rule.nth] ?? `${nth(rule.nth)}`} ${DAY_NAMES[rule.weekday]} of the month`;
+    } catch {
+      /* fall through */
+    }
+    return "Every month";
+  }
+  return recurringLabel(b.days_mask ?? 0);
+}
+
 const sec = (ms: number) => Math.round(ms / 1000);
 
 /** A channel-default span, cut at Paris midnights so each day's list is self-contained. */
@@ -81,7 +102,7 @@ const slotFor = (o: Occurrence): GuideSlot => ({
   description: o.block.description,
   starts_at: sec(o.startMs),
   ends_at: sec(o.endMs),
-  recurring: recurringLabel(o.block.days_mask),
+  recurring: blockRecurringLabel(o.block),
   kind: o.block.colour === "purple" ? "show" : "music",
 });
 
@@ -99,7 +120,8 @@ export async function buildGuide(env: Env, days: number, nowMs = Date.now()): Pr
   for (const ch of channels) {
     const slots: GuideSlot[] = [];
     if (ch.sched_enabled) {
-      const occs = occurrencesBetween(await loadGridBlocks(env.DB, ch.id), fromMs, toMs);
+      // Non-public blocks fold into the channel default (§11.1).
+      const occs = occurrencesBetween(await loadGridBlocks(env.DB, ch.id), fromMs, toMs).filter((o) => o.block.public !== 0);
       let cursor = fromMs;
       for (const o of occs) {
         const start = Math.max(o.startMs, cursor);

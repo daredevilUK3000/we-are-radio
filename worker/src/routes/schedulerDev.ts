@@ -30,6 +30,50 @@ async function oldAt(env: Env, channel: Channel, t: number) {
   return { key: it.track_id ? `t:${it.track_id}` : `a:${it.audio_asset_id}`, pos: position_seconds, label: it.label };
 }
 
+// GET /r2-tests - Release 2's engine checks (recurrence, layers, Release 1 equivalence), plus
+// planner checks on a real channel's catalogue: a flexible boundary lets the last song finish
+// and a hard one fits it; a one-off special cuts a recurring block, which resumes after it.
+schedulerDevRoutes.get("/r2-tests", async (c) => {
+  const { runR2Tests } = await import("../lib/scheduler/r2tests");
+  const { parisWallClockToUtcMs } = await import("../lib/scheduler/time");
+  const results = runR2Tests();
+  const channel = await c.env.DB.prepare("SELECT * FROM channels WHERE slug = ?").bind(c.req.query("channel") ?? "kizzi-radio").first<Channel>();
+  if (channel) {
+    const date = "2026-10-16";
+    const at = (m: number) => parisWallClockToUtcMs(date, m);
+    const mk = (id: string, name: string, extra: Record<string, unknown>) =>
+      ({ id, channel_id: channel.id, name, description: "Test", colour: "blue", days_mask: 127, start_min: 18 * 60, end_min: 19 * 60, fill_kind: "autopilot",
+         programme_id: null, tags_any_json: null, active: 1, created_at_ms: 0, updated_at_ms: 0, ...extra }) as never;
+    for (const flexible of [true, false]) {
+      const mode = flexible ? "flexible" : "hard";
+      const blocks = [mk("fa", "A", { start_min: 18 * 60, end_min: 19 * 60, end_mode: mode }), mk("fb", "B", { start_min: 19 * 60, end_min: 20 * 60, start_mode: mode })];
+      const { items } = await new Planner(c.env.DB, c.env.CONFIG, channel, blocks, at(17 * 60)).build(at(17 * 60 + 50), at(20 * 60 + 30));
+      const lastA = [...items].reverse().find((i) => i.blockId === "fa")!;
+      const firstB = items.find((i) => i.blockId === "fb")!;
+      const lastB = [...items].reverse().find((i) => i.blockId === "fb")!;
+      const natural = lastA.endsAt - lastA.startsAt === lastA.fileMs - lastA.offset;
+      const ok = flexible
+        ? natural && lastA.endsAt >= at(19 * 60) && firstB.startsAt === lastA.endsAt && lastB.endsAt === at(20 * 60)
+        : lastA.endsAt === at(19 * 60) && firstB.startsAt === at(19 * 60);
+      results.push({ name: `planner: ${mode} boundary A->B at 19:00`, ok, ...(ok ? {} : { detail: JSON.stringify({ lastAEnd: new Date(lastA.endsAt).toISOString(), natural, firstBStart: new Date(firstB.startsAt).toISOString(), lastBEnd: new Date(lastB.endsAt).toISOString() }) }) });
+    }
+    {
+      const blocks = [
+        mk("rec", "Recurring", { days_mask: 127, start_min: 18 * 60, end_min: 22 * 60, layer: 1 }),
+        mk("sp", "Special", { recurrence: "once", once_date: date, days_mask: null, start_min: 20 * 60, end_min: 21 * 60, layer: 3 }),
+      ];
+      const { items } = await new Planner(c.env.DB, c.env.CONFIG, channel, blocks, at(17 * 60)).build(at(17 * 60 + 50), at(22 * 60 + 30));
+      const firstSp = items.find((i) => i.blockId === "sp");
+      const lastSp = [...items].reverse().find((i) => i.blockId === "sp");
+      const resumed = items.find((i) => i.blockId === "rec" && i.startsAt >= at(21 * 60));
+      const lastRec = [...items].reverse().find((i) => i.blockId === "rec");
+      const ok = !!firstSp && firstSp.startsAt === at(20 * 60) && lastSp!.endsAt === at(21 * 60) && resumed?.startsAt === at(21 * 60) && lastRec!.endsAt === at(22 * 60);
+      results.push({ name: "planner: one-off 20-21 over recurring 18-22, both boundaries on the dot", ok, ...(ok ? {} : { detail: JSON.stringify({ sp: firstSp && new Date(firstSp.startsAt).toISOString(), spEnd: lastSp && new Date(lastSp.endsAt).toISOString(), resumed: resumed && new Date(resumed.startsAt).toISOString() }) }) });
+    }
+  }
+  return c.json({ passed: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok), total: results.length });
+});
+
 // GET /dayparts?channel=<slug>&from=<ms>&hours=48 - the plan with each song's time-of-day tags,
 // and every song that starts in a time of day it isn't tagged for (should be none).
 schedulerDevRoutes.get("/dayparts", async (c) => {

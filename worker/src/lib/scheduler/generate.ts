@@ -1,6 +1,7 @@
 import type { Channel, Env } from "../types";
 import { hashSeed, ROTATION_RULES } from "../radioBrain";
 import { loadGridBlocks } from "./grid";
+import { planDigests } from "./plans";
 import { Planner, PlanError } from "./plan";
 import { liveMax, logChange, publishVersion, type PublishResult, type VersionKind, type VersionRow } from "./store";
 import { itemAt, itemsBetween } from "./timeline";
@@ -83,14 +84,9 @@ export function channelFingerprint(channel: Channel, catalogue: string, gridDige
   )}|${gridDigest}`;
 }
 
+/** What each channel's log is built from on the plan side: its latest published plan (plans.ts). */
 export async function gridDigests(db: D1Database): Promise<Map<string, string>> {
-  const { results } = await db
-    .prepare(
-      `SELECT channel_id, group_concat(id || ':' || updated_at_ms || ':' || active) AS d
-       FROM sched_grid_blocks GROUP BY channel_id`
-    )
-    .all<{ channel_id: string; d: string }>();
-  return new Map(results.map((r) => [r.channel_id, String(hashSeed(r.d ?? ""))]));
+  return planDigests(db);
 }
 
 export type GenerateOutcome =

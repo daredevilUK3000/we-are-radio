@@ -43,7 +43,7 @@ export async function gridStatus(db: D1Database, channelId: string, nowMs: numbe
   const lastEdit = await db
     .prepare(
       `SELECT MAX(t) AS t FROM (
-         SELECT MAX(updated_at_ms) AS t FROM sched_grid_blocks WHERE channel_id = ?1
+         SELECT MAX(created_at_ms) AS t FROM sched_plans WHERE channel_id = ?1
          UNION ALL SELECT MAX(at_ms) FROM sched_changes WHERE channel_id = ?1 AND action = 'grid')`
     )
     .bind(channelId)

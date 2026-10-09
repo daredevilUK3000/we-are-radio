@@ -4,7 +4,8 @@ import { newId, nowIso } from "../lib/id";
 import { requireSameOrigin } from "../lib/origin";
 import { runAction, type ActionRequest } from "../lib/scheduler/actions";
 import { buildFromPlan, latestVersion, nextBoundary, HORIZON_MS, type SchedChannelRow } from "../lib/scheduler/generate";
-import { DAY_KEYS, loadGridBlocks, occurrenceOn, type GridBlock } from "../lib/scheduler/grid";
+import { DAY_KEYS, loadGridBlocks, loadWorkingBlocks, occurrenceOn, type GridBlock } from "../lib/scheduler/grid";
+import { insertPlan, latestPlanRow, snapshotWorkingCopy } from "../lib/scheduler/plans";
 import { overlapWith, parseBlockInput, validateBlock } from "../lib/scheduler/gridEdit";
 import { channelHealth, gridStatus, LIVE_CONTROL_KINDS, type HealthCheck } from "../lib/scheduler/health";
 import { fallbackLoop } from "../lib/scheduler/read";
@@ -488,7 +489,8 @@ schedulerRoutes.get("/channels/:slug/top-jingles", async (c) => {
 // ------------------------------------------------------------------ the weekly grid
 
 async function gridPayload(env: Env, ch: Channel, nowMs: number) {
-  const blocks = await loadGridBlocks(env.DB, ch.id, true);
+  // The working copy (Release 2): until the Timeline's Draft and Publish arrive, every save here is published at once.
+  const blocks = await loadWorkingBlocks(env.DB, ch.id, true);
   // This week, Monday to Sunday (Paris), each day's occurrences.
   const today = parisDate(nowMs);
   const monday = addDaysTo(today, -weekdayIndex(today));
@@ -564,14 +566,28 @@ async function applyGridChange(c: Ctx, ch: Channel, write: () => Promise<void>, 
   await write();
   const from = await nextBoundary(c.env.DB, ch.id, now);
   const latest = await latestVersion(c.env.DB, ch.id);
+  // The working copy becomes the next published plan, and the log is rebuilt from it.
+  const prevPlan = await latestPlanRow(c.env.DB, ch.id);
+  const plan = await insertPlan(c.env.DB, {
+    channelId: ch.id,
+    snapshot: await snapshotWorkingCopy(c.env.DB, ch.id),
+    summary,
+    actor: "studio",
+    effectiveFromMs: from,
+    versionId: null,
+    basedOn: prevPlan?.number ?? null,
+  });
   const out = await buildFromPlan(c.env, ch, {
     kind: "grid", actor: "studio", from, to: Math.max(latest?.horizon_ms ?? 0, now + HORIZON_MS), nowMs: now,
     summary: () => summary,
   });
   if (out.status !== "published") {
+    await c.env.DB.prepare("DELETE FROM sched_plans WHERE id = ?").bind(plan.id).run();
     await undo();
     return c.json({ error: "build_failed", message: `Not saved: ${out.status === "failed" ? out.error : "nothing to schedule"}. Nothing live changed.` }, 400);
   }
+  await c.env.DB.prepare("UPDATE sched_plans SET version_id = ? WHERE id = ?").bind(out.version.id, plan.id).run();
+  await c.env.DB.prepare("UPDATE sched_versions SET action = 'publish' WHERE id = ?").bind(out.version.id).run();
   clearTimelineCache(ch.id);
   await c.env.CONFIG.delete(`sched:health:${ch.id}`);
   await logChange(c.env.DB, { channelId: ch.id, versionId: out.version.id, actor: "studio", action: "grid", reason: summary });
@@ -587,8 +603,8 @@ const blockRow = (id: string, channelId: string, v: ReturnType<typeof parseBlock
 async function upsertBlock(db: D1Database, b: GridBlock) {
   await db
     .prepare(
-      `INSERT INTO sched_grid_blocks (id, channel_id, name, description, days_mask, start_min, end_min, fill_kind, programme_id, tags_any_json, colour, active, created_at_ms, updated_at_ms)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `INSERT INTO sched_blocks (id, channel_id, name, description, recurrence, days_mask, start_min, end_min, fill_kind, programme_id, tags_any_json, colour, active, created_at_ms, updated_at_ms)
+       VALUES (?,?,?,?,'weekly',?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description, days_mask = excluded.days_mask,
          start_min = excluded.start_min, end_min = excluded.end_min, fill_kind = excluded.fill_kind, programme_id = excluded.programme_id,
          tags_any_json = excluded.tags_any_json, colour = excluded.colour, active = excluded.active, updated_at_ms = excluded.updated_at_ms`
@@ -603,24 +619,24 @@ schedulerRoutes.post("/channels/:slug/grid", async (c) => {
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
   const parsed = parseBlockInput(body);
   if (!parsed.ok) return c.json({ error: "invalid", field: parsed.field, message: parsed.message }, 400);
-  const others = await loadGridBlocks(c.env.DB, ch.id, true);
+  const others = await loadWorkingBlocks(c.env.DB, ch.id, true);
   const check = await validateBlock(c.env.DB, ch, parsed.value, others);
   if (check.errors.length) return c.json({ error: "invalid", field: check.errors[0].field, message: check.errors[0].message }, 400);
   if (check.warnings.length && body.force !== true) return c.json({ error: "warning", message: check.warnings[0], needs_force: true }, 409);
   const now = Date.now();
   const row = blockRow(newId("blk"), ch.id, parsed, now, now) as GridBlock;
-  return applyGridChange(c, ch, () => upsertBlock(c.env.DB, row), () => c.env.DB.prepare("DELETE FROM sched_grid_blocks WHERE id = ?").bind(row.id).run().then(() => {}), `Grid: added ${row.name}`);
+  return applyGridChange(c, ch, () => upsertBlock(c.env.DB, row), () => c.env.DB.prepare("DELETE FROM sched_blocks WHERE id = ?").bind(row.id).run().then(() => {}), `Grid: added ${row.name}`);
 });
 
 schedulerRoutes.put("/channels/:slug/grid/:blockId", async (c) => {
   const ch = await channelBySlug(c.env.DB, c.req.param("slug"));
   if (!ch) return c.json({ error: "not_found" }, 404);
-  const existing = await c.env.DB.prepare("SELECT * FROM sched_grid_blocks WHERE id = ? AND channel_id = ?").bind(c.req.param("blockId"), ch.id).first<GridBlock>();
+  const existing = await c.env.DB.prepare("SELECT * FROM sched_blocks WHERE id = ? AND channel_id = ?").bind(c.req.param("blockId"), ch.id).first<GridBlock>();
   if (!existing) return c.json({ error: "not_found", message: "That block no longer exists." }, 404);
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
   const parsed = parseBlockInput(body);
   if (!parsed.ok) return c.json({ error: "invalid", field: parsed.field, message: parsed.message }, 400);
-  const others = (await loadGridBlocks(c.env.DB, ch.id, true)).filter((b) => b.id !== existing.id);
+  const others = (await loadWorkingBlocks(c.env.DB, ch.id, true)).filter((b) => b.id !== existing.id);
   const check = await validateBlock(c.env.DB, ch, parsed.value, others);
   if (check.errors.length) return c.json({ error: "invalid", field: check.errors[0].field, message: check.errors[0].message }, 400);
   if (check.warnings.length && body.force !== true) return c.json({ error: "warning", message: check.warnings[0], needs_force: true }, 409);
@@ -631,12 +647,12 @@ schedulerRoutes.put("/channels/:slug/grid/:blockId", async (c) => {
 schedulerRoutes.delete("/channels/:slug/grid/:blockId", async (c) => {
   const ch = await channelBySlug(c.env.DB, c.req.param("slug"));
   if (!ch) return c.json({ error: "not_found" }, 404);
-  const existing = await c.env.DB.prepare("SELECT * FROM sched_grid_blocks WHERE id = ? AND channel_id = ?").bind(c.req.param("blockId"), ch.id).first<GridBlock>();
+  const existing = await c.env.DB.prepare("SELECT * FROM sched_blocks WHERE id = ? AND channel_id = ?").bind(c.req.param("blockId"), ch.id).first<GridBlock>();
   if (!existing) return c.json({ error: "not_found", message: "That block no longer exists." }, 404);
   return applyGridChange(
     c,
     ch,
-    () => c.env.DB.prepare("DELETE FROM sched_grid_blocks WHERE id = ?").bind(existing.id).run().then(() => {}),
+    () => c.env.DB.prepare("DELETE FROM sched_blocks WHERE id = ?").bind(existing.id).run().then(() => {}),
     () => upsertBlock(c.env.DB, existing),
     `Grid: removed ${existing.name}`
   );
@@ -651,11 +667,12 @@ schedulerRoutes.post("/channels/:slug/grid/copy-day", async (c) => {
   const toIdx = (body.to ?? []).map((d) => DAY_KEYS.indexOf(d as (typeof DAY_KEYS)[number])).filter((i) => i >= 0 && i !== fromIdx);
   if (fromIdx < 0 || toIdx.length === 0) return c.json({ error: "invalid", message: "Choose a day to copy and the days to copy it to." }, 400);
   const targetMask = toIdx.reduce((m, i) => m | (1 << i), 0);
-  const before = await loadGridBlocks(c.env.DB, ch.id, true);
+  // Weekly blocks only: one-offs and monthly blocks have no days to copy.
+  const before = (await loadWorkingBlocks(c.env.DB, ch.id, true)).filter((b) => (b.recurrence ?? "weekly") === "weekly");
   const after = before
     .map((b) => {
-      let mask = b.days_mask & ~targetMask; // clear the target days
-      if (b.days_mask & (1 << fromIdx)) mask |= targetMask; // then the source day's blocks run on them
+      let mask = (b.days_mask ?? 0) & ~targetMask; // clear the target days
+      if ((b.days_mask ?? 0) & (1 << fromIdx)) mask |= targetMask; // then the source day's blocks run on them
       return { ...b, days_mask: mask, updated_at_ms: Date.now() };
     });
   // No overlaps allowed after the copy.
@@ -670,7 +687,7 @@ schedulerRoutes.post("/channels/:slug/grid/copy-day", async (c) => {
     async () => {
       for (const b of after) {
         if (b.days_mask) await upsertBlock(c.env.DB, b);
-        else await c.env.DB.prepare("DELETE FROM sched_grid_blocks WHERE id = ?").bind(b.id).run();
+        else await c.env.DB.prepare("DELETE FROM sched_blocks WHERE id = ?").bind(b.id).run();
       }
     },
     async () => {

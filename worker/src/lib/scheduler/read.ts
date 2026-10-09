@@ -3,7 +3,7 @@ import type { RotationItem } from "../radioBrain";
 import { locateInLoop } from "../radioBrain";
 import { enrichItems } from "../station";
 import { cachedWindow, itemsBetween, locate, type TimelineItem } from "./timeline";
-import type { GridBlock } from "./grid";
+import { loadGridBlocks } from "./grid";
 import { voiceFor } from "../onAir";
 
 /**
@@ -53,8 +53,8 @@ async function cachedRow<T>(key: string, load: () => Promise<T | null>): Promise
 
 async function programmeFor(db: D1Database, channel: Channel, item: TimelineItem) {
   if (item.blockId) {
-    const block = await cachedRow(`blk:${item.blockId}`, () =>
-      db.prepare("SELECT * FROM sched_grid_blocks WHERE id = ?").bind(item.blockId).first<GridBlock>()
+    const block = await cachedRow(`blk:${channel.id}:${item.blockId}`, async () =>
+      (await loadGridBlocks(db, channel.id, true)).find((b) => b.id === item.blockId) ?? null
     );
     if (block) return { id: null, title: block.name, description: block.description };
   }

@@ -264,7 +264,10 @@ export class Planner {
     for (let guard = 0; t < toMs && guard < 200; guard++) {
       const occ = occs.find((o) => o.startMs <= t && t < o.endMs) ?? daypartAt(t);
       const next = occ ? occ.endMs : occs.find((o) => o.startMs > t)?.startMs ?? Infinity;
-      const items = occ ? await this.blockWindow(occ, t, toMs, out) : await this.defaultWindow(t, next, toMs, occs, out);
+      // A flexible boundary (§2.3): this block ends flexibly AND the next one starts flexibly, right where it ends.
+      const following = occ && !occ.cut && !occ.daypart ? occs.find((o) => o.startMs === occ.endMs) : undefined;
+      const flexEnd = !!(occ && following && occ.block.end_mode === "flexible" && following.block.start_mode === "flexible");
+      const items = occ ? await this.blockWindow(occ, t, toMs, out, flexEnd) : await this.defaultWindow(t, next, toMs, occs, out);
       if (items.length === 0) {
         throw new PlanError(`Nothing to play from ${parisHHMM(t)}`);
       }
@@ -281,7 +284,7 @@ export class Planner {
   }
 
   /** A block's items from `t` (its start, or later when resuming) up to its end - or past `limit` if that comes first. */
-  private async blockWindow(occ: Occurrence, t: number, limit: number, before: PlanItem[]): Promise<PlanItem[]> {
+  private async blockWindow(occ: Occurrence, t: number, limit: number, before: PlanItem[], flexEnd = false): Promise<PlanItem[]> {
     const content = await this.contentFor(occ);
     const reasons = [occ.daypart ? daypartReason(occ) : blockReason(occ)];
     const seq = content.items
@@ -298,10 +301,12 @@ export class Planner {
     if (seq.length === 0) throw new PlanError(`The ${occ.block.name} block has nothing playable`);
 
     // Laid out from the block's start, deterministically, so resuming part-way lands where the published log is.
-    const recent = this.recentMap(before.filter((i) => i.startsAt >= occ.startMs - REPEAT_WINDOW_MS));
+    // After a higher layer cut into it, that's still the occurrence's own start (originMs, §2.2).
+    const origin = occ.originMs ?? occ.startMs;
+    const recent = this.recentMap(before.filter((i) => i.startsAt >= origin - REPEAT_WINDOW_MS));
     const emitEnd = Math.min(occ.endMs, limit);
     const all: PlanItem[] = [];
-    let cursor = occ.startMs;
+    let cursor = origin;
     let skipped = 0;
     for (let k = 0; cursor < emitEnd && k < 20_000; k++) {
       const p = seq[k % seq.length];
@@ -327,6 +332,8 @@ export class Planner {
     items = this.notTheSameAgain(items, t);
 
     if (occ.endMs > limit) return items; // the fit happens in a later version (limit is never within an hour of the end)
+    // Flexible into flexible: the last item that starts before the boundary plays to its natural end, and the next block starts after it.
+    if (flexEnd) return items;
     const endLabel = parisHHMM(occ.endMs);
     return fitToWindow(items, t, occ.endMs, content.pool, this.recentMap([...before, ...all.slice(0, from)]), {
       dropped: `Dropped so the ${occ.block.name} block ends on time at ${endLabel}`,
