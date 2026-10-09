@@ -5,6 +5,7 @@ import { useActiveChannel } from "../context/ActiveChannelContext";
 import { livePosition, nextOnEnded, startPosition, stillFinishing, useExclusiveAudio } from "../lib/audioUtils";
 import { cancelOverlay, unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { isBroken, useStallRecovery } from "../lib/useStallRecovery";
+import { usePreloadNext } from "../lib/usePreloadNext";
 import { NowPlayingExpanded } from "./NowPlayingExpanded";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "./ShareButton";
@@ -293,6 +294,8 @@ export function NowPlayingBar() {
     assumed.current = null;
     void refresh();
   }
+  // The next song and its jingles come from the phone, not the network, when it's time (lib/usePreloadNext.ts).
+  usePreloadNext(audioRef, loadedItem, data);
   useStallRecovery(audioRef, {
     active: playing && !castingHere && !rw.rewound,
     endAt: loadedItem?.file_duration_seconds > loadedItem?.duration_seconds ? loadedItem.duration_seconds : null,

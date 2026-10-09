@@ -25,6 +25,12 @@ import { overlayRecent } from "../../shared/duckEngine";
  * music right then - the music is started again straight away. Any other
  * pause is the phone's own (a call, headphones out) and is left alone; the
  * play button then resumes with one tap. Both are reported.
+ *
+ * Woken up to silence (9 Oct 2026): a phone can freeze the page while it's
+ * asleep, and then nothing here can run until the screen comes back on. If
+ * the music hadn't moved for a while when the page becomes visible again, it
+ * says so ("woke_up_silent", with how long it was hidden and silent and what
+ * state the audio was in), so those stops can be told apart from the rest.
  */
 
 const CHECK_MS = 2000;
@@ -124,6 +130,37 @@ export function useStallRecovery(
     };
     audio.addEventListener("pause", onPause);
 
+    let lastProgressAt = Date.now();
+    let hiddenAt: number | null = document.visibilityState === "hidden" ? Date.now() : null;
+    const onProgress = () => {
+      if (!audio.paused) lastProgressAt = Date.now();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      const silentS = Math.round((Date.now() - lastProgressAt) / 1000);
+      if (hiddenAt !== null && silentS >= 15 && latest.current.active) {
+        const o = latest.current;
+        trackPlayerIssue("woke_up_silent", {
+          channelId: o.channelId,
+          label: o.label,
+          detail: {
+            ...audioState(audio),
+            paused: audio.paused,
+            ended: audio.ended,
+            hidden_s: Math.round((Date.now() - hiddenAt) / 1000),
+            silent_s: silentS,
+            jingle_before: overlayRecent(audio, silentS * 1000 + 10_000),
+          },
+        });
+      }
+      hiddenAt = null;
+    };
+    audio.addEventListener("timeupdate", onProgress);
+    document.addEventListener("visibilitychange", onVisibility);
+
     const onError = () => {
       if (!gaveUp) tryRecover("error");
     };
@@ -153,6 +190,8 @@ export function useStallRecovery(
     return () => {
       audio.removeEventListener("error", onError);
       audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("timeupdate", onProgress);
+      document.removeEventListener("visibilitychange", onVisibility);
       window.clearTimeout(pauseCheck);
       window.clearInterval(id);
     };

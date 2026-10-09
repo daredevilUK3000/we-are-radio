@@ -4,6 +4,7 @@ import { mediaUrl } from "../../api/client";
 import { useExclusiveAudio, formatClock, livePosition, nextOnEnded, stillFinishing, startPosition } from "../lib/audioUtils";
 import { cancelOverlay, unlockAudio, useOverlayJingles } from "../../shared/duckEngine";
 import { isBroken, useStallRecovery } from "../lib/useStallRecovery";
+import { usePreloadNext } from "../lib/usePreloadNext";
 import { useChannelLog } from "../../shared/analytics";
 import { ShareButton } from "../components/ShareButton";
 import { FlagshipPlayer } from "../components/FlagshipPlayer";
@@ -202,6 +203,8 @@ export function Listen() {
     assumed.current = null;
     void refresh();
   }
+  // The next song and its jingles come from the phone, not the network, when it's time (lib/usePreloadNext.ts).
+  usePreloadNext(audioRef, loadedItem, data);
   useStallRecovery(audioRef, {
     active: playing && !castingHere && !rw.rewound,
     endAt: loadedItem?.file_duration_seconds > loadedItem?.duration_seconds ? loadedItem.duration_seconds : null,
