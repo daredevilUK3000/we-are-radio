@@ -179,3 +179,125 @@ export const schedApi = {
 
 export const friendly = (err: unknown, fallback = "Something went wrong. Please try again.") =>
   (err instanceof ApiError && err.friendly) || fallback;
+
+// ------------------------------------------------------------------ Release 2: the plan (worker/src/routes/schedulerPlan.ts)
+
+export type BlockColour = "blue" | "purple" | "gold" | "green" | "red" | "grey";
+
+export interface PlanBlock {
+  id: string;
+  channel_id: string;
+  name: string;
+  description: string;
+  colour: BlockColour;
+  recurrence: "once" | "weekly" | "monthly";
+  days_mask: number | null;
+  once_date: string | null;
+  monthly_rule: string | null;
+  date_from: string | null;
+  date_to: string | null;
+  start_min: number;
+  end_min: number;
+  layer: number;
+  start_mode: "hard" | "flexible";
+  end_mode: "hard" | "flexible";
+  priority: "high" | "normal";
+  mode: "auto" | "manual";
+  fill_kind: "programme" | "autopilot" | "playlist" | "template" | "manual";
+  programme_id: string | null;
+  tags_any: string[];
+  public: number;
+  active: number;
+  exceptions: string[];
+  updated_at_ms: number;
+}
+
+export interface PlanSegment {
+  block_id: string;
+  date: string;
+  start_ms: number;
+  end_ms: number;
+  origin_ms: number;
+  cut: boolean;
+  resumed: boolean;
+}
+
+export type FixKind = "move" | "shorten" | "replace" | "exception" | "edit";
+
+export interface PlanIssue {
+  level: "red" | "amber";
+  code: string;
+  text: string;
+  block_id?: string;
+  other_block_id?: string;
+  date?: string;
+  start_ms?: number;
+  end_ms?: number;
+  fixes: FixKind[];
+}
+
+export interface ChannelDraft {
+  slug: string;
+  name: string;
+  live_plan: number | null;
+  live_version: number | null;
+  changes: { text: string; block_id?: string }[];
+  issues: PlanIssue[];
+  first_change_ms: number | null;
+  can_publish: boolean;
+  why_not: string | null;
+}
+
+export interface BoardLane {
+  slug: string;
+  name: string;
+  description: string | null;
+  status: string;
+  enabled: boolean;
+  programming_mode: string;
+  accent: string;
+  live_plan: number | null;
+  live_version: number | null;
+  blocks: PlanBlock[];
+  segments: PlanSegment[];
+  raw: { block_id: string; date: string; start_ms: number; end_ms: number }[];
+  conflicts: { block_id: string; other_block_id: string; date: string; start_ms: number; end_ms: number }[];
+  draft: ChannelDraft;
+}
+
+export interface Board {
+  now_ms: number;
+  from: number;
+  to: number;
+  view: "draft" | "live";
+  channels: BoardLane[];
+  programmes: { id: string; title: string; channel_id: string; duration_seconds: number | null; items: number }[];
+  tags: string[];
+}
+
+export type PublishOutcome =
+  | { ok: true; plan: number; version: number | null; goes_live_ms: number | null; message: string }
+  | { ok: false; status: number; error: string; message: string; issues?: PlanIssue[]; live_plan?: number | null };
+
+type Drafts = { ok: true; drafts: Record<string, ChannelDraft> };
+
+export const planApi = {
+  board: (from: number, to: number, view: "draft" | "live", channel?: string) =>
+    call<Board>(`/plan/board?from=${from}&to=${to}&view=${view}${channel ? `&channel=${channel}` : ""}`),
+  drafts: () => call<{ now_ms: number; drafts: Record<string, ChannelDraft> }>("/plan/draft"),
+  create: (body: Record<string, unknown>) => call<Drafts & { block: PlanBlock }>("/plan/blocks", json(body)),
+  update: (id: string, body: Record<string, unknown>) => call<Drafts & { block: PlanBlock }>(`/plan/blocks/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  remove: (id: string, scope?: "occurrence", date?: string) => call<Drafts>(`/plan/blocks/${id}${scope ? `?scope=${scope}&date=${date}` : ""}`, { method: "DELETE" }),
+  duplicate: (id: string) => call<Drafts & { block: PlanBlock }>(`/plan/blocks/${id}/duplicate`, json({})),
+  exception: (id: string, date: string, skip = true) => call<Drafts>(`/plan/blocks/${id}/exception`, json({ date, skip })),
+  copyDay: (channel: string, from: string, to: string[]) => call<Drafts>("/plan/copy-day", json({ channel, from, to })),
+  preview: (channel: string, date: string) => call<any>(`/plan/preview?channel=${channel}&date=${date}`),
+  publish: (channels: string[], expected: Record<string, number | null>) =>
+    call<{ results: Record<string, PublishOutcome>; drafts: Record<string, ChannelDraft> }>("/plan/publish", json({ channels, expected })),
+  discard: (channel: string) => call<Drafts & { discarded: number; message: string }>("/plan/discard", json({ channel })),
+  rollback: (channel: string, number: number, expected: number | null) =>
+    call<Drafts & { result: PublishOutcome }>("/plan/rollback", json({ channel, number, expected })),
+  plans: (channel: string) => call<{ channel: { slug: string; name: string }; plans: any[]; draft_changes: number }>(`/plan/plans?channel=${channel}`),
+  plan: (channel: string, number: number) => call<{ plan: any; blocks: PlanBlock[]; compared_to_live: { text: string }[] }>(`/plan/plans/${number}?channel=${channel}`),
+  pool: (tags: string[], channel: string) => call<{ tracks: number; seconds: number }>(`/plan/pool?tags=${encodeURIComponent(tags.join(","))}&channel=${channel}`),
+};

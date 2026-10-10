@@ -1,6 +1,7 @@
 import type { Channel, Env } from "./types";
 import { loadGridBlocks, occurrencesBetween, type GridBlock, type Occurrence } from "./scheduler/grid";
 import { addDaysTo, DAY, HOUR, parisDate, parisWallClockToUtcMs } from "./scheduler/time";
+import { googleCalendarUrl } from "./ics";
 
 /**
  * The public programme guide (handoff_tv_firetv.md §A3, in the response shape
@@ -21,6 +22,8 @@ export interface GuideSlot {
   ends_at: number;
   recurring: string | null; // "Every Friday"
   kind: "show" | "music" | "default";
+  /** Add to calendar (block slots only): the .ics file and a Google Calendar link. */
+  calendar?: { ics: string; google: string | null };
 }
 
 export interface GuideChannel {
@@ -96,7 +99,7 @@ function defaultSpans(channel: Channel, fromMs: number, toMs: number): GuideSlot
   return out;
 }
 
-const slotFor = (o: Occurrence): GuideSlot => ({
+const slotFor = (o: Occurrence, ch: Channel, nowMs: number): GuideSlot => ({
   block_id: o.block.id,
   name: o.block.name,
   description: o.block.description,
@@ -104,6 +107,7 @@ const slotFor = (o: Occurrence): GuideSlot => ({
   ends_at: sec(o.endMs),
   recurring: blockRecurringLabel(o.block),
   kind: o.block.colour === "purple" ? "show" : "music",
+  calendar: { ics: `/api/guide/blocks/${o.block.id}.ics`, google: googleCalendarUrl(o.block, ch, nowMs) },
 });
 
 /** The guide for [today 00:00 Paris, + days). */
@@ -126,7 +130,7 @@ export async function buildGuide(env: Env, days: number, nowMs = Date.now()): Pr
       for (const o of occs) {
         const start = Math.max(o.startMs, cursor);
         if (start > cursor) slots.push(...defaultSpans(ch, cursor, start));
-        slots.push(slotFor(o));
+        slots.push(slotFor(o, ch, nowMs));
         cursor = Math.max(cursor, o.endMs);
       }
       if (cursor < toMs) slots.push(...defaultSpans(ch, cursor, toMs));

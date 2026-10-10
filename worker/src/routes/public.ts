@@ -5,6 +5,8 @@ import { addDays, parseCapsuleFields, stationToday } from "../lib/capsules";
 import { enrichItems, loadPinnedJingles, loadStation } from "../lib/station";
 import { nowPlayingFromLog, scheduleFromLog, schedState } from "../lib/scheduler/read";
 import { blocksAround, buildGuide } from "../lib/guide";
+import { icsForBlock } from "../lib/ics";
+import { loadGridBlocks } from "../lib/scheduler/grid";
 import { newId, nowIso } from "../lib/id";
 import {
   buildRotation,
@@ -331,6 +333,25 @@ publicRoutes.get("/now-playing/all", async (c) => {
 publicRoutes.get("/guide", async (c) => {
   const days = Math.min(7, Math.max(1, Math.floor(Number(c.req.query("days")) || 7)));
   return c.json(await buildGuide(c.env, days), 200, { "Cache-Control": "public, max-age=300" });
+});
+
+/** GET /api/guide/blocks/:blockId.ics - "Add to calendar" for a public block of a live channel's published plan. */
+publicRoutes.get("/guide/blocks/:file", async (c) => {
+  const id = c.req.param("file").replace(/\.ics$/, "");
+  const { results: channels } = await c.env.DB.prepare(
+    `SELECT ch.* FROM channels ch JOIN sched_channels sc ON sc.channel_id = ch.id WHERE ch.status = 'live' AND sc.enabled = 1`
+  ).all<Channel>();
+  for (const ch of channels) {
+    const block = (await loadGridBlocks(c.env.DB, ch.id)).find((b) => b.id === id && b.public !== 0);
+    if (!block) continue;
+    const ics = icsForBlock(block, ch);
+    if (!ics) break;
+    const file = `${ch.slug}-${block.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "show"}.ics`;
+    return new Response(ics, {
+      headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": `attachment; filename="${file}"`, "Cache-Control": "public, max-age=300" },
+    });
+  }
+  return c.json({ error: "not_found" }, 404);
 });
 
 /**

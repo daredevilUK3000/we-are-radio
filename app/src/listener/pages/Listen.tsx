@@ -22,6 +22,7 @@ import { ListenerVoicePill, voiceLines } from "../components/onair/voice";
 import { GOOD_ON_AIR_SUB, GoodOnAirPill, GoodOnAirTitle, isGood } from "../components/good/GoodOnAir";
 import { fadeIn, useRewind } from "../lib/useRewind";
 import { BackToLivePill, StartOverButton } from "../components/PlayerRewind";
+import { ComingUpAt } from "../components/ComingUpAt";
 import { JustPlayed, ThatWasChip, useJustPlayed } from "../components/JustPlayed";
 
 const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark", "we-are-instrumental"]);
@@ -437,6 +438,7 @@ export function Listen() {
 
       <StudioConsole accent={accent} seed={channelSlug} />
 
+      <ComingUpAt block={shown.next_block} className="lp-coming-up-at" />
       {queue.length > 0 && (
         <div className="lp-queue">
           {rw.rewound && liveNowItem && <div className="lp-queue-label np-onair-now">On air now: {liveNowItem.label}</div>}
@@ -446,6 +448,9 @@ export function Listen() {
               <QueueCard key={item.id ?? i} item={item} accent={accent} next={i === 0} />
             ))}
           </div>
+          <Link className="lp-schedule-link" to={`/schedule?channel=${channelSlug}`}>
+            See the schedule →
+          </Link>
         </div>
       )}
 

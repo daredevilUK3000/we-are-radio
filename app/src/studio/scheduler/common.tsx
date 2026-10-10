@@ -9,8 +9,8 @@ export function SchedulerNav() {
       <NavLink to="/studio/scheduler" end>
         Master Control
       </NavLink>
-      <NavLink to="/studio/scheduler/grid">Weekly grid</NavLink>
-      {/* Timeline, Library, Playlists & templates and Rules arrive in Releases 2 and 3. */}
+      <NavLink to="/studio/scheduler/timeline">Timeline</NavLink>
+      {/* Playlists & templates and the Report arrive in Release 2B and 2C. */}
     </nav>
   );
 }

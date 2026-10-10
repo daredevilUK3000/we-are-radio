@@ -5,7 +5,7 @@ import { requireSameOrigin } from "../lib/origin";
 import { runAction, type ActionRequest } from "../lib/scheduler/actions";
 import { buildFromPlan, latestVersion, nextBoundary, HORIZON_MS, type SchedChannelRow } from "../lib/scheduler/generate";
 import { DAY_KEYS, loadGridBlocks, loadWorkingBlocks, occurrenceOn, type GridBlock } from "../lib/scheduler/grid";
-import { insertPlan, latestPlanRow, snapshotWorkingCopy } from "../lib/scheduler/plans";
+import { planRoutes } from "./schedulerPlan";
 import { overlapWith, parseBlockInput, validateBlock } from "../lib/scheduler/gridEdit";
 import { channelHealth, gridStatus, LIVE_CONTROL_KINDS, type HealthCheck } from "../lib/scheduler/health";
 import { fallbackLoop } from "../lib/scheduler/read";
@@ -22,6 +22,7 @@ import type { RotationItem } from "../lib/radioBrain";
  */
 export const schedulerRoutes = new Hono<{ Bindings: Env }>();
 schedulerRoutes.use("*", requireSameOrigin);
+schedulerRoutes.route("/plan", planRoutes);
 
 type Ctx = Context<{ Bindings: Env }>;
 
@@ -555,43 +556,13 @@ schedulerRoutes.get("/pool", async (c) => {
 });
 
 /**
- * Apply a grid change: write it, then regenerate from the end of the airing
- * on now (never mid-song). If the new log can't be built, the change is
- * undone and nothing live changes.
+ * Release 1's grid routes, kept for one release as thin aliases (an open
+ * Weekly grid tab keeps working): they now edit the draft, which reaches the
+ * air only when it's published from the Timeline.
  */
-async function applyGridChange(c: Ctx, ch: Channel, write: () => Promise<void>, undo: () => Promise<void>, summary: string) {
-  const sc = await schedRow(c.env.DB, ch.id);
-  if (!sc.enabled) return c.json({ error: "locked", message: "The weekly grid unlocks once the Scheduler is on air for this channel." }, 409);
-  const now = Date.now();
+async function applyGridChange(c: Ctx, ch: Channel, write: () => Promise<void>, _undo: () => Promise<void>, summary: string) {
   await write();
-  const from = await nextBoundary(c.env.DB, ch.id, now);
-  const latest = await latestVersion(c.env.DB, ch.id);
-  // The working copy becomes the next published plan, and the log is rebuilt from it.
-  const prevPlan = await latestPlanRow(c.env.DB, ch.id);
-  const plan = await insertPlan(c.env.DB, {
-    channelId: ch.id,
-    snapshot: await snapshotWorkingCopy(c.env.DB, ch.id),
-    summary,
-    actor: "studio",
-    effectiveFromMs: from,
-    versionId: null,
-    basedOn: prevPlan?.number ?? null,
-  });
-  const out = await buildFromPlan(c.env, ch, {
-    kind: "grid", actor: "studio", from, to: Math.max(latest?.horizon_ms ?? 0, now + HORIZON_MS), nowMs: now,
-    summary: () => summary,
-  });
-  if (out.status !== "published") {
-    await c.env.DB.prepare("DELETE FROM sched_plans WHERE id = ?").bind(plan.id).run();
-    await undo();
-    return c.json({ error: "build_failed", message: `Not saved: ${out.status === "failed" ? out.error : "nothing to schedule"}. Nothing live changed.` }, 400);
-  }
-  await c.env.DB.prepare("UPDATE sched_plans SET version_id = ? WHERE id = ?").bind(out.version.id, plan.id).run();
-  await c.env.DB.prepare("UPDATE sched_versions SET action = 'publish' WHERE id = ?").bind(out.version.id).run();
-  clearTimelineCache(ch.id);
-  await c.env.CONFIG.delete(`sched:health:${ch.id}`);
-  await logChange(c.env.DB, { channelId: ch.id, versionId: out.version.id, actor: "studio", action: "grid", reason: summary });
-  return c.json({ ok: true, version: out.version.number, live_from_ms: from, ...(await gridPayload(c.env, ch, now)) });
+  return c.json({ ok: true, draft: true, message: `${summary.replace(/^Grid: /, "")}: saved to the draft. Publish it from the Timeline.`, ...(await gridPayload(c.env, ch, Date.now())) });
 }
 
 const blockRow = (id: string, channelId: string, v: ReturnType<typeof parseBlockInput> & { ok: true }, created: number, now: number) => ({

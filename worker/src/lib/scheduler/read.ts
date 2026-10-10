@@ -92,6 +92,13 @@ export async function nowPlayingFromLog(env: Env, channel: Channel, st: SchedSta
       const next = items[idx + 1] ?? null;
       const comingUp = items.slice(idx + 1).filter((i) => i.itemType !== "station_id" && i.airingId !== cur.airingId).slice(0, 4);
       const [nowE, nextE, ...upE] = await enrichItems(env.DB, [toRotation(cur), next ? toRotation(next) : null, ...comingUp.map(toRotation)]);
+      // "Coming up at 18:00: Friday Game Changers" - a public block starting within the hour, from the log (so a moved start shows as moved).
+      let next_block: { name: string; description: string; starts_at: number } | null = null;
+      const turn = items.slice(idx + 1).find((i) => i.blockId && i.blockId !== cur.blockId && i.startsAt - nowMs <= 60 * 60_000);
+      if (turn) {
+        const b = await cachedRow(`blk:${channel.id}:${turn.blockId}`, async () => (await loadGridBlocks(env.DB, channel.id, true)).find((x) => x.id === turn.blockId) ?? null);
+        if (b && b.public !== 0) next_block = { name: b.name, description: b.description, starts_at: Math.round(turn.startsAt / 1000) };
+      }
       return {
         channel,
         programme: await programmeFor(env.DB, channel, cur),
@@ -100,6 +107,7 @@ export async function nowPlayingFromLog(env: Env, channel: Channel, st: SchedSta
         now_playing: await withVoice(env.DB, nowE),
         up_next: nextE,
         coming_up: upE,
+        next_block,
         log_version: cur.versionNumber,
       };
     }

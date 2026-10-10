@@ -1,7 +1,7 @@
 import type { Channel, Env, Programme } from "../types";
 import { sendEmail } from "../email";
 import { autopilotTracks, channelTags } from "../station";
-import { blockLengthMin, blockTags, loadGridBlocks, occurrencesBetween, occurrenceLabel, type GridBlock } from "./grid";
+import { blockLengthMin, blockTags, loadGridBlocks, occurrencesBetween, occurrenceLabel, type GridBlock, loadWorkingBlocks } from "./grid";
 import { furthestHorizon, type SchedChannelRow } from "./generate";
 import { fallbackLoop } from "./read";
 import { itemAt, itemsBetween } from "./timeline";
@@ -129,6 +129,11 @@ export async function channelHealth(env: Env, channel: Channel, sc: SchedChannel
     } else if (g.hasGrid) add("grid_now", "green", "Playing what the grid says", g.now ? `${g.now.block.name} is on.` : "Channel default is on.");
   }
   out.push(...(await gridFillChecks(env.DB, channel, blocks, nowMs)));
+
+  // Draft changes waiting to be published (a nudge, not a warning).
+  const { draftChanges } = await import("./planPublish");
+  const draft = draftChanges(blocks, await loadWorkingBlocks(env.DB, channel.id, true));
+  if (draft.length) add("draft", "grey", "Draft changes not published", `${draft.length} change${draft.length === 1 ? "" : "s"} in the Timeline's draft: ${draft.slice(0, 3).map((d) => d.text).join(" · ")}${draft.length > 3 ? " …" : ""}`, "grid");
 
   // Listener voice notes the placer has given up on (3 failed tries): shown only when there are some.
   const stuck = await env.DB.prepare(

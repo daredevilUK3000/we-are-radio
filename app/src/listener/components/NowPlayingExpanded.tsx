@@ -10,6 +10,7 @@ import { OnAirSheet, SayItOnAirButton } from "./onair/OnAirSheet";
 import { ListenerVoicePill, voiceLines } from "./onair/voice";
 import { GOOD_ON_AIR_SUB, GoodOnAirPill, GoodOnAirTitle, isGood } from "./good/GoodOnAir";
 import { BackToLivePill, StartOverButton } from "./PlayerRewind";
+import { ComingUpAt } from "./ComingUpAt";
 import { JustPlayed, useJustPlayed } from "./JustPlayed";
 
 /** Start over (handoff_player_upgrades.md §1), from the player that owns the <audio> element. */
@@ -298,6 +299,7 @@ export function NowPlayingExpanded({
         </div>
 
         <div className="np-lower">
+          <ComingUpAt block={data.next_block} className="np-coming-up-at" />
           {comingUp.length > 0 && (
             <section className="np-queue" aria-label="On the station">
               <div className="np-eyebrow">On the station</div>

@@ -114,6 +114,14 @@ export interface PublishRequest {
   /** Live controls: the time the recovery keeps. */
   anchorMs?: number | null;
   changes?: PendingChange[];
+  /** The precise action (Release 2: publish, plan_rollback, hold...); kind stays the coarse category. */
+  action?: string | null;
+  /**
+   * Statements that must commit with the swap or not at all (a published
+   * plan's row). They run in the same batch, right after it, and should be
+   * guarded with WHERE EXISTS (the version is published).
+   */
+  alongside?: (versionId: string) => D1PreparedStatement[];
   nowMs?: number;
   /** Set only by tests: publish nothing, fail validation with this message. */
   forceInvalid?: string;
@@ -212,11 +220,11 @@ export async function publishVersion(db: D1Database, req: PublishRequest): Promi
   await db
     .prepare(
       `INSERT INTO sched_versions (id, channel_id, number, status, effective_from_ms, horizon_ms, kind, actor, based_on_version_id,
-         rollback_of_version_id, summary, item_count, created_at_ms, anchor_ms)
-       VALUES (?,?,0,'building',?,?,?,?,?,?,?,?,?,?)`
+         rollback_of_version_id, summary, item_count, created_at_ms, anchor_ms, action)
+       VALUES (?,?,0,'building',?,?,?,?,?,?,?,?,?,?,?)`
     )
     .bind(versionId, req.channelId, req.effectiveFrom, horizon, req.kind, req.actor, req.basedOn?.id ?? null, req.rollbackOf ?? null,
-      req.summary.slice(0, 300), items.length, now, req.anchorMs ?? null)
+      req.summary.slice(0, 300), items.length, now, req.anchorMs ?? null, req.action ?? null)
     .run();
 
   try {
@@ -236,14 +244,15 @@ export async function publishVersion(db: D1Database, req: PublishRequest): Promi
     if (problem) return await fail(problem);
 
     const next = req.expectedMax + 1;
-    const swap = await db
+    const swapStmt = db
       .prepare(
         `UPDATE sched_versions SET status = 'published', number = ?, published_at_ms = ?
          WHERE id = ? AND status = 'building'
            AND COALESCE((SELECT MAX(number) FROM sched_versions WHERE channel_id = ? AND status = 'published'), 0) = ?`
       )
-      .bind(next, Date.now(), versionId, req.channelId, req.expectedMax)
-      .run()
+      .bind(next, Date.now(), versionId, req.channelId, req.expectedMax);
+    const extra = req.alongside?.(versionId) ?? [];
+    const swap = await (extra.length ? db.batch([swapStmt, ...extra]).then((r) => r[0]) : swapStmt.run())
       .catch(() => null); // the unique index refusing a duplicate number is a lost race too
     if (!swap || swap.meta.changes !== 1) return await fail("Someone else published first", true);
 

@@ -13,6 +13,7 @@ export function SiteFooter() {
         </div>
         <nav aria-label="Footer">
           <GoodFooterLink />
+          <Link to="/schedule">Schedule</Link>
           <Link to="/on-air">Send a shout out</Link>
           <Link to="/contact">Contact</Link>
           <Link to="/top3/rules">Top 3 rules</Link>

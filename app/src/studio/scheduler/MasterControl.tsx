@@ -887,7 +887,7 @@ function HealthRail({
                   </button>
                 )}
                 {c.action === "grid" && (
-                  <Link className="sch-link" to={`/studio/scheduler/grid?channel=${c.channelSlug}`}>
+                  <Link className="sch-link" to={`/studio/scheduler/timeline?view=week&channel=${c.channelSlug}`}>
                     Open the grid
                   </Link>
                 )}

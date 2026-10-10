@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { trackVisit } from "./shared/analytics";
 import { Home } from "./listener/pages/Home";
 import { Listen } from "./listener/pages/Listen";
@@ -21,6 +21,7 @@ import { ContestRules } from "./listener/pages/contest/ContestRules";
 import { ContestSong } from "./listener/pages/contest/ContestSong";
 import { ContestConfirm, ContestNotifyConfirm, ContestUnsubscribe } from "./listener/pages/contest/ContestConfirm";
 import { Contact } from "./listener/pages/contact/Contact";
+import { Schedule } from "./listener/pages/schedule/Schedule";
 import { Legal } from "./listener/pages/legal/Legal";
 import { Privacy } from "./listener/pages/legal/Privacy";
 import { OnAir, OnAirListenBack, OnAirManage, OnAirShare } from "./listener/pages/OnAir";
@@ -60,7 +61,7 @@ import { PublishWizard } from "./studio/pages/PublishWizard";
 import { Contest } from "./studio/pages/Contest";
 import { Likes } from "./studio/pages/Likes";
 import { MasterControl } from "./studio/scheduler/MasterControl";
-import { WeeklyGrid } from "./studio/scheduler/WeeklyGrid";
+import { Timeline } from "./studio/scheduler/Timeline";
 import { OnAirInbox } from "./studio/pages/OnAirInbox";
 import { onAirStudioApi } from "./api/onAir";
 
@@ -101,6 +102,7 @@ function ListenerLayout({ children }: { children: React.ReactNode }) {
           <NavLink to="/albums">Albums</NavLink>
           <NavLink to="/programmes">Programmes</NavLink>
           <NavLink to="/podcasts">Podcasts</NavLink>
+          <NavLink to="/schedule">Schedule</NavLink>
           <NavLink to="/top3" className="t3f-nav-pill">
             <IconTrophy size={12} />
             Top 3
@@ -197,7 +199,8 @@ function StudioApp() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="scheduler" element={<MasterControl />} />
-        <Route path="scheduler/grid" element={<WeeklyGrid />} />
+        <Route path="scheduler/timeline" element={<Timeline />} />
+        <Route path="scheduler/grid" element={<GridRedirect />} />
         <Route path="on-air" element={<OnAirInbox />} />
         <Route path="contest" element={<Contest />} />
         <Route path="likes" element={<Likes />} />
@@ -275,6 +278,7 @@ export default function App() {
                     <Route path="top3/unsubscribe" element={<ContestUnsubscribe />} />
                     <Route path="top3/:id" element={<ContestSong />} />
                     <Route path="contact" element={<Contact />} />
+                    <Route path="schedule" element={<Schedule />} />
                     <Route path="on-air" element={<OnAir />} />
                     <Route path="on-air/manage" element={<OnAirManage />} />
                     <Route path="on-air/m/:id" element={<OnAirListenBack />} />
@@ -292,4 +296,10 @@ export default function App() {
       />
     </Routes>
   );
+}
+
+/** Release 1's Weekly grid became the Timeline's week view. */
+function GridRedirect() {
+  const channel = new URLSearchParams(useLocation().search).get("channel");
+  return <Navigate to={`/studio/scheduler/timeline?view=week${channel ? `&channel=${channel}` : ""}`} replace />;
 }

@@ -112,6 +112,15 @@ shareLinkRoutes.get("/contact", (c) =>
   })
 );
 
+shareLinkRoutes.get("/schedule", (c) =>
+  pageWithOg(c.env, c.req.raw, {
+    title: "What's on We Are Radio",
+    description: "Shows and sounds on every We Are Radio channel this week.",
+    image: defaultImage(c.req.raw),
+    url: `${new URL(c.req.raw.url).origin}/schedule`,
+  })
+);
+
 // ---- Top 3 Creator Songs of 2026 ----
 //
 // One static contest image for every contest page (never the creator's own

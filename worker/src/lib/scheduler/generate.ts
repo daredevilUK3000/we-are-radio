@@ -1,8 +1,9 @@
 import type { Channel, Env } from "../types";
 import { hashSeed, ROTATION_RULES } from "../radioBrain";
-import { loadGridBlocks } from "./grid";
+import { loadGridBlocks, type GridBlock } from "./grid";
 import { planDigests } from "./plans";
 import { Planner, PlanError } from "./plan";
+import { carryOverrides } from "./carry";
 import { liveMax, logChange, publishVersion, type PublishResult, type VersionKind, type VersionRow } from "./store";
 import { itemAt, itemsBetween } from "./timeline";
 import { HOUR, parisDayTime } from "./time";
@@ -112,6 +113,10 @@ export async function buildFromPlan(
     forceInvalid?: string;
     /** Test hook: make the build itself throw. */
     forceThrow?: boolean;
+    /** Build from these blocks instead of the latest published plan (publishing a new plan). */
+    blocks?: GridBlock[];
+    action?: string | null;
+    alongside?: (versionId: string) => D1PreparedStatement[];
   }
 ): Promise<GenerateOutcome> {
   const now = opts.nowMs ?? Date.now();
@@ -119,9 +124,10 @@ export async function buildFromPlan(
     const expectedMax = await liveMax(env.DB, channel.id);
     const basedOn = expectedMax ? await latestVersion(env.DB, channel.id) : null;
     let plan: { items: PlanItem[]; toMs: number };
+    let planner: Planner;
     try {
       if (opts.forceThrow) throw new Error("Generation forced to fail (test)");
-      const planner = new Planner(env.DB, env.CONFIG, channel, await loadGridBlocks(env.DB, channel.id), now);
+      planner = new Planner(env.DB, env.CONFIG, channel, opts.blocks ?? (await loadGridBlocks(env.DB, channel.id)), now);
       // What ends right where this build starts: the new plan mustn't open with it again.
       const before = basedOn ? await itemAt(env.DB, channel.id, opts.from - 1) : null;
       const avoidFirst = before && before.item.endsAt === opts.from ? contentKey(before.item) : null;
@@ -135,6 +141,20 @@ export async function buildFromPlan(
       return { status: "failed", error: message };
     }
     const baseItems = basedOn ? await itemsBetween(env.DB, channel.id, opts.from, Math.max(plan.toMs, basedOn.horizon_ms) + HOUR) : [];
+    // Live changes survive a library rebuild and a plan publish (§2.7); Back on schedule and rollbacks drop them.
+    let anchorMs: number | null = null;
+    let kept: PlanItem[] = [];
+    if (basedOn && (opts.kind === "generate" || (opts.kind === "grid" && opts.action === "publish"))) {
+      const carried = await carryOverrides(env, channel, planner, basedOn, baseItems, plan.items, opts.from, now).catch((err) => {
+        console.error("carrying live changes failed", err);
+        return null;
+      });
+      if (carried) {
+        plan = { ...plan, items: carried.items };
+        anchorMs = carried.anchor;
+        kept = carried.kept;
+      }
+    }
     const result: PublishResult = await publishVersion(env.DB, {
       channelId: channel.id,
       kind: opts.kind,
@@ -147,6 +167,12 @@ export async function buildFromPlan(
       expectedMax,
       nowMs: now,
       forceInvalid: opts.forceInvalid,
+      action: opts.action,
+      alongside: opts.alongside,
+      anchorMs,
+      changes: kept.length
+        ? [{ action: "kept", reason: `Kept ${kept.length === 1 ? "1 live change" : `${kept.length} live changes`} through the rebuild: ${kept.map((k) => k.label ?? "an item").join(", ")}`.slice(0, 500) }]
+        : undefined,
     });
     if (result.ok) return { status: "published", version: result.version };
     if (!result.conflict) return { status: "failed", error: result.error };

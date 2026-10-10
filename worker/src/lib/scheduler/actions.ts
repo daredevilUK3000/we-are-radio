@@ -120,7 +120,7 @@ export async function runAction(env: Env, channel: Channel, req: ActionRequest, 
   if (req.action === "back_on_schedule") {
     const from = cur ? Math.min(cur.endsAt, cur.cutAt ?? Infinity) : nowMs;
     const out = await buildFromPlan(env, channel, {
-      kind: "back_on_schedule", actor: "studio", from, to: Math.max(horizon, nowMs + HORIZON_MS), nowMs,
+      kind: "back_on_schedule", actor: "studio", from, to: Math.max(horizon, nowMs + HORIZON_MS), nowMs, action: "back_on_schedule",
       summary: () => `Back on schedule from ${parisHHMM(from)}`,
     });
     if (out.status !== "published") return { ok: false, status: 503, error: "build_failed", message: out.status === "failed" ? out.error : "Nothing to schedule." };
@@ -282,6 +282,7 @@ export async function runAction(env: Env, channel: Channel, req: ActionRequest, 
     rollbackOf,
     anchorMs: result.anchor,
     changes,
+    action: req.action,
     nowMs,
   });
   if (!published.ok) {
@@ -312,7 +313,7 @@ async function after(env: Env, channel: Channel, version: VersionRow, nowMs: num
 }
 
 /** Songs aired on the channel in the last two hours (content key -> start). */
-async function recentlyAired(db: D1Database, channelId: string, nowMs: number): Promise<Map<string, number>> {
+export async function recentlyAired(db: D1Database, channelId: string, nowMs: number): Promise<Map<string, number>> {
   const { results } = await db
     .prepare("SELECT track_id, audio_asset_id, starts_at_ms FROM sched_aired WHERE channel_id = ? AND starts_at_ms > ?")
     .bind(channelId, nowMs - 2 * HOUR)
@@ -323,7 +324,7 @@ async function recentlyAired(db: D1Database, channelId: string, nowMs: number): 
 }
 
 /** What a gap can be filled with: the block's own pool, or the channel default's songs, then the emergency playlist. */
-async function recoveryPool(env: Env, channel: Channel, planner: Planner, inBlock: PlanItem | null, nowMs: number): Promise<Playable[]> {
+export async function recoveryPool(env: Env, channel: Channel, planner: Planner, inBlock: PlanItem | null, nowMs: number): Promise<Playable[]> {
   let pool: Playable[] = [];
   if (inBlock?.blockId && inBlock.blockDate) {
     const occ = occurrencesBetween(planner.blocks, nowMs - 26 * HOUR, nowMs + 26 * HOUR).find((o) => o.block.id === inBlock.blockId && o.date === inBlock.blockDate);
