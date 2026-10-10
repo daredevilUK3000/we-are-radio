@@ -3,9 +3,11 @@ import type { Channel, Env } from "../lib/types";
 import { channelAccent } from "../lib/guide";
 import { latestVersion } from "../lib/scheduler/generate";
 import { loadWorkingBlocks, occurrencesBetween, rawOccurrences, type GridBlock } from "../lib/scheduler/grid";
-import { latestPlan, planByNumber } from "../lib/scheduler/plans";
+import { latestPlan, planByNumber, snapshotContent, snapshotWorkingCopy } from "../lib/scheduler/plans";
+import { loadLists } from "../lib/scheduler/content";
+import { contentRoutes } from "./schedulerContent";
 import { newBlockId, parsePlanBlock, writeBlockStatements } from "../lib/scheduler/planEdit";
-import { channelDraft, discardDraft, draftChanges, publishSnapshot, rollbackPlan, type ChannelDraft, type PublishOutcome } from "../lib/scheduler/planPublish";
+import { channelDraft, discardDraft, planChanges, publishSnapshot, rollbackPlan, type ChannelDraft, type PublishOutcome } from "../lib/scheduler/planPublish";
 import { Planner } from "../lib/scheduler/plan";
 import { addDaysTo, DAY, HOUR, parisDate, parisWallClockToUtcMs } from "../lib/scheduler/time";
 import { itemsBetween } from "../lib/scheduler/timeline";
@@ -19,6 +21,7 @@ import { autopilotTracks, channelTags } from "../lib/station";
  * published.
  */
 export const planRoutes = new Hono<{ Bindings: Env }>();
+planRoutes.route("/", contentRoutes);
 
 const channelBySlug = (db: D1Database, slug: string | undefined | null) =>
   slug ? db.prepare("SELECT * FROM channels WHERE slug = ?").bind(slug).first<Channel>() : Promise.resolve(null);
@@ -101,7 +104,8 @@ planRoutes.get("/board", async (c) => {
     ).all<Record<string, unknown>>()
   ).results;
   const tags = (await c.env.DB.prepare("SELECT name FROM tags ORDER BY name").all<{ name: string }>()).results.map((t) => t.name);
-  return c.json({ now_ms: nowMs, from, to, view, channels: lanes, programmes, tags });
+  const lists = Object.values(await loadLists(c.env.DB)).map((l) => ({ id: l.id, kind: l.kind, name: l.name, archived: l.archived, length_ms: l.length_ms, slots: l.slots.length }));
+  return c.json({ now_ms: nowMs, from, to, view, channels: lanes, programmes, tags, lists });
 });
 
 /** GET /plan/draft - every channel's draft summary. */
@@ -121,6 +125,15 @@ async function respond(env: Env, channels: Channel[], extra: Record<string, unkn
   return { ok: true, ...extra, drafts: await draftsFor(env, channels, nowMs) };
 }
 
+/** A playlist block needs a playlist, a template block a template, and a new choice can't be archived (§7). */
+async function listProblem(db: D1Database, value: { fill_kind: string; list_id?: string | null }, previous?: string | null): Promise<string | null> {
+  if (value.fill_kind !== "playlist" && value.fill_kind !== "template") return null;
+  const list = value.list_id ? (await loadLists(db, [value.list_id]))[value.list_id] : undefined;
+  if (!list || list.kind !== value.fill_kind) return `Choose a ${value.fill_kind}.`;
+  if (list.archived && list.id !== previous) return `${list.name} is archived: choose another ${value.fill_kind}.`;
+  return null;
+}
+
 /** POST /plan/blocks {channel, ...block} */
 planRoutes.post("/blocks", async (c) => {
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
@@ -128,6 +141,8 @@ planRoutes.post("/blocks", async (c) => {
   if (!ch) return c.json({ error: "not_found", message: "Choose a channel." }, 404);
   const parsed = parsePlanBlock(body);
   if (!parsed.ok) return c.json({ error: "invalid", field: parsed.field, message: parsed.message }, 400);
+  const lp = await listProblem(c.env.DB, parsed.value);
+  if (lp) return c.json({ error: "invalid", field: "list_id", message: lp }, 400);
   const now = Date.now();
   const block: GridBlock = { ...parsed.value, id: newBlockId(), channel_id: ch.id, created_at_ms: now, updated_at_ms: now };
   await save(c.env.DB, block);
@@ -160,14 +175,23 @@ planRoutes.put("/blocks/:id", async (c) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({ error: "invalid", field: "date", message: "Which date?" }, 400);
     const parsed = parsePlanBlock({ ...existing, ...body, tags_any: body.tags_any ?? JSON.parse(existing.tags_any_json ?? "[]"), recurrence: "once", once_date: body.once_date ?? date, layer: 3, exceptions: [] });
     if (!parsed.ok) return c.json({ error: "invalid", field: parsed.field, message: parsed.message }, 400);
+    const lpo = await listProblem(c.env.DB, parsed.value, existing.list_id);
+    if (lpo) return c.json({ error: "invalid", field: "list_id", message: lpo }, 400);
     const oneOff: GridBlock = { ...parsed.value, id: newBlockId(), channel_id: target.id, created_at_ms: now, updated_at_ms: now };
     const skipped: GridBlock = { ...existing, exceptions: [...new Set([...(existing.exceptions ?? []), date])].sort(), updated_at_ms: now };
-    await c.env.DB.batch([...writeBlockStatements(c.env.DB, skipped), ...writeBlockStatements(c.env.DB, oneOff)]);
+    await c.env.DB.batch([
+      ...writeBlockStatements(c.env.DB, skipped),
+      ...writeBlockStatements(c.env.DB, oneOff),
+      // That date's running order (an episode, a manual hour) moves with it.
+      c.env.DB.prepare("UPDATE sched_running_orders SET block_id = ? WHERE block_id = ? AND date = ?").bind(oneOff.id, existing.id, date),
+    ]);
     return c.json(await respond(c.env, target.id === from.id ? [from] : [from, target], { block: blockJson(oneOff) }));
   }
 
   const parsed = parsePlanBlock({ ...existing, exceptions: existing.exceptions, ...body, tags_any: body.tags_any ?? JSON.parse(existing.tags_any_json ?? "[]") });
   if (!parsed.ok) return c.json({ error: "invalid", field: parsed.field, message: parsed.message }, 400);
+  const lpa = await listProblem(c.env.DB, parsed.value, existing.list_id);
+  if (lpa) return c.json({ error: "invalid", field: "list_id", message: lpa }, 400);
   const block: GridBlock = { ...parsed.value, id: existing.id, channel_id: target.id, created_at_ms: existing.created_at_ms, updated_at_ms: now };
   await save(c.env.DB, block);
   return c.json(await respond(c.env, target.id === from.id ? [from] : [from, target], { block: blockJson(block) }));
@@ -253,7 +277,8 @@ planRoutes.get("/preview", async (c) => {
   const dayEnd = parisWallClockToUtcMs(addDaysTo(date, 1), 0);
   const from = Math.max(dayStart, nowMs);
   if (from >= dayEnd) return c.json({ date, past: true, live: [], draft: [] });
-  const working = await loadWorkingBlocks(c.env.DB, ch.id);
+  const snap = await snapshotWorkingCopy(c.env.DB, ch.id, nowMs);
+  const working = snap.blocks;
   const plan = await latestPlan(c.env.DB, ch.id);
   const names = new Map([...(plan?.snapshot.blocks ?? []), ...working].map((b) => [b.id, b.name]));
   const short = (i: { startsAt: number; endsAt: number; label: string | null; itemType: string; blockId: string | null; trackId: string | null; assetId: string | null }) => ({
@@ -264,9 +289,9 @@ planRoutes.get("/preview", async (c) => {
     block: i.blockId ? (names.get(i.blockId) ?? null) : null,
     key: i.trackId ? `t:${i.trackId}` : `a:${i.assetId}`,
   });
-  const draftItems = (await new Planner(c.env.DB, c.env.CONFIG, ch, working, nowMs).build(from, dayEnd)).items.map(short);
+  const draftItems = (await new Planner(c.env.DB, c.env.CONFIG, ch, working, nowMs, snapshotContent(snap)).build(from, dayEnd)).items.map(short);
   const liveItems = (await itemsBetween(c.env.DB, ch.id, from, Math.min(dayEnd, nowMs + 48 * HOUR))).map(short);
-  const issues = (await validatePlan(c.env.DB, ch, working, nowMs)).filter((i) => !i.date || i.date === date);
+  const issues = (await validatePlan(c.env.DB, ch, working, nowMs, snapshotContent(snap))).filter((i) => !i.date || i.date === date);
   return c.json({ date, from, live: liveItems, draft: draftItems, issues, live_known_to: Math.min(dayEnd, (await latestVersion(c.env.DB, ch.id))?.horizon_ms ?? from) });
 });
 
@@ -293,8 +318,9 @@ planRoutes.post("/discard", async (c) => {
   const body = await c.req.json<{ channel?: string }>().catch(() => ({}) as { channel?: string });
   const ch = await channelBySlug(c.env.DB, body.channel);
   if (!ch) return c.json({ error: "not_found" }, 404);
-  const { discarded } = await discardDraft(c.env.DB, ch);
-  return c.json(await respond(c.env, [ch], { discarded, message: discarded ? `Discarded ${discarded} draft change${discarded === 1 ? "" : "s"} to ${ch.name}.` : "There was nothing to discard." }));
+  const { discarded, note } = await discardDraft(c.env.DB, ch);
+  const msg = discarded ? `Discarded ${discarded} draft change${discarded === 1 ? "" : "s"} to ${ch.name}.` : "There was nothing to discard.";
+  return c.json(await respond(c.env, [ch], { discarded, message: note ? `${msg} ${note}` : msg }));
 });
 
 /** POST /plan/rollback {channel, number, expected} */
@@ -318,9 +344,9 @@ planRoutes.get("/plans", async (c) => {
   )
     .bind(ch.id)
     .all<Record<string, unknown>>();
-  const working = await loadWorkingBlocks(c.env.DB, ch.id, true);
   const plan = await latestPlan(c.env.DB, ch.id);
-  return c.json({ channel: { slug: ch.slug, name: ch.name }, plans: results, draft_changes: draftChanges(plan?.snapshot.blocks ?? [], working).length });
+  const nowMs = Date.now();
+  return c.json({ channel: { slug: ch.slug, name: ch.name }, plans: results, draft_changes: planChanges(plan?.snapshot, await snapshotWorkingCopy(c.env.DB, ch.id, nowMs), nowMs).length });
 });
 
 /** GET /plan/plans/:number?channel= - one plan's blocks (for its preview). */
@@ -329,7 +355,7 @@ planRoutes.get("/plans/:number", async (c) => {
   const p = ch ? await planByNumber(c.env.DB, ch.id, Number(c.req.param("number"))) : null;
   if (!ch || !p) return c.json({ error: "not_found" }, 404);
   const live = await latestPlan(c.env.DB, ch.id);
-  return c.json({ plan: p.row, blocks: p.snapshot.blocks.map(blockJson), compared_to_live: draftChanges(live?.snapshot.blocks ?? [], p.snapshot.blocks) });
+  return c.json({ plan: p.row, blocks: p.snapshot.blocks.map(blockJson), compared_to_live: planChanges(live?.snapshot, p.snapshot, Date.now()) });
 });
 
 /** GET /plan/pool?channel=&tags= - how big an autopilot pool is (for the editor). */

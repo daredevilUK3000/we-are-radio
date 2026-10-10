@@ -3,6 +3,9 @@ import type { Channel, Env } from "../lib/types";
 import { newId, nowIso } from "../lib/id";
 import { requireSameOrigin } from "../lib/origin";
 import { runAction, type ActionRequest } from "../lib/scheduler/actions";
+import { holdPreview, runHold } from "../lib/scheduler/hold";
+import { latestPlanRow } from "../lib/scheduler/plans";
+import { dayReport, reportCsv } from "../lib/scheduler/report";
 import { buildFromPlan, latestVersion, nextBoundary, HORIZON_MS, type SchedChannelRow } from "../lib/scheduler/generate";
 import { DAY_KEYS, loadGridBlocks, loadWorkingBlocks, occurrenceOn, type GridBlock } from "../lib/scheduler/grid";
 import { planRoutes } from "./schedulerPlan";
@@ -10,7 +13,7 @@ import { overlapWith, parseBlockInput, validateBlock } from "../lib/scheduler/gr
 import { channelHealth, gridStatus, LIVE_CONTROL_KINDS, type HealthCheck } from "../lib/scheduler/health";
 import { fallbackLoop } from "../lib/scheduler/read";
 import { liveMax, logChange, type VersionRow } from "../lib/scheduler/store";
-import { addDaysTo, DAY, HOUR, MINUTE, parisDate, parisDayTime, weekdayIndex } from "../lib/scheduler/time";
+import { addDaysTo, DAY, HOUR, MINUTE, parisDate, parisDayTime, parisWallClockToUtcMs, weekdayIndex } from "../lib/scheduler/time";
 import { clearTimelineCache, itemsBetween, type TimelineItem } from "../lib/scheduler/timeline";
 import { autopilotTracks, channelTags, enrichItems } from "../lib/station";
 import type { RotationItem } from "../lib/radioBrain";
@@ -169,6 +172,7 @@ schedulerRoutes.get("/overview", async (c) => {
       enabled: !!sc.enabled,
       state: ch.status !== "live" && !latest ? "not_live" : state,
       live_version: latest?.number ?? 0,
+      live_plan: (await latestPlanRow(c.env.DB, ch.id))?.number ?? null,
       horizon_ms: latest?.horizon_ms ?? null,
       shadow: {
         checks: sc.shadow_checks,
@@ -261,6 +265,51 @@ schedulerRoutes.post("/channels/:slug/actions", async (c) => {
   const result = await runAction(c.env, ch, { ...body, expected_version: Number(body.expected_version) });
   if (!result.ok) return c.json({ error: result.error, message: result.message, live_version: await liveMax(c.env.DB, ch.id) }, result.status);
   return c.json({ ok: true, version: result.version.number, previous: result.version.number - 1, message: result.message });
+});
+
+// Hold (Release 2, §8): the dialog's list of hard starts, then the hold itself.
+schedulerRoutes.get("/channels/:slug/hold", async (c) => {
+  const ch = await channelBySlug(c.env.DB, c.req.param("slug"));
+  if (!ch) return c.json({ error: "not_found" }, 404);
+  const minutes = [5, 10, 15, 30].includes(Number(c.req.query("minutes"))) ? Number(c.req.query("minutes")) : 10;
+  const out = await holdPreview(c.env, ch, minutes);
+  if (!out.ok) return c.json({ error: "no_log", message: out.message }, 409);
+  return c.json(out);
+});
+
+schedulerRoutes.post("/channels/:slug/hold", async (c) => {
+  const ch = await channelBySlug(c.env.DB, c.req.param("slug"));
+  if (!ch) return c.json({ error: "not_found" }, 404);
+  const sc = await schedRow(c.env.DB, ch.id);
+  if (!sc.enabled) return c.json({ error: "not_enabled", message: "Live controls work once the Scheduler is on air for this channel." }, 409);
+  const body = await c.req.json<{ minutes?: number; move?: string[]; expected_version?: number }>().catch(() => ({}) as { minutes?: number; move?: string[]; expected_version?: number });
+  const result = await runHold(c.env, ch, { minutes: Number(body.minutes), move: Array.isArray(body.move) ? body.move.map(String) : [], expected_version: Number(body.expected_version) });
+  if (!result.ok) return c.json({ error: result.error, message: result.message, live_version: await liveMax(c.env.DB, ch.id) }, result.status);
+  return c.json({ ok: true, version: result.version.number, previous: result.version.number - 1, message: result.message });
+});
+
+// Scheduled versus aired (Release 2, §9): one channel, one Paris day. Finished days are cached (they never change).
+schedulerRoutes.get("/report", async (c) => {
+  const ch = await channelBySlug(c.env.DB, c.req.query("channel") ?? "");
+  if (!ch) return c.json({ error: "not_found", message: "Choose a channel." }, 404);
+  const today = parisDate(Date.now());
+  const qd = c.req.query("date") ?? "";
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(qd) && qd <= today ? qd : addDaysTo(today, -1);
+  const key = `sched:report:v1:${ch.id}:${date}`;
+  let report = date < today ? ((await c.env.CONFIG.get(key, "json")) as Awaited<ReturnType<typeof dayReport>> | null) : null;
+  if (!report) {
+    report = await dayReport(c.env.DB, ch, date);
+    // A day is final a little after Paris midnight (the last airing has been recorded).
+    if (report.complete && Date.now() - parisWallClockToUtcMs(addDaysTo(date, 1), 0) > 10 * MINUTE) {
+      await c.env.CONFIG.put(key, JSON.stringify(report), { expirationTtl: 60 * 60 * 24 * 90 });
+    }
+  }
+  if (c.req.query("format") === "csv") {
+    return new Response(reportCsv(report), {
+      headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${ch.slug}-${date}-scheduled-vs-aired.csv"` },
+    });
+  }
+  return c.json(report);
 });
 
 schedulerRoutes.post("/channels/:slug/versions/:number/rollback", async (c) => {
@@ -458,13 +507,33 @@ schedulerRoutes.get("/library", async (c) => {
       .all<Record<string, unknown>>();
     return c.json({ results: results.map((r) => ({ ...r, kind: "song", track_id: r.id })) });
   }
-  const types: Record<string, string[]> = { ids: ["station_id", "jingle"], promos: ["promo"], links: ["link"], capsules: ["feature"] };
+  if (type === "playlists" || type === "templates") {
+    // Lists for the Timeline's library drawer (Release 2): dragged onto a block to set its fill.
+    const { results } = await c.env.DB.prepare(
+      `SELECT x.id, x.name AS title, x.kind, x.length_ms, (SELECT COUNT(*) FROM sched_list_slots s WHERE s.list_id = x.id) AS slots
+       FROM sched_lists x WHERE x.archived = 0 AND x.kind = ? AND x.name LIKE ? ORDER BY x.name LIMIT 40`
+    )
+      .bind(type === "playlists" ? "playlist" : "template", q)
+      .all<Record<string, unknown>>();
+    return c.json({ results: results.map((r) => ({ ...r, list_id: r.id })) });
+  }
+  if (type === "programmes") {
+    const { results } = await c.env.DB.prepare(
+      `SELECT x.id, x.title, x.duration_seconds FROM programmes x WHERE x.status = 'published' AND x.title LIKE ? ORDER BY x.updated_at DESC LIMIT 40`
+    )
+      .bind(q)
+      .all<Record<string, unknown>>();
+    return c.json({ results: results.map((r) => ({ ...r, kind: "programme", programme_id: r.id })) });
+  }
+  const types: Record<string, string[]> = { ids: ["station_id", "jingle"], promos: ["promo"], links: ["link"], capsules: ["feature"], features: ["feature", "interview"] };
   const wanted = types[type] ?? types.ids;
   const capsuleOnly = type === "capsules" ? "AND EXISTS (SELECT 1 FROM time_capsules tc WHERE tc.audio_asset_id = x.id)" : "";
+  // Features and interviews may be 'ready' (imported podcast episodes play in programmes that way too).
+  const statuses = type === "features" ? "('published','ready')" : "('published')";
   const { results } = await c.env.DB.prepare(
     `SELECT x.id, x.title, x.type, x.duration_seconds, ${lastAired("audio_asset_id")} AS last_aired_ms
      FROM audio_assets x
-     WHERE x.status = 'published' AND x.type IN (${wanted.map(() => "?").join(",")}) AND x.title LIKE ? ${capsuleOnly}
+     WHERE x.status IN ${statuses} AND x.type IN (${wanted.map(() => "?").join(",")}) AND x.title LIKE ? ${capsuleOnly}
      ORDER BY x.created_at DESC LIMIT 40`
   )
     .bind(...wanted, q)

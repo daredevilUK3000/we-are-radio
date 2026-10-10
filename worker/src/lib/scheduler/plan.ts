@@ -13,8 +13,9 @@ import {
   type StationLoop,
 } from "../station";
 import { fitToWindow } from "./fit";
-import { blockReason, blockTags, occurrencesBetween, type GridBlock, type Occurrence } from "./grid";
-import { addDaysTo, DAY, HOUR, mmss, parisHHMM, stationDate, stationDayStartMs } from "./time";
+import { blockReason, blockTags, occurrenceOn, occurrencesBetween, type GridBlock, type Occurrence } from "./grid";
+import { describeRule, EMPTY_CONTENT, parseRule, SlotResolver, trackPlayable, type ListSlot, type PlanContent } from "./content";
+import { addDaysTo, DAY, HOUR, mmss, parisHHMM, shortDay, stationDate, stationDayStartMs } from "./time";
 import { allowedIn, bandDistance, daypartReason, daypartsApply, daypartsBetween, daypartSeconds, MIN_DAYPART_SONGS, songBands, type TimeBand } from "./dayparts";
 import { contentKey, REPEAT_WINDOW_MS, type ItemSource, type PlanItem, type Playable } from "./types";
 
@@ -32,7 +33,24 @@ import { contentKey, REPEAT_WINDOW_MS, type ItemSource, type PlanItem, type Play
  *   block's end (the loop is re-anchored there) rather than mid-song.
  * - A block starts on the dot. Whatever runs up to it is fitted to end there
  *   (fitToWindow), and the block's own content is fitted to end at its end.
+ * - Hand-planned blocks (playlist, template, manual: handoff §3) play their
+ *   slots in order from the block start; a slot with an `at` time is an
+ *   internal hard start, and what runs before it is fitted to end there.
+ *   Short is topped up from the block's pool (manual: the channel
+ *   default's), never silence. Fixed items are never dropped.
  */
+
+const HAND_KINDS = new Set(["playlist", "template", "manual"]);
+export const isHandPlanned = (b: Pick<GridBlock, "fill_kind">) => HAND_KINDS.has(b.fill_kind);
+
+interface HandEntry {
+  slot: ListSlot;
+  /** list:<id> or ro:<id> */
+  ref: string;
+  /** The list or running order id (rule picks are rule:<owner>:<position>). */
+  owner: string;
+  why: string;
+}
 
 export class PlanError extends Error {}
 
@@ -59,7 +77,9 @@ export class Planner {
     readonly kv: KVNamespace,
     readonly channel: Channel,
     readonly blocks: GridBlock[],
-    readonly nowMs: number = Date.now()
+    readonly nowMs: number = Date.now(),
+    /** The plan's playlists, templates and running orders (hand-planned blocks). */
+    readonly content: PlanContent = EMPTY_CONTENT
   ) {
     const tags = channelTags(channel);
     this.tagsText = tags.length ? ` (tagged ${tags.join(", ")})` : "";
@@ -161,6 +181,10 @@ export class Planner {
     const reasons = [occ.daypart ? daypartReason(occ) : blockReason(occ)];
 
     if (occ.daypart) return this.loadDaypartContent(occ, capsules, pins, reasons);
+    if (isHandPlanned(b)) {
+      // Laid out by handLayout; this is only the pool live controls recover from.
+      return { items: [], pool: await this.handPool(occ), source: "programme", sourceRef: b.list_id ? `list:${b.list_id}` : `block:${b.id}` };
+    }
 
     if (b.fill_kind === "programme") {
       const programme = b.programme_id
@@ -261,13 +285,21 @@ export class Planner {
 
     const out: PlanItem[] = [];
     let t = fromMs;
+    let afterFlex = false;
     for (let guard = 0; t < toMs && guard < 200; guard++) {
       const occ = occs.find((o) => o.startMs <= t && t < o.endMs) ?? daypartAt(t);
       const next = occ ? occ.endMs : occs.find((o) => o.startMs > t)?.startMs ?? Infinity;
       // A flexible boundary (§2.3): this block ends flexibly AND the next one starts flexibly, right where it ends.
       const following = occ && !occ.cut && !occ.daypart ? occs.find((o) => o.startMs === occ.endMs) : undefined;
       const flexEnd = !!(occ && following && occ.block.end_mode === "flexible" && following.block.start_mode === "flexible");
-      const items = occ ? await this.blockWindow(occ, t, toMs, out, flexEnd) : await this.defaultWindow(t, next, toMs, occs, out);
+      // Starting late after a flexible hand-over: a hand-planned block's content starts from its first item.
+      const layoutFrom = afterFlex && occ && t > occ.startMs && (occ.originMs ?? occ.startMs) === occ.startMs ? t : undefined;
+      afterFlex = flexEnd;
+      const items = occ
+        ? isHandPlanned(occ.block) && !occ.daypart
+          ? await this.handWindow(occ, t, out, flexEnd, layoutFrom)
+          : await this.blockWindow(occ, t, toMs, out, flexEnd)
+        : await this.defaultWindow(t, next, toMs, occs, out);
       if (items.length === 0) {
         throw new PlanError(`Nothing to play from ${parisHHMM(t)}`);
       }
@@ -340,6 +372,192 @@ export class Planner {
       added: (gap) => `Added to fill ${mmss(gap)} at the end of the ${occ.block.name} block`,
       trimmed: (ms) => `Faded ${mmss(ms)} early so ${endLabel} starts on time`,
     }).items;
+  }
+
+  // ------------------------------------------------------------ hand-planned blocks (§3)
+
+  private resolvers = new Map<string, SlotResolver>();
+  resolverFor(b: GridBlock): SlotResolver {
+    let r = this.resolvers.get(b.id);
+    if (!r) {
+      const tags = blockTags(b);
+      r = new SlotResolver(this.db, tags.length ? tags : channelTags(this.channel));
+      this.resolvers.set(b.id, r);
+    }
+    return r;
+  }
+
+  private handPools = new Map<string, Promise<Playable[]>>();
+  /**
+   * What tops up a hand-planned block: a playlist or template block's own
+   * pool (its tags, else the channel's songs), or for a manual block the
+   * safety net, the channel default's pool.
+   */
+  handPool(occ: Occurrence): Promise<Playable[]> {
+    const key = `${occ.block.id}:${occ.date}`;
+    let p = this.handPools.get(key);
+    if (!p) {
+      p = (async () => {
+        const b = occ.block;
+        if (b.fill_kind === "manual") {
+          const pool = await this.defaultPool(stationDate(occ.startMs));
+          return pool.map((x) => ({ ...x, blockId: b.id, blockDate: occ.date, reasons: [blockReason(occ), "Safety net: the channel's own music fills what the running order leaves"] }));
+        }
+        const tags = blockTags(b);
+        const ref = `pool:${b.id}:${occ.date}`;
+        const songs = (await autopilotTracks(this.db, tags.length ? tags : channelTags(this.channel)))
+          .map(trackPlayable)
+          .filter((x): x is Playable => !!x)
+          .map((x) => ({ ...x, source: "autopilot" as const, sourceRef: ref, blockId: b.id, blockDate: occ.date, reasons: [blockReason(occ), `From the ${b.name} block's pool`] }));
+        return [...songs, ...(await this.stationFillers("autopilot", ref, occ))];
+      })();
+      this.handPools.set(key, p);
+    }
+    return p;
+  }
+
+  /** The slots an occurrence plays, in order: its running order, else its template or playlist (§3.1-3.3). */
+  handEntries(occ: Occurrence): HandEntry[] {
+    const b = occ.block;
+    const ro = this.content.running_orders.find((r) => r.block_id === b.id && r.date === occ.date);
+    const day = shortDay(occ.date);
+    if ((b.fill_kind === "template" || b.fill_kind === "manual") && ro) {
+      const what = b.fill_kind === "template" ? `the ${b.name} episode for ${day}` : `the running order for ${day}`;
+      return ro.items.map((slot) => ({ slot, ref: `ro:${ro.id}`, owner: ro.id, why: `From ${what}, item ${slot.position}${slot.label ? ` (${slot.label})` : ""}` }));
+    }
+    if (b.fill_kind === "manual" || !b.list_id) return [];
+    const list = this.content.lists[b.list_id];
+    if (!list) return [];
+    const word = list.kind === "template" ? "template" : "playlist";
+    return list.slots
+      // A template's episode slots are left out until an episode fills them (§3.2).
+      .filter((slot) => slot.slot_kind !== "episode")
+      .map((slot) => ({ slot, ref: `list:${list.id}`, owner: list.id, why: `From the ${word} ${list.name}, item ${slot.position}${slot.label ? ` (${slot.label})` : ""}` }));
+  }
+
+  /**
+   * A hand-planned occurrence laid out whole from its start (or from
+   * `layoutFrom` after a flexible hand-over), fitted to each internal anchor
+   * and to the block's own end. Deterministic, so resuming part-way lands
+   * where the published log is.
+   */
+  async handLayout(occ: Occurrence, before: PlanItem[], layoutFrom?: number): Promise<{ items: PlanItem[]; anchors: number[]; fullEnd: number; pool: Playable[] }> {
+    const b = occ.block;
+    const origin = occ.originMs ?? occ.startMs;
+    const fullEnd = occurrenceOn(b, occ.date)?.endMs ?? occ.endMs;
+    const start = Math.max(origin, layoutFrom ?? origin);
+    const pool = await this.handPool(occ);
+    const resolver = this.resolverFor(b);
+    const base = blockReason(occ);
+    const recent = this.recentMap(before.filter((i) => i.startsAt >= start - REPEAT_WINDOW_MS));
+    const picked = new Set<string>();
+
+    // Split at internal anchors (template and manual blocks): each stretch runs until the next anchored slot's time.
+    const anchored = b.fill_kind !== "playlist";
+    const segs: { at: number | null; entries: HandEntry[] }[] = [{ at: null, entries: [] }];
+    for (const e of this.handEntries(occ)) {
+      if (anchored && e.slot.at_ms !== null && e.slot.at_ms !== undefined) segs.push({ at: origin + e.slot.at_ms, entries: [e] });
+      else segs[segs.length - 1].entries.push(e);
+    }
+    const anchors = segs.filter((s) => s.at !== null).map((s) => s.at as number);
+
+    const resolve = async (e: HandEntry, cursor: number, round: number): Promise<PlanItem | null> => {
+      const s = e.slot;
+      let p: Playable | null = null;
+      let reasons = [base, e.why];
+      let ref = e.ref;
+      if (s.slot_kind === "fixed") p = await resolver.fixed(s);
+      else if (s.slot_kind === "rule") {
+        const rule = parseRule(s.rule_json);
+        if (rule) {
+          p = await resolver.pick(rule, `${b.id}:${occ.date}:${s.position}${round ? `:${round}` : ""}`, cursor, recent, picked, REPEAT_WINDOW_MS);
+          reasons = [...reasons, `Rule slot: ${describeRule(rule)}`];
+          ref = `rule:${e.owner}:${s.position}`;
+        }
+      }
+      // An empty episode slot, missing audio, or a rule nothing matches: skipped (validation reports it beforehand).
+      if (!p) return null;
+      const item: PlanItem = {
+        ...p, source: "programme", sourceRef: ref, blockId: b.id, blockDate: occ.date, reasons,
+        fixed: s.slot_kind === "fixed" && !s.auto_filled, startsAt: cursor, endsAt: cursor + p.fileMs, offset: 0,
+      };
+      picked.add(contentKey(item));
+      recent.set(contentKey(item), cursor);
+      return item;
+    };
+
+    const out: PlanItem[] = [];
+    let cursor = start;
+    for (let k = 0; k < segs.length; k++) {
+      const seg = segs[k];
+      const segStart = Math.max(cursor, seg.at ?? cursor);
+      const segEnd = k + 1 < segs.length ? (segs[k + 1].at as number) : fullEnd;
+      const isEnd = k === segs.length - 1;
+      let items: PlanItem[] = [];
+      let c = segStart;
+      for (let round = 0; round < 50; round++) {
+        let added = 0;
+        for (const e of seg.entries) {
+          const it = await resolve(e, c, round);
+          if (!it) continue;
+          items.push(it);
+          c = it.endsAt;
+          added++;
+        }
+        // A playlist that loops (when_short = 'loop') goes round again until the block is full.
+        if (!(b.fill_kind === "playlist" && b.when_short === "loop" && isEnd) || added === 0 || c >= segEnd) break;
+      }
+      if (segEnd <= segStart) {
+        // The content before this anchor already ran past it: play on from here (validation reports it).
+        out.push(...items);
+        cursor = c;
+        continue;
+      }
+      const at = parisHHMM(segEnd);
+      items = fitToWindow(items, segStart, segEnd, pool, this.recentMap([...before, ...out]), {
+        dropped: isEnd ? `Dropped so the ${b.name} block ends on time at ${at}` : `Dropped so the ${b.name} item at ${at} starts on time`,
+        added: (gap) => (isEnd ? `Added to fill ${mmss(gap)} at the end of the ${b.name} block` : `Added to fill ${mmss(gap)} before the ${b.name} item at ${at}`),
+        trimmed: (ms) => `Faded ${mmss(ms)} early so ${at} starts on time`,
+      }).items;
+      out.push(...items);
+      cursor = items.length ? items[items.length - 1].endsAt : segEnd;
+    }
+    return { items: out, anchors, fullEnd, pool };
+  }
+
+  /** A hand-planned block's items from `t` to its end (across a flexible hand-over, to its last item's natural end). */
+  private async handWindow(occ: Occurrence, t: number, before: PlanItem[], flexEnd: boolean, layoutFrom?: number): Promise<PlanItem[]> {
+    const { items: full, anchors, fullEnd, pool } = await this.handLayout(occ, before, layoutFrom);
+    const recent = this.recentMap(before);
+    const from = full.findIndex((i) => i.endsAt > t);
+    let items = from < 0 ? [] : full.slice(from);
+    if (items.length && items[0].startsAt !== t) {
+      // Resuming after a higher layer's special: the item covering t starts whole at t, refitted up to the next anchor.
+      const nextB = Math.min(anchors.find((a) => a > t) ?? Infinity, occ.endMs);
+      const at = parisHHMM(nextB);
+      const head = relayFrom(items.filter((i) => i.startsAt < nextB).map((i, k) => (k === 0 ? { ...i, offset: 0 } : i)), t);
+      const fitted = fitToWindow(head, t, nextB, pool, recent, {
+        dropped: `Dropped so ${at} starts on time`,
+        added: (gap) => `Added to fill ${mmss(gap)} in the ${occ.block.name} block`,
+        trimmed: (ms) => `Faded ${mmss(ms)} early so ${at} starts on time`,
+      }).items;
+      items = [...fitted, ...items.filter((i) => i.startsAt >= nextB)];
+    }
+    if (occ.endMs < fullEnd) {
+      // Cut short by a higher layer: always a hard boundary.
+      const at = parisHHMM(occ.endMs);
+      items = fitToWindow(items.filter((i) => i.startsAt < occ.endMs), t, occ.endMs, pool, recent, {
+        dropped: `Dropped so the special at ${at} starts on time`,
+        added: (gap) => `Added to fill ${mmss(gap)} before the special at ${at}`,
+        trimmed: (ms) => `Faded ${mmss(ms)} early so the special at ${at} starts on time`,
+      }).items;
+    } else if (flexEnd && items.length) {
+      // Flexible into flexible: the last item plays to its natural end (§2.3).
+      const last = items[items.length - 1];
+      const natural = last.startsAt + last.fileMs - last.offset;
+      if (last.endsAt < natural) items[items.length - 1] = { ...last, endsAt: natural, reasons: last.reasons.filter((r) => !r.startsWith("Faded")) };
+    }
+    return items;
   }
 
   /** The channel default from `t` until `windowEnd` (the next block start, or open-ended), or past `limit`. */

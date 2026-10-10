@@ -1,5 +1,6 @@
 import { newId } from "../id";
 import { loadWorkingBlocks, type GridBlock } from "./grid";
+import { workingContent, type PlanContent, type SnapshotList, type SnapshotRunningOrder } from "./content";
 
 /**
  * Published plans (handoff_scheduler_release2.md §1.1, §1.5, §1.6): immutable
@@ -18,11 +19,14 @@ export interface PlanSnapshot {
   channel_id: string;
   /** Active blocks only, each with its exceptions inlined. */
   blocks: GridBlock[];
-  /** Every playlist/template a block or running order uses, with slots (Stage 2B). */
-  lists: Record<string, unknown>;
-  /** Running orders from (today - 1) on (Stage 2B). */
-  running_orders: unknown[];
+  /** Every playlist/template a block uses, with its slots, so editing one never changes a published week. */
+  lists: Record<string, SnapshotList>;
+  /** Running orders from (today - 1) on; older ones are dropped at publish. */
+  running_orders: SnapshotRunningOrder[];
 }
+
+/** The lists and running orders of a snapshot (older plans may lack them). */
+export const snapshotContent = (s: PlanSnapshot | null | undefined): PlanContent => ({ lists: s?.lists ?? {}, running_orders: s?.running_orders ?? [] });
 
 export interface PlanRow {
   id: string;
@@ -84,16 +88,22 @@ export async function latestPlan(db: D1Database, channelId: string): Promise<Loa
   return seeded ? parse(seeded) : null;
 }
 
+/** What airs on a channel: the latest published plan's active blocks and its lists and running orders. */
+export async function airingPlan(db: D1Database, channelId: string): Promise<{ blocks: GridBlock[]; content: PlanContent }> {
+  const plan = await latestPlan(db, channelId);
+  return { blocks: (plan?.snapshot.blocks ?? []).filter((b) => b.active), content: snapshotContent(plan?.snapshot) };
+}
+
 /** A plan by number (for rollback and history). */
 export async function planByNumber(db: D1Database, channelId: string, number: number): Promise<LoadedPlan | null> {
   const row = await db.prepare("SELECT * FROM sched_plans WHERE channel_id = ? AND number = ?").bind(channelId, number).first<PlanRow>();
   return row ? parse(row) : null;
 }
 
-/** The working copy as a snapshot (§1.5): active blocks with their exceptions. Lists and running orders arrive in Stage 2B. */
-export async function snapshotWorkingCopy(db: D1Database, channelId: string): Promise<PlanSnapshot> {
+/** The working copy as a snapshot (§1.5): active blocks with their exceptions, the lists they use, and running orders from yesterday on. */
+export async function snapshotWorkingCopy(db: D1Database, channelId: string, nowMs = Date.now()): Promise<PlanSnapshot> {
   const blocks = await loadWorkingBlocks(db, channelId, false);
-  return { schema: 1, channel_id: channelId, blocks, lists: {}, running_orders: [] };
+  return { schema: 1, channel_id: channelId, blocks, ...(await workingContent(db, channelId, blocks, nowMs)) };
 }
 
 /** Write the next plan number for a channel. Fails (UNIQUE) if another plan took that number first. */

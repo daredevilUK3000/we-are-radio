@@ -6,8 +6,8 @@ import { blockLengthMin, type BlockColour, type GridBlock } from "./grid";
  * sends, checked for shape only. Overlaps are allowed in the working copy:
  * they become `conflict` issues (validate.ts), not save errors.
  *
- * In stage 2A a block is filled by autopilot tags or a programme; playlists,
- * templates and manual running orders arrive in 2B.
+ * A block is filled by autopilot tags, a programme, a playlist, a template
+ * (with per-date episodes), or by hand (a manual running order per date).
  */
 
 const COLOURS: BlockColour[] = ["blue", "purple", "gold", "green", "red", "grey"];
@@ -53,10 +53,14 @@ export function parsePlanBlock(body: Record<string, unknown>): { ok: true; value
   if (!Number.isInteger(end) || end < 5 || end > 1440 || end % 5) return bad("end_min", "End times go in 5-minute steps.");
   if (end === start || blockLengthMin({ start_min: start, end_min: end }) < 5) return bad("end_min", "The block needs a length.");
 
-  const fill = body.fill_kind === "programme" ? "programme" : body.fill_kind === "autopilot" ? "autopilot" : null;
+  const FILLS = ["programme", "autopilot", "playlist", "template", "manual"] as const;
+  const fill = FILLS.find((f) => f === body.fill_kind) ?? null;
   if (!fill) return bad("fill_kind", "Choose what fills the block.");
   const programme_id = fill === "programme" ? String(body.programme_id ?? "") || null : null;
   if (fill === "programme" && !programme_id) return bad("programme_id", "Choose a programme.");
+  // A template fills template blocks only, a playlist playlist blocks only (§7); checked against the list itself by the route.
+  const list_id = fill === "playlist" || fill === "template" ? String(body.list_id ?? "") || null : null;
+  if ((fill === "playlist" || fill === "template") && !list_id) return bad("list_id", `Choose a ${fill}.`);
   const tags = Array.isArray(body.tags_any) ? body.tags_any.map(String).filter(Boolean).slice(0, 20) : [];
 
   // The layer follows from the repeat unless it's set: one-offs on top, then seasons, then the regular week.
@@ -82,12 +86,13 @@ export function parsePlanBlock(body: Record<string, unknown>): { ok: true; value
       start_mode: body.start_mode === "flexible" ? "flexible" : "hard",
       end_mode: body.end_mode === "flexible" ? "flexible" : "hard",
       priority: body.priority === "high" ? "high" : "normal",
-      mode: "auto",
+      // Manual blocks are built item by item; everything else fills itself.
+      mode: fill === "manual" ? "manual" : "auto",
       fill_kind: fill,
       programme_id,
-      list_id: null,
+      list_id,
       tags_any_json: JSON.stringify(tags),
-      when_short: "fill",
+      when_short: body.when_short === "loop" ? "loop" : "fill",
       public: body.public === false || body.public === 0 ? 0 : 1,
       active: body.active === false || body.active === 0 ? 0 : 1,
       exceptions,

@@ -8,7 +8,12 @@ import { Bars, clock, dayHm, hm, hms, HEALTH_LABEL, longDate, Modal, SchedulerNa
 import { LibraryPicker } from "./LibraryPicker";
 import { FallbackEditor } from "./FallbackEditor";
 import { AiringHistory, VersionHistory } from "./History";
+import { HoldDialog } from "./Hold";
+import { WhatsNewBanner } from "./WhatsNew";
+import "./whatsnew.css";
 import "./scheduler.css";
+import "./timeline.css";
+import "./content.css";
 import "../pages/onair-studio.css";
 
 /**
@@ -41,6 +46,7 @@ export function MasterControl() {
     | { kind: "airing"; airingId: string; label: string | null }
     | { kind: "fallback" }
     | { kind: "enable"; on: boolean }
+    | { kind: "hold" }
   >(null);
 
   const loadOverview = useCallback(() => {
@@ -155,6 +161,7 @@ export function MasterControl() {
   return (
     <div className="sch">
       <SchedulerNav />
+      <WhatsNewBanner />
       <header className="sch-head">
         <div>
           <h1 className="sch-h1">Master Control</h1>
@@ -207,7 +214,8 @@ export function MasterControl() {
                 {channel.name}
               </h2>
               <button type="button" className="sch-version" onClick={() => setModal({ kind: "versions" })} disabled={!channel.live_version}>
-                {channel.enabled ? "LIVE" : "SHADOW"} · v{timeline?.channel.slug === channel.slug ? timeline.live_version : channel.live_version}
+                {channel.enabled ? "LIVE" : "SHADOW"}
+                {channel.live_plan ? ` · Plan ${channel.live_plan}` : ""} · v{timeline?.channel.slug === channel.slug ? timeline.live_version : channel.live_version}
               </button>
               {voices.length > 0 && (
                 <button
@@ -248,6 +256,7 @@ export function MasterControl() {
                 onPick={(mode) => setModal({ kind: "picker", mode, airingId: mode === "replace" ? timeline?.up_next[0]?.airing_id : undefined })}
                 onSkip={() => act({ action: "skip" })}
                 onBack={() => act({ action: "back_on_schedule" })}
+                onHold={() => setModal({ kind: "hold" })}
                 onJingle={(id) => act({ action: "insert_jingle", item: { audio_asset_id: id } })}
                 onRecorded={afterChange}
                 onError={onError}
@@ -290,6 +299,18 @@ export function MasterControl() {
             else if (modal.mode === "jingle") void act({ action: "insert_jingle", item });
             else void act({ action: modal.mode as "play_now" | "insert_next", item });
           }}
+        />
+      )}
+      {modal?.kind === "hold" && focus && channel && (
+        <HoldDialog
+          slug={focus}
+          name={channel.name}
+          onClose={() => setModal(null)}
+          onDone={(r) => {
+            setModal(null);
+            afterChange(r);
+          }}
+          onError={() => {}}
         />
       )}
       {modal?.kind === "preview" && timeline && <PreviewModal slug={timeline.channel.slug} name={timeline.channel.name} onClose={() => setModal(null)} />}
@@ -624,6 +645,7 @@ function LiveControls({
   onPick,
   onSkip,
   onBack,
+  onHold,
   onJingle,
   onRecorded,
   onError,
@@ -635,6 +657,7 @@ function LiveControls({
   onPick: (mode: "play_now" | "insert_next" | "replace" | "jingle") => void;
   onSkip: () => void;
   onBack: () => void;
+  onHold: () => void;
   onJingle: (assetId: string) => void;
   onRecorded: (res: { version: number; previous: number; message: string }) => void;
   onError: (err: unknown) => void;
@@ -666,6 +689,9 @@ function LiveControls({
           Replace…
         </button>
       </div>
+      <button type="button" className="sch-btn sch-btn-block" disabled={off} onClick={onHold} title="Play a few more minutes of what's on, moving the starts you choose later">
+        Hold…
+      </button>
       <p className="sch-eyebrow sch-eyebrow-sub">Insert jingle</p>
       <div className="sch-chips">
         {jingles.map((j) => (

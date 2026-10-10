@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { friendly, planApi, type Board, type BoardLane, type ChannelDraft, type PlanBlock, type PlanIssue, type PlanSegment, type PublishOutcome } from "./api";
+import { contentApi, friendly, planApi, type Board, type BoardLane, type ChannelDraft, type LibraryResult, type PlanBlock, type PlanIssue, type PlanSegment, type PublishOutcome, type RunningOrderView } from "./api";
+import { LIBRARY_MIME, LibrarySearch } from "./LibraryPicker";
+import { RunningOrderDialog } from "./RunningOrder";
 import { hm, longDate, Modal, SchedulerNav, Toast, useNow, type ToastState } from "./common";
 import { bodyFor, DAY_LONG, DAY_SHORT, draftFromBlock, lengthMin, mm, newDraft, PlanEditor, type EditorDraft } from "./PlanEditor";
 import "./scheduler.css";
 import "./timeline.css";
+import "./content.css";
 
 /**
  * Studio -> Scheduler -> Timeline (/studio/scheduler/timeline), Release 2:
@@ -74,6 +77,10 @@ export function repeatsText(b: PlanBlock): string {
   if (b.exceptions?.length) base += ` · skips ${b.exceptions.length === 1 ? shortDate(b.exceptions[0]) : `${b.exceptions.length} dates`}`;
   return base;
 }
+const clockText = (ms: number) => {
+  const s = Math.round(Math.abs(ms) / 1000);
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
 const badgeFor = (b: PlanBlock) => ((b.recurrence ?? "weekly") === "once" ? "ONE-OFF" : b.date_from || b.date_to ? "SEASON" : null);
 const isRepeating = (b: PlanBlock) => (b.recurrence ?? "weekly") !== "once";
 const layerName = (n: number) => (n === 3 ? "3 · One-off (on top)" : n === 2 ? "2 · Seasonal" : "1 · Regular week");
@@ -94,7 +101,9 @@ type ModalState =
   | { kind: "history"; slug: string }
   | { kind: "discard"; slug: string }
   | { kind: "resolve"; slug: string; issue: { block_id: string; other_block_id: string; date: string; start_ms?: number; end_ms?: number } }
-  | { kind: "copy"; slug: string; from: number };
+  | { kind: "copy"; slug: string; from: number }
+  | { kind: "ro"; slug: string; blockId: string; date: string }
+  | { kind: "fill"; slug: string; block: PlanBlock; date: string; item: LibraryResult };
 
 // ------------------------------------------------------------------ the page
 
@@ -112,6 +121,7 @@ export function Timeline() {
   const [modal, setModal] = useState<ModalState | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [libOpen, setLibOpen] = useState(false);
   // The whole day fits the screen by default; the zoom is remembered once changed.
   const fitPx = () => Math.max(25, Math.floor((Math.min(window.innerWidth, 1600) - 130 - 160 - (selection ? 360 : 0)) / 24));
   const [pxPerHour, setPxPerHour] = useState(() => {
@@ -188,6 +198,48 @@ export function Timeline() {
     }
   };
 
+  /**
+   * Something dragged from the library drawer (§5.5): a playlist, template or
+   * programme onto a block sets its fill (after a confirm); onto empty lane
+   * time it creates a one-hour block there. Songs and audio go into a
+   * block's running order.
+   */
+  const dropLibrary = async (s: string, item: LibraryResult, target: { block?: PlanBlock; date: string; minute: number }) => {
+    const isList = item.kind === "playlist" || item.kind === "template";
+    const isProg = item.kind === "programme";
+    if (target.block) {
+      if (isList || isProg) setModal({ kind: "fill", slug: s, block: target.block, date: target.date, item });
+      else if (target.block.fill_kind === "manual" || target.block.fill_kind === "template") setModal({ kind: "ro", slug: s, blockId: target.block.id, date: target.date });
+      else setToast({ message: `${target.block.name} fills itself by its ${target.block.fill_kind === "programme" ? "programme" : "rules"}. Make it manual to place songs by hand.`, tone: "info" });
+      return;
+    }
+    if (!isList && !isProg) {
+      setToast({ message: "Drop a song onto a manual block, or open a block's running order to add it.", tone: "info" });
+      return;
+    }
+    const start = Math.min(1380, Math.floor(target.minute / 15) * 15);
+    try {
+      const res = await planApi.create({
+        channel: s,
+        name: item.title.slice(0, 60),
+        description: isProg ? `The programme ${item.title}` : `From the ${item.kind} ${item.title}`.slice(0, 140),
+        colour: item.kind === "template" || isProg ? "purple" : "blue",
+        recurrence: "once",
+        once_date: target.date,
+        start_min: start,
+        end_min: start + 60,
+        fill_kind: isProg ? "programme" : item.kind,
+        programme_id: isProg ? item.programme_id : null,
+        list_id: isList ? item.list_id : null,
+        tags_any: [],
+      });
+      edited(`Added ${item.title} as a one-off at ${mm(start)} (in the draft). Edit it to make it repeat.`, res);
+      setSelection({ slug: s, blockId: res.block.id, date: target.date, start_ms: 0 });
+    } catch (e) {
+      fail(e);
+    }
+  };
+
   const selLane = selection ? lanes.find((l) => l.slug === selection.slug) ?? null : null;
   const selBlock = selection && selLane ? selLane.blocks.find((b) => b.id === selection.blockId) ?? null : null;
 
@@ -242,6 +294,11 @@ export function Timeline() {
           </select>
         )}
         <span className="sch-spacer" />
+        {editable && view === "day" && (
+          <button type="button" className="sch-btn" aria-pressed={libOpen} onClick={() => setLibOpen((x) => !x)}>
+            {libOpen ? "Hide library" : "Library"}
+          </button>
+        )}
         {editable && (
           <button
             type="button"
@@ -290,7 +347,28 @@ export function Timeline() {
       )}
       {mode === "live" && <div className="sch-tl-banner is-live">Live: the published plan. Switch to Draft to make changes.</div>}
 
-      <div className={`sch-tl-layout${selection ? " has-panel" : ""}`}>
+      <div className={`sch-tl-layout${selection ? " has-panel" : ""}${libOpen && editable && view === "day" ? " has-lib" : ""}`}>
+        {libOpen && editable && view === "day" && (
+          <aside className="sch-card sch-tl-lib" aria-label="Library">
+            <p className="sch-eyebrow">Library</p>
+            <LibrarySearch
+              actionLabel="Info"
+              types={[
+                { key: "playlists", label: "Playlists" },
+                { key: "templates", label: "Templates" },
+                { key: "programmes", label: "Programmes" },
+                { key: "songs", label: "Songs" },
+                { key: "features", label: "Audio" },
+              ]}
+              onPick={(item) =>
+                setToast({
+                  message: item.kind === "playlist" || item.kind === "template" || item.kind === "programme" ? `Drag ${item.title} onto a block to fill it with it, or onto empty time to add it as a one-hour block.` : `Drag ${item.title} onto a manual block to add it to that airing's running order.`,
+                  tone: "info",
+                })
+              }
+            />
+          </aside>
+        )}
         <div className="sch-tl-main">
           {!board ? (
             <p className="sch-dim">Loading…</p>
@@ -310,6 +388,7 @@ export function Timeline() {
               onCreate={(s, start, end) => setModal({ kind: "editor", draft: newDraft(s, date, start, end, weekday(date)) })}
               onChange={changeAiring}
               onResolve={(s, c) => setModal({ kind: "resolve", slug: s, issue: c })}
+              onDropLibrary={(s, item, target) => void dropLibrary(s, item, target)}
             />
           ) : (
             <WeekView
@@ -355,6 +434,16 @@ export function Timeline() {
               const b = blockOf(selLane.slug, blockId);
               if (b) setModal({ kind: "editor", draft: draftFromBlock(b, selLane.slug) });
               void edit;
+            }}
+            onOpenRunningOrder={(d) => setModal({ kind: "ro", slug: selLane.slug, blockId: selBlock.id, date: d })}
+            onNextEpisode={async () => {
+              try {
+                const r = await contentApi.nextEpisode(selBlock.id);
+                edited(`Created the ${selBlock.name} episode for ${r.date_label} (in the draft). Fill its empty slots.`, r);
+                setModal({ kind: "ro", slug: selLane.slug, blockId: selBlock.id, date: r.date });
+              } catch (e) {
+                fail(e);
+              }
             }}
           />
         )}
@@ -472,6 +561,53 @@ export function Timeline() {
           onError={fail}
         />
       )}
+      {modal?.kind === "ro" && board && blockOf(modal.slug, modal.blockId) && (
+        <RunningOrderDialog
+          board={board}
+          block={blockOf(modal.slug, modal.blockId)!}
+          channel={modal.slug}
+          date={modal.date}
+          mode={mode}
+          editable={editable}
+          onClose={() => {
+            setModal(null);
+            load();
+          }}
+          onChanged={(message, d) => {
+            if (d) setDrafts((x) => ({ ...x, ...d }));
+            setToast({ message, tone: "info" });
+          }}
+        />
+      )}
+      {modal?.kind === "fill" && (
+        <Modal
+          title={`Fill ${modal.block.name} with ${modal.item.title}?`}
+          onClose={() => setModal(null)}
+          footer={
+            <>
+              <button type="button" className="sch-btn" onClick={() => setModal(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sch-btn sch-btn-red"
+                onClick={() => {
+                  const m = modal;
+                  setModal(null);
+                  const kind = m.item.kind === "programme" ? "programme" : m.item.kind;
+                  changeAiring(m.slug, m.block, m.date, { fill_kind: kind, programme_id: m.item.programme_id ?? null, list_id: m.item.list_id ?? null }, `${m.block.name} is now filled by the ${kind} ${m.item.title}`);
+                }}
+              >
+                Fill it
+              </button>
+            </>
+          }
+        >
+          <p>
+            <strong>{modal.block.name}</strong> is filled by {modal.block.fill_kind === "programme" ? "a programme" : modal.block.fill_kind === "autopilot" ? "songs by tag" : `a ${modal.block.fill_kind === "manual" ? "hand-built running order" : modal.block.fill_kind}`} now. It will play the {modal.item.kind} <strong>{modal.item.title}</strong> instead (in the draft).
+          </p>
+        </Modal>
+      )}
       <Toast toast={toast} onUndo={() => {}} onClose={() => setToast(null)} />
     </div>
   );
@@ -545,6 +681,7 @@ function DayView({
   onCreate,
   onChange,
   onResolve,
+  onDropLibrary,
 }: {
   board: Board;
   now: number;
@@ -558,8 +695,10 @@ function DayView({
   onCreate: (slug: string, start: number, end: number) => void;
   onChange: (slug: string, block: PlanBlock, date: string, changes: Record<string, unknown>, verb: string) => void;
   onResolve: (slug: string, c: { block_id: string; other_block_id: string; date: string; start_ms: number; end_ms: number }) => void;
+  onDropLibrary: (slug: string, item: LibraryResult, target: { block?: PlanBlock; date: string; minute: number }) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
+  const [dropLane, setDropLane] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [ghost, setGhost] = useState<{ slug: string; a: number; b: number } | null>(null);
   const [nudge, setNudge] = useState<{ key: string; dStart: number; dEnd: number } | null>(null);
@@ -710,8 +849,24 @@ function DayView({
                   </span>
                 </div>
                 <div
-                  className={`sch-tl-track${editable ? " is-editable" : ""}`}
+                  className={`sch-tl-track${editable ? " is-editable" : ""}${dropLane === lane.slug ? " is-drop" : ""}`}
                   style={{ width, backgroundSize: `${pxPerHour}px 100%` }}
+                  onDragOver={(e) => {
+                    if (!editable || !e.dataTransfer.types.includes(LIBRARY_MIME)) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                    if (dropLane !== lane.slug) setDropLane(lane.slug);
+                  }}
+                  onDragLeave={() => setDropLane(null)}
+                  onDrop={(e) => {
+                    setDropLane(null);
+                    const raw = e.dataTransfer.getData(LIBRARY_MIME);
+                    if (!editable || !raw) return;
+                    e.preventDefault();
+                    const bar = (e.target as HTMLElement).closest<HTMLElement>(".sch-tl-bar");
+                    const block = bar?.dataset.block ? lane.blocks.find((b) => b.id === bar.dataset.block) : undefined;
+                    onDropLibrary(lane.slug, JSON.parse(raw) as LibraryResult, { block, date: bar?.dataset.date ?? date, minute: minAt(e.clientX) });
+                  }}
                   onPointerDown={(e) => {
                     if (!editable || (e.target as HTMLElement).closest(".sch-tl-bar, .sch-tl-conflict")) return;
                     const m = minAt(e.clientX);
@@ -753,6 +908,8 @@ function DayView({
                         style={{ left: x(a), width: w, transform: dragging && drag.dLane ? `translateY(${drag.dLane * 64}px)` : undefined }}
                         aria-label={`${block.name}, ${hm(s.start_ms)} to ${hm(s.end_ms)} on ${lane.name}. ${repeatsText(block)}. ${block.description}${editable ? ". Arrow keys move it by 5 minutes, Shift+arrows change its end, Enter saves." : ""}`}
                         aria-pressed={selected}
+                        data-block={block.id}
+                        data-date={s.date}
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           const rect = e.currentTarget.getBoundingClientRect();
@@ -1067,6 +1224,8 @@ function BlockPanel({
   onDelete,
   onResolve,
   onFix,
+  onOpenRunningOrder,
+  onNextEpisode,
 }: {
   lane: BoardLane;
   block: PlanBlock;
@@ -1079,15 +1238,38 @@ function BlockPanel({
   onDelete: () => void;
   onResolve: (c: { block_id: string; other_block_id: string; date: string }) => void;
   onFix: (blockId: string, edit: true) => void;
+  onOpenRunningOrder: (date: string) => void;
+  onNextEpisode: () => void;
 }) {
   const seg = lane.segments.find((s) => s.block_id === block.id && s.date === selection.date);
+  const hand = block.fill_kind === "playlist" || block.fill_kind === "template" || block.fill_kind === "manual";
+  const [ro, setRo] = useState<RunningOrderView | null>(null);
+  useEffect(() => {
+    setRo(null);
+    if (!hand) return;
+    let gone = false;
+    contentApi
+      .runningOrder(block.id, selection.date)
+      .then((r) => !gone && setRo(r))
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [block.id, block.updated_at_ms, selection.date, hand, lane.draft]);
+  const list = block.list_id ? board.lists?.find((l) => l.id === block.list_id) : undefined;
   const lenMin = lengthMin(block);
   const programme = block.fill_kind === "programme" ? board.programmes.find((p) => p.id === block.programme_id) : null;
   const issues = lane.draft.issues.filter((i) => (i.block_id === block.id || i.other_block_id === block.id) && (!i.date || i.code === "conflict" || i.date === selection.date));
   const fill =
     block.fill_kind === "programme"
       ? `Programme · ${programme?.title ?? "(not published)"}`
-      : `Auto-fill · ${block.tags_any.length ? `tags: ${block.tags_any.join(", ")}` : `${lane.name}'s own songs`}`;
+      : block.fill_kind === "playlist"
+        ? `Playlist · ${list?.name ?? "(none chosen)"}${block.when_short === "loop" ? " (loops)" : ""}`
+        : block.fill_kind === "template"
+          ? `Template · ${list?.name ?? "(none chosen)"}${ro ? (ro.running_order ? " · episode ready" : " · no episode yet") : ""}`
+          : block.fill_kind === "manual"
+            ? `Manual running order${ro ? (ro.running_order ? ` · ${ro.items.length} item${ro.items.length === 1 ? "" : "s"}` : " · none yet") : ""}`
+            : `Auto-fill · ${block.tags_any.length ? `tags: ${block.tags_any.join(", ")}` : `${lane.name}'s own songs`}`;
   let duration: { tone: "green" | "amber" | "red"; text: string; pct: number };
   if (programme?.duration_seconds) {
     const progMin = programme.duration_seconds / 60;
@@ -1097,7 +1279,17 @@ function BlockPanel({
         : progMin > lenMin + 0.5
           ? { tone: "amber", pct: 100, text: `The programme runs ${Math.round(progMin - lenMin)} min longer than the block: its end is faded to keep the next start on time.` }
           : { tone: "green", pct: 100, text: "Fits exactly." };
-  } else duration = { tone: "green", pct: 100, text: "Fits exactly. The generator fills this block by its rules." };
+  } else if (hand && ro) {
+    const over = ro.est_ms - ro.length_ms;
+    const filler = block.fill_kind === "manual" ? "the safety net fills it" : "the block's songs fill it";
+    duration =
+      over > 20_000
+        ? { tone: "red", pct: 100, text: `${clockText(over)} over: ${ro.over_ms && ro.about ? "rule-picked songs are dropped to fit" : "the end is faded to keep the next start on time"}.` }
+        : over < -20_000
+          ? { tone: "amber", pct: Math.max(4, (ro.est_ms / ro.length_ms) * 100), text: `${clockText(-over)} unfilled: ${filler}.` }
+          : { tone: "green", pct: 100, text: "Fits exactly." };
+  } else if (hand) duration = { tone: "green", pct: 0, text: "Measuring…" };
+  else duration = { tone: "green", pct: 100, text: "Fits exactly. The generator fills this block by its rules." };
 
   return (
     <aside className="sch-card sch-tl-panel" aria-labelledby="sch-tl-panel-h">
@@ -1156,9 +1348,31 @@ function BlockPanel({
                   Edit block
                 </button>
               )}
+              {(i.fixes.includes("open_ro") || i.fixes.includes("create_ro") || i.fixes.includes("auto_fill") || i.fixes.includes("trim")) && (
+                <button type="button" className="sch-btn sch-btn-sm" onClick={() => onOpenRunningOrder(i.date ?? selection.date)}>
+                  {i.fixes.includes("create_ro") ? (block.fill_kind === "template" ? "Create episode" : "Build it") : "Open running order"}
+                </button>
+              )}
+              {i.fixes.includes("edit_list") && (
+                <a className="sch-btn sch-btn-sm" href={`/studio/scheduler/lists?open=${block.list_id ?? ""}`}>
+                  Edit {list?.kind ?? "list"}
+                </a>
+              )}
             </li>
           ))}
         </ul>
+      )}
+      {hand && (
+        <div className="sch-tl-panel-actions">
+          <button type="button" className={`sch-btn${editable ? "" : " sch-btn-red"}`} onClick={() => onOpenRunningOrder(selection.date)}>
+            {block.fill_kind === "playlist" ? "Open playlist items" : block.fill_kind === "template" && ro && !ro.running_order ? "Open (no episode yet)" : "Open running order"}
+          </button>
+          {block.fill_kind === "template" && editable && (
+            <button type="button" className="sch-btn" onClick={onNextEpisode}>
+              Create next episode
+            </button>
+          )}
+        </div>
       )}
       {editable ? (
         <div className="sch-tl-panel-actions">

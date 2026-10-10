@@ -5,7 +5,7 @@ import { blockLengthMin, blockTags, loadGridBlocks, occurrencesBetween, occurren
 import { furthestHorizon, type SchedChannelRow } from "./generate";
 import { fallbackLoop } from "./read";
 import { itemAt, itemsBetween } from "./timeline";
-import { DAY, HOUR, MINUTE, parisDayTime, parisHHMM, wallClock, PARIS_TZ } from "./time";
+import { addDaysTo, DAY, HOUR, MINUTE, parisDate, parisDayTime, parisHHMM, wallClock, PARIS_TZ } from "./time";
 import { REPEAT_WINDOW_MS } from "./types";
 
 /**
@@ -130,9 +130,18 @@ export async function channelHealth(env: Env, channel: Channel, sc: SchedChannel
   }
   out.push(...(await gridFillChecks(env.DB, channel, blocks, nowMs)));
 
+  // The published plan's own problems in the next 48 hours (§10): missing audio, empty episodes, overruns...
+  const { latestPlan, snapshotContent, snapshotWorkingCopy } = await import("./plans");
+  const { validatePlan } = await import("./validate");
+  const live = await latestPlan(env.DB, channel.id);
+  const soon = (await validatePlan(env.DB, channel, blocks, nowMs, snapshotContent(live?.snapshot))).filter(
+    (i) => i.code !== "conflict" && i.code !== "clock_change" && i.code !== "past" && (!i.date || i.date <= addDaysTo(parisDate(nowMs), 2))
+  );
+  for (const i of soon) add(`plan_${i.code}_${i.block_id ?? ""}_${i.date ?? ""}`, i.level, i.level === "red" ? "Published plan has a problem" : "Published plan: worth a look", i.text, "grid");
+
   // Draft changes waiting to be published (a nudge, not a warning).
-  const { draftChanges } = await import("./planPublish");
-  const draft = draftChanges(blocks, await loadWorkingBlocks(env.DB, channel.id, true));
+  const { planChanges } = await import("./planPublish");
+  const draft = planChanges(live?.snapshot, await snapshotWorkingCopy(env.DB, channel.id, nowMs), nowMs);
   if (draft.length) add("draft", "grey", "Draft changes not published", `${draft.length} change${draft.length === 1 ? "" : "s"} in the Timeline's draft: ${draft.slice(0, 3).map((d) => d.text).join(" · ")}${draft.length > 3 ? " …" : ""}`, "grid");
 
   // Listener voice notes the placer has given up on (3 failed tries): shown only when there are some.
@@ -193,6 +202,8 @@ export async function blockFillProblem(db: D1Database, channel: Channel, b: Pick
     if (!n?.n) return { level: "red", text: "its programme is empty" };
     return null;
   }
+  // Playlists, templates and running orders are checked item by item in validate.ts.
+  if (b.fill_kind === "playlist" || b.fill_kind === "template" || b.fill_kind === "manual") return null;
   const tags = blockTags(b as GridBlock);
   const tracks = await autopilotTracks(db, tags.length ? tags : channelTags(channel));
   if (tracks.length === 0) return { level: "red", text: "no published songs match its tags" };

@@ -3,10 +3,11 @@ import { newId } from "../id";
 import { blockRecurringLabel } from "../guide";
 import { buildFromPlan, HORIZON_MS, latestVersion, nextBoundary, type SchedChannelRow } from "./generate";
 import { loadWorkingBlocks, occurrencesBetween, type GridBlock, type Occurrence } from "./grid";
-import { latestPlan, planByNumber, snapshotWorkingCopy, type PlanSnapshot } from "./plans";
+import { latestPlan, planByNumber, snapshotContent, snapshotWorkingCopy, type PlanSnapshot } from "./plans";
+import { listsDiffer, loadLists, loadRunningOrder, roDiffer, writeListStatements, writeRunningOrderStatements, type SnapshotRunningOrder } from "./content";
 import { writeBlockStatements } from "./planEdit";
 import { logChange } from "./store";
-import { addDaysTo, DAY, hhmm, parisDate, parisHHMM } from "./time";
+import { addDaysTo, DAY, hhmm, parisDate, parisHHMM, shortDay } from "./time";
 import { clearTimelineCache, itemAt } from "./timeline";
 import { redIssues, shortDate, validatePlan, type PlanIssue } from "./validate";
 
@@ -65,7 +66,7 @@ export function draftChanges(live: GridBlock[], working: GridBlock[]): DraftChan
     const name = w.name;
     const whenFields = ["recurrence", "days_mask", "once_date", "monthly_rule", "date_from", "date_to", "start_min", "end_min"];
     if (air.some((f) => whenFields.includes(f))) out.push({ text: `${name} moved from ${describeWhen(l)} to ${describeWhen(w)}`, block_id: id });
-    if (air.includes("fill_kind") || air.includes("programme_id") || air.includes("tags_any_json")) out.push({ text: `${name}: what fills it changed`, block_id: id });
+    if (air.includes("fill_kind") || air.includes("programme_id") || air.includes("list_id") || air.includes("tags_any_json")) out.push({ text: `${name}: what fills it changed`, block_id: id });
     const behaviour = air.filter((f) => ["start_mode", "end_mode", "priority", "layer", "mode", "when_short"].includes(f));
     if (behaviour.length) {
       const words: Record<string, string> = { start_mode: "start", end_mode: "end", priority: "priority", layer: "layer", mode: "mode", when_short: "short fill" };
@@ -107,6 +108,70 @@ export function sameBlocks(live: GridBlock[], working: GridBlock[]): boolean {
   return draftChanges(live, working).length === 0;
 }
 
+export interface ContentChange extends DraftChange {
+  list_id?: string;
+  date?: string;
+}
+
+/**
+ * Plain sentences for the hand-planned content (§4.2): a playlist or
+ * template that changed under a block that uses it, and running orders
+ * (manual hours, episodes) from today on that are new, changed or gone.
+ */
+export function contentChanges(live: PlanSnapshot | null | undefined, working: PlanSnapshot, nowMs: number): ContentChange[] {
+  const out: ContentChange[] = [];
+  const L = snapshotContent(live);
+  const W = snapshotContent(working);
+  for (const [id, w] of Object.entries(W.lists)) {
+    const l = L.lists[id];
+    // A list newly used by a block shows as that block's fill changing.
+    if (!l || !listsDiffer(l, w)) continue;
+    const n = working.blocks.filter((b) => b.active && b.list_id === id).length;
+    out.push({ text: `${w.kind === "template" ? "Template" : "Playlist"} ${w.name} changed (used by ${n} block${n === 1 ? "" : "s"})`, list_id: id });
+  }
+  const today = parisDate(nowMs);
+  const blockById = new Map([...(live?.blocks ?? []), ...working.blocks].map((b) => [b.id, b]));
+  const activeNow = new Set(working.blocks.filter((b) => b.active).map((b) => b.id));
+  const key = (r: SnapshotRunningOrder) => `${r.block_id}|${r.date}`;
+  const liveRos = new Map(L.running_orders.filter((r) => r.date >= today).map((r) => [key(r), r]));
+  const workRos = new Map(W.running_orders.filter((r) => r.date >= today).map((r) => [key(r), r]));
+  const what = (blockId: string) => (blockById.get(blockId)?.fill_kind === "template" ? "episode" : "running order");
+  for (const [k, w] of workRos) {
+    if (!activeNow.has(w.block_id)) continue;
+    const l = liveRos.get(k);
+    const name = blockById.get(w.block_id)?.name ?? "A block";
+    const n = w.items.length;
+    if (!l) out.push({ text: `${name}: new ${what(w.block_id)} for ${shortDay(w.date)} (${n} item${n === 1 ? "" : "s"})`, block_id: w.block_id, date: w.date });
+    else if (roDiffer(l, w)) out.push({ text: `${name} ${what(w.block_id)} for ${shortDay(w.date)} changed (${n} item${n === 1 ? "" : "s"})`, block_id: w.block_id, date: w.date });
+  }
+  for (const [k, l] of liveRos) {
+    if (workRos.has(k) || !activeNow.has(l.block_id)) continue;
+    out.push({ text: `${blockById.get(l.block_id)?.name ?? "A block"} ${what(l.block_id)} for ${shortDay(l.date)} removed`, block_id: l.block_id, date: l.date });
+  }
+  return out;
+}
+
+/** Every difference between the published plan and the working copy, in words. */
+export function planChanges(live: PlanSnapshot | null | undefined, working: PlanSnapshot, nowMs: number): DraftChange[] {
+  return [...draftChanges(live?.blocks ?? [], working.blocks), ...contentChanges(live, working, nowMs)];
+}
+
+/** The first instant at which the working copy airs differently from the published plan (blocks, lists or running orders). */
+export function firstPlanChangeMs(live: PlanSnapshot | null | undefined, working: PlanSnapshot, fromMs: number, toMs: number): number | null {
+  const candidates: number[] = [];
+  const blocksFirst = firstChangeMs(live?.blocks ?? [], working.blocks, fromMs, toMs);
+  if (blocksFirst !== null) candidates.push(blocksFirst);
+  const changes = contentChanges(live, working, fromMs);
+  if (changes.length) {
+    const occs = occurrencesBetween(working.blocks.filter((b) => b.active), fromMs, toMs);
+    for (const c of changes) {
+      const o = c.list_id ? occs.find((o) => o.block.list_id === c.list_id) : occs.find((o) => o.block.id === c.block_id && o.date === c.date);
+      if (o) candidates.push(Math.max(fromMs, o.originMs ?? o.startMs));
+    }
+  }
+  return candidates.length ? Math.min(...candidates) : null;
+}
+
 // ------------------------------------------------------------------ draft summary
 
 export interface ChannelDraft {
@@ -134,10 +199,9 @@ export async function publishBlocker(db: D1Database, channel: Channel): Promise<
 
 export async function channelDraft(env: Env, channel: Channel, nowMs: number): Promise<ChannelDraft> {
   const plan = await latestPlan(env.DB, channel.id);
-  const live = plan?.snapshot.blocks ?? [];
-  const working = await loadWorkingBlocks(env.DB, channel.id, true);
-  const changes = draftChanges(live, working);
-  const issues = await validatePlan(env.DB, channel, working, nowMs);
+  const working = await snapshotWorkingCopy(env.DB, channel.id, nowMs);
+  const changes = planChanges(plan?.snapshot, working, nowMs);
+  const issues = await validatePlan(env.DB, channel, working.blocks, nowMs, snapshotContent(working));
   const latest = await latestVersion(env.DB, channel.id);
   const blocker = await publishBlocker(env.DB, channel);
   return {
@@ -147,7 +211,7 @@ export async function channelDraft(env: Env, channel: Channel, nowMs: number): P
     live_version: latest?.number ?? null,
     changes,
     issues,
-    first_change_ms: changes.length ? firstChangeMs(live, working, nowMs, nowMs + 60 * DAY) : null,
+    first_change_ms: changes.length ? firstPlanChangeMs(plan?.snapshot, working, nowMs, nowMs + 60 * DAY) : null,
     can_publish: changes.length > 0 && !blocker && redIssues(issues).length === 0,
     why_not: blocker ?? (redIssues(issues).length ? `${redIssues(issues).length} problem${redIssues(issues).length === 1 ? "" : "s"} to fix first` : null),
   };
@@ -195,11 +259,10 @@ export async function publishSnapshot(
   const blocker = await publishBlocker(db, channel);
   if (blocker) return { ok: false, status: 409, error: "not_publishable", message: `Publication cancelled. ${unchanged}: ${blocker}` };
 
-  const snapshot = opts.snapshot ?? (await snapshotWorkingCopy(db, channel.id));
-  const live = latest?.snapshot.blocks ?? [];
-  const changes = draftChanges(live, snapshot.blocks);
+  const snapshot = opts.snapshot ?? (await snapshotWorkingCopy(db, channel.id, nowMs));
+  const changes = planChanges(latest?.snapshot, snapshot, nowMs);
   if (!opts.rollbackOf && changes.length === 0) return { ok: false, status: 400, error: "no_changes", message: "There's nothing to publish on this channel." };
-  const issues = await validatePlan(db, channel, snapshot.blocks, nowMs);
+  const issues = await validatePlan(db, channel, snapshot.blocks, nowMs, snapshotContent(snapshot));
   const reds = redIssues(issues);
   if (reds.length) return { ok: false, status: 400, error: "invalid", message: `Publication cancelled. ${unchanged}: ${reds[0].text}.`, issues };
 
@@ -207,7 +270,7 @@ export async function publishSnapshot(
   const summary = (opts.summary ?? (changes.map((c) => c.text).join(" · ") || "No changes")).slice(0, 500);
   const planId = newId("pln");
   const json = JSON.stringify(snapshot);
-  const first = firstChangeMs(live, snapshot.blocks, nowMs, nowMs + 400 * DAY);
+  const first = firstPlanChangeMs(latest?.snapshot, snapshot, nowMs, nowMs + 400 * DAY);
   const horizon = latestVer?.horizon_ms ?? null;
   const action = opts.rollbackOf ? "plan_rollback" : "publish";
 
@@ -233,7 +296,7 @@ export async function publishSnapshot(
       kind: "grid",
       actor: "studio",
       action,
-      blocks: snapshot.blocks,
+      snapshot,
       from,
       to: Math.max(horizon, nowMs + HORIZON_MS),
       nowMs,
@@ -287,29 +350,70 @@ export async function publishSnapshot(
 
 // ------------------------------------------------------------------ discard and rollback
 
-/** Reset a channel's working copy to a snapshot (its blocks and their exceptions). */
-export async function resetWorkingCopy(db: D1Database, channelId: string, snapshot: PlanSnapshot) {
+/**
+ * Reset a channel's working copy to a snapshot: its blocks, their
+ * exceptions and running orders, and the playlists and templates it uses.
+ * Lists are shared between channels (§4.4): one is reset only if no other
+ * channel's draft depends on the change; otherwise it's left, and the
+ * returned note says which channel still has it.
+ */
+export async function resetWorkingCopy(db: D1Database, channelId: string, snapshot: PlanSnapshot, nowMs = Date.now()): Promise<{ note: string | null }> {
+  // Past running orders aren't in the snapshot: keep them (deleting a block takes its running orders with it).
+  const keepFrom = addDaysTo(parisDate(nowMs), -1);
+  const snapIds = new Set(snapshot.blocks.map((b) => b.id));
+  const { results: past } = await db
+    .prepare(`SELECT r.block_id, r.date FROM sched_running_orders r JOIN sched_blocks b ON b.id = r.block_id WHERE b.channel_id = ? AND r.date < ?`)
+    .bind(channelId, keepFrom)
+    .all<{ block_id: string; date: string }>();
+  const pastRos = (await Promise.all(past.filter((p) => snapIds.has(p.block_id)).map((p) => loadRunningOrder(db, p.block_id, p.date)))).filter((r): r is SnapshotRunningOrder => !!r);
+
   const stmts: D1PreparedStatement[] = [
+    db.prepare("DELETE FROM sched_running_orders WHERE block_id IN (SELECT id FROM sched_blocks WHERE channel_id = ?)").bind(channelId),
     db.prepare("DELETE FROM sched_block_exceptions WHERE block_id IN (SELECT id FROM sched_blocks WHERE channel_id = ?)").bind(channelId),
     db.prepare("DELETE FROM sched_blocks WHERE channel_id = ?").bind(channelId),
     ...snapshot.blocks.flatMap((b) => writeBlockStatements(db, { ...b, channel_id: channelId })),
+    ...[...pastRos, ...(snapshot.running_orders ?? []).filter((r) => r.date >= keepFrom && snapIds.has(r.block_id))].flatMap((r) => writeRunningOrderStatements(db, r)),
   ];
+
+  // Shared lists: reset each changed one unless another channel's draft relies on its working version.
+  const held: string[] = [];
+  const snapLists = snapshotContent(snapshot).lists;
+  const workingLists = await loadLists(db, Object.keys(snapLists));
+  for (const [id, want] of Object.entries(snapLists)) {
+    const have = workingLists[id];
+    if (have && !listsDiffer(have, want)) continue;
+    const { results: users } = await db
+      .prepare("SELECT DISTINCT b.channel_id, c.name FROM sched_blocks b JOIN channels c ON c.id = b.channel_id WHERE b.list_id = ? AND b.active = 1 AND b.channel_id != ?")
+      .bind(id, channelId)
+      .all<{ channel_id: string; name: string }>();
+    const others: string[] = [];
+    for (const u of users) {
+      const theirs = snapshotContent((await latestPlan(db, u.channel_id))?.snapshot).lists[id];
+      if (have && (!theirs || listsDiffer(theirs, have))) others.push(u.name);
+    }
+    if (others.length) held.push(`${want.name} (still changed in ${others.join(", ")}'s draft)`);
+    else stmts.push(...writeListStatements(db, { ...want, updated_at_ms: nowMs }));
+  }
   // One batch is one transaction: the working copy is never half-reset.
   await db.batch(stmts);
+  return { note: held.length ? `Kept your changes to ${held.join("; ")}.` : null };
 }
 
-export async function discardDraft(db: D1Database, channel: Channel): Promise<{ discarded: number }> {
+export async function discardDraft(db: D1Database, channel: Channel, nowMs = Date.now()): Promise<{ discarded: number; note: string | null }> {
   const plan = await latestPlan(db, channel.id);
-  const working = await loadWorkingBlocks(db, channel.id, true);
-  const n = draftChanges(plan?.snapshot.blocks ?? [], working).length;
-  await resetWorkingCopy(db, channel.id, plan?.snapshot ?? { schema: 1, channel_id: channel.id, blocks: [], lists: {}, running_orders: [] });
-  return { discarded: n };
+  const working = await snapshotWorkingCopy(db, channel.id, nowMs);
+  const n = planChanges(plan?.snapshot, working, nowMs).length;
+  const { note } = await resetWorkingCopy(db, channel.id, plan?.snapshot ?? { schema: 1, channel_id: channel.id, blocks: [], lists: {}, running_orders: [] }, nowMs);
+  return { discarded: n, note };
 }
 
 export async function rollbackPlan(env: Env, channel: Channel, number: number, expected: number | null, nowMs = Date.now()): Promise<PublishOutcome> {
   const target = await planByNumber(env.DB, channel.id, number);
   if (!target) return { ok: false, status: 404, error: "not_found", message: `There's no Plan ${number}.` };
-  const out = await publishSnapshot(env, channel, { expected, snapshot: { ...target.snapshot, channel_id: channel.id }, summary: `Rolled back to Plan ${number}`, rollbackOf: number, nowMs });
-  if (out.ok) await resetWorkingCopy(env.DB, channel.id, target.snapshot);
+  // Running orders for days already gone don't come back.
+  const today = addDaysTo(parisDate(nowMs), -1);
+  const snap: PlanSnapshot = { ...target.snapshot, channel_id: channel.id, lists: target.snapshot.lists ?? {}, running_orders: (target.snapshot.running_orders ?? []).filter((r) => r.date >= today) };
+  const out = await publishSnapshot(env, channel, { expected, snapshot: snap, summary: `Rolled back to Plan ${number}`, rollbackOf: number, nowMs });
+  if (out.ok) await resetWorkingCopy(env.DB, channel.id, snap, nowMs);
   return out;
 }

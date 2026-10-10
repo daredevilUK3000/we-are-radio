@@ -38,6 +38,22 @@ export function registerDevTools(r: Hono<{ Bindings: Env }>) {
     return c.json({ ok: true });
   });
 
+  // Hold at a frozen time (Release 2): GET previews, POST holds.
+  r.get("/hold", async (c) => {
+    const ch = await chan(c.env, c.req.query("channel"));
+    if (!ch) return c.json({ error: "no channel" }, 404);
+    const { holdPreview } = await import("../lib/scheduler/hold");
+    return c.json(await holdPreview(c.env, ch, Number(c.req.query("minutes")) || 10, Number(c.req.query("now")) || Date.now()));
+  });
+  r.post("/hold", async (c) => {
+    const ch = await chan(c.env, c.req.query("channel"));
+    if (!ch) return c.json({ error: "no channel" }, 404);
+    const { runHold } = await import("../lib/scheduler/hold");
+    const body = await c.req.json<{ minutes: number; move: string[]; expected_version: number }>();
+    const res = await runHold(c.env, ch, body, Number(c.req.query("now")) || Date.now());
+    return c.json(res, res.ok ? 200 : res.status);
+  });
+
   // A live control at a frozen time.
   r.post("/action", async (c) => {
     const ch = await chan(c.env, c.req.query("channel"));

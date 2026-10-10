@@ -95,6 +95,10 @@ export function weekdayIndex(date: string): number {
 }
 
 export const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Fri 16 Oct" for a Paris date. */
+export const shortDay = (date: string) => `${WEEKDAY_SHORT[weekdayIndex(date)]} ${Number(date.slice(8, 10))} ${MONTH_SHORT[Number(date.slice(5, 7)) - 1]}`;
 
 export const hhmm = (minutes: number) =>
   `${String(Math.floor((minutes % 1440) / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;

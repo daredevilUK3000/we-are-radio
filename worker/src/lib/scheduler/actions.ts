@@ -2,7 +2,8 @@ import type { AudioAsset, Channel, Env, Track } from "../types";
 import { recordAired, endAiring } from "./aired";
 import { fitToWindow } from "./fit";
 import { buildFromPlan, latestVersion, HORIZON_MS } from "./generate";
-import { loadGridBlocks, occurrencesBetween } from "./grid";
+import { occurrencesBetween } from "./grid";
+import { airingPlan } from "./plans";
 import { Planner } from "./plan";
 import { fallbackLoop } from "./read";
 import { liveMax, publishVersion, rowToItem, type LogItemRow, type PendingChange, type VersionKind, type VersionRow } from "./store";
@@ -128,9 +129,9 @@ export async function runAction(env: Env, channel: Channel, req: ActionRequest, 
     return { ok: true, version: out.version, message: `Back on schedule from ${parisHHMM(from)}, as v${out.version.number}.` };
   }
 
-  const blocks = await loadGridBlocks(db, channel.id);
+  const { blocks, content } = await airingPlan(db, channel.id);
   const blockStarts = occurrencesBetween(blocks, nowMs, nowMs + 3 * HOUR).map((o) => o.startMs);
-  const planner = new Planner(db, env.CONFIG, channel, blocks, nowMs);
+  const planner = new Planner(db, env.CONFIG, channel, blocks, nowMs, content);
 
   let S: number;
   let head: PlanItem[] = [];

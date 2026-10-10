@@ -10,7 +10,11 @@ export function SchedulerNav() {
         Master Control
       </NavLink>
       <NavLink to="/studio/scheduler/timeline">Timeline</NavLink>
-      {/* Playlists & templates and the Report arrive in Release 2B and 2C. */}
+      <NavLink to="/studio/scheduler/lists">Playlists & templates</NavLink>
+      <NavLink to="/studio/scheduler/report">Report</NavLink>
+      <NavLink to="/studio/scheduler/whats-new" className="sch-subnav-new">
+        ✦ What's new
+      </NavLink>
     </nav>
   );
 }

@@ -62,6 +62,9 @@ import { Contest } from "./studio/pages/Contest";
 import { Likes } from "./studio/pages/Likes";
 import { MasterControl } from "./studio/scheduler/MasterControl";
 import { Timeline } from "./studio/scheduler/Timeline";
+import { Lists } from "./studio/scheduler/Lists";
+import { Report } from "./studio/scheduler/Report";
+import { WhatsNew } from "./studio/scheduler/WhatsNew";
 import { OnAirInbox } from "./studio/pages/OnAirInbox";
 import { onAirStudioApi } from "./api/onAir";
 
@@ -200,6 +203,9 @@ function StudioApp() {
         <Route path="/" element={<Dashboard />} />
         <Route path="scheduler" element={<MasterControl />} />
         <Route path="scheduler/timeline" element={<Timeline />} />
+        <Route path="scheduler/lists" element={<Lists />} />
+        <Route path="scheduler/report" element={<Report />} />
+        <Route path="scheduler/whats-new" element={<WhatsNew />} />
         <Route path="scheduler/grid" element={<GridRedirect />} />
         <Route path="on-air" element={<OnAirInbox />} />
         <Route path="contest" element={<Contest />} />

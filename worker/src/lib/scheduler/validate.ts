@@ -2,6 +2,10 @@ import type { Channel } from "../types";
 import { blockFillProblem, clockChangesBetween } from "./health";
 import { occurrenceLabel, occurrencesBetween, rawOccurrences, type GridBlock, type Occurrence } from "./grid";
 import { DAY, HOUR, hhmm, parisDate, parisHHMM, weekdayIndex } from "./time";
+import { EMPTY_CONTENT, type PlanContent } from "./content";
+import { anchorProblems, blockLengthMs, estimateSlots, hms, occurrenceSource, resolverForBlock, sumMs, type SlotEstimate } from "./handCheck";
+import { isHandPlanned } from "./plan";
+import { channelTags } from "../station";
 
 /**
  * Plan validation (handoff §2.5). Red issues stop a channel's Publish; amber
@@ -10,11 +14,16 @@ import { DAY, HOUR, hhmm, parisDate, parisHHMM, weekdayIndex } from "./time";
  * place, and Schedule Health shows the next 48 hours of them.
  */
 
-export type FixKind = "move" | "shorten" | "replace" | "exception" | "edit";
+export type FixKind =
+  | "move" | "shorten" | "replace" | "exception" | "edit"
+  // Hand-planned content (§2.5, §6.3)
+  | "open_ro" | "create_ro" | "auto_fill" | "leave" | "trim" | "flex_end" | "lengthen" | "edit_list";
 
 export interface PlanIssue {
   level: "red" | "amber";
-  code: "conflict" | "cant_fill" | "repeat_risk" | "flex_drift" | "clock_change" | "past" | "no_airings";
+  code:
+    | "conflict" | "cant_fill" | "repeat_risk" | "flex_drift" | "clock_change" | "past" | "no_airings"
+    | "missing_audio" | "fixed_overrun_hard" | "internal_anchor" | "empty_episode" | "underrun" | "overrun_auto" | "manual_empty" | "rule_empty";
   text: string;
   block_id?: string;
   /** The other block in a conflict. */
@@ -36,7 +45,7 @@ export const shortDate = (date: string) => `${DAY_LONG[weekdayIndex(date)]} ${Nu
 const span = (b: GridBlock) => `${hhmm(b.start_min)}–${hhmm(b.end_min)}`;
 const kindWord = (b: GridBlock) => ((b.recurrence ?? "weekly") === "once" ? "one-off" : b.date_from || b.date_to ? "seasonal" : (b.recurrence ?? "weekly") === "monthly" ? "monthly" : "recurring");
 
-export async function validatePlan(db: D1Database, channel: Channel, blocks: GridBlock[], nowMs: number): Promise<PlanIssue[]> {
+export async function validatePlan(db: D1Database, channel: Channel, blocks: GridBlock[], nowMs: number, content: PlanContent = EMPTY_CONTENT): Promise<PlanIssue[]> {
   const issues: PlanIssue[] = [];
   const active = blocks.filter((b) => b.active);
   const toMs = nowMs + LOOKAHEAD_MS;
@@ -121,6 +130,9 @@ export async function validatePlan(db: D1Database, channel: Channel, blocks: Gri
     });
   }
 
+  // ---- Hand-planned content: playlists, templates and running orders (§3).
+  issues.push(...(await handIssues(db, channel, active, effective, content, nowMs)));
+
   // ---- Clock changes in the next 14 days that land in a block.
   for (const ch of clockChangesBetween(nowMs, toMs)) {
     for (const o of effective.filter((o) => o.startMs <= ch.at + HOUR && o.endMs >= ch.at - HOUR)) {
@@ -140,3 +152,106 @@ export async function validatePlan(db: D1Database, channel: Channel, blocks: Gri
 }
 
 export const redIssues = (issues: PlanIssue[]) => issues.filter((i) => i.level === "red");
+
+/**
+ * Checks for playlist, template and manual blocks over the next 14 days.
+ * A template or playlist problem is reported once (on its first date);
+ * running-order problems per date.
+ */
+async function handIssues(db: D1Database, channel: Channel, active: GridBlock[], effective: Occurrence[], content: PlanContent, nowMs: number): Promise<PlanIssue[]> {
+  const out: PlanIssue[] = [];
+  const seen = new Set<string>();
+  const estimates = new Map<string, Promise<SlotEstimate[]>>();
+
+  for (const b of active.filter(isHandPlanned)) {
+    if (b.fill_kind === "manual") continue;
+    const list = b.list_id ? content.lists[b.list_id] : undefined;
+    const want = b.fill_kind === "template" ? "template" : "playlist";
+    if (!list || list.kind !== want) out.push({ level: "red", code: "cant_fill", text: `${b.name} can't be filled: choose a ${want} for it`, block_id: b.id, fixes: ["edit"] });
+  }
+
+  const resolvers = new Map<string, ReturnType<typeof resolverForBlock>>();
+  const tags = channelTags(channel);
+  // Each occurrence once, whole (a stretch resumed after a special is the same occurrence).
+  const occs = effective.filter((o) => isHandPlanned(o.block) && !o.daypart && (o.originMs ?? o.startMs) === o.startMs && o.endMs > nowMs);
+  for (const o of occs) {
+    const b = o.block;
+    const src = occurrenceSource(b, o.date, content);
+    if (b.fill_kind !== "manual" && (!src.list || src.list.kind !== (b.fill_kind === "template" ? "template" : "playlist"))) continue; // reported above
+    const day = shortDate(o.date);
+    let resolver = resolvers.get(b.id);
+    if (!resolver) resolvers.set(b.id, (resolver = resolverForBlock(db, b, tags)));
+    const perDate = !!src.ro || b.fill_kind === "manual";
+    const ownerKey = src.ro ? `ro:${src.ro.id}` : src.list ? `list:${src.list.id}:${b.id}` : `none:${b.id}:${o.date}`;
+    if (!perDate) {
+      if (seen.has(ownerKey)) continue;
+      seen.add(ownerKey);
+    }
+    const where = perDate ? `${day}, ${b.name}` : `${b.name} (${src.list?.kind === "template" ? "template" : "playlist"} ${src.list?.name})`;
+
+    if (b.fill_kind === "manual" && !src.ro) {
+      out.push({ level: "amber", code: "manual_empty", text: `${day}, ${b.name}: no running order yet. The safety net fills the whole block.`, block_id: b.id, date: o.date, fixes: ["create_ro"] });
+      continue;
+    }
+    let est = estimates.get(ownerKey);
+    if (!est) estimates.set(ownerKey, (est = estimateSlots(resolver, src.slots)));
+    const e = await est;
+    const lengthMs = blockLengthMs(b);
+    const roFix: FixKind[] = src.ro ? ["open_ro"] : ["edit_list"];
+
+    for (const s of e.filter((s) => s.missing)) {
+      out.push({ level: "red", code: "missing_audio", text: `${where}: "${s.label}" has no audio`, block_id: b.id, date: o.date, fixes: roFix });
+    }
+    for (const s of e.filter((s) => s.no_match)) {
+      out.push({ level: "amber", code: "rule_empty", text: `${where}: item ${s.position} (${s.label}) matches nothing, so it's skipped`, block_id: b.id, date: o.date, fixes: roFix });
+    }
+    const empties = e.filter((s) => s.empty);
+    if (b.fill_kind === "template" && empties.length) {
+      const one = empties.length === 1;
+      out.push({
+        level: "amber",
+        code: "empty_episode",
+        text: `${day}, ${b.name}: ${empties.map((s) => s.label).join(", ")} ${one ? "slot is" : "slots are"} empty. If ${one ? "it stays" : "they stay"} empty, ${one ? "it's" : "they're"} skipped and the gap is filled with music.`,
+        block_id: b.id,
+        date: o.date,
+        fixes: src.ro ? ["open_ro"] : ["create_ro"],
+      });
+    }
+    if (b.fill_kind !== "playlist") {
+      for (const a of anchorProblems(e)) {
+        out.push({
+          level: "red",
+          code: "internal_anchor",
+          text: `${where}: the item at ${hms(a.at_ms)} can't start on time: the fixed items before it run ${hms(a.before_ms)}`,
+          block_id: b.id,
+          date: o.date,
+          fixes: roFix,
+        });
+      }
+    }
+    const fixedMs = sumMs(e, true);
+    const estMs = sumMs(e);
+    const next = effective.find((x) => x.startMs === o.endMs && !x.daypart);
+    const hardEnd = !(b.end_mode === "flexible" && next && next.block.start_mode === "flexible");
+    if (fixedMs > lengthMs) {
+      const over = fixedMs - lengthMs;
+      if (hardEnd) {
+        out.push({
+          level: "red",
+          code: "fixed_overrun_hard",
+          text: `${where}: fixed items run ${hms(fixedMs)}, ${hms(over)} longer than the block, and ${parisHHMM(o.endMs)} is a hard start`,
+          block_id: b.id,
+          date: o.date,
+          fixes: [...roFix, "lengthen", ...(next && next.block.start_mode === "flexible" ? (["flex_end"] as FixKind[]) : [])],
+        });
+      } else {
+        out.push({ level: "amber", code: "flex_drift", text: `${where}: runs on ${hms(over)} past ${parisHHMM(o.endMs)}; ${next?.block.name ?? "the next block"} starts after it`, block_id: b.id, date: o.date, fixes: [] });
+      }
+    } else if (estMs > lengthMs + 20_000 && b.fill_kind !== "playlist") {
+      out.push({ level: "amber", code: "overrun_auto", text: `${where}: runs about ${hms(estMs - lengthMs)} over, so rule-picked songs will be dropped to fit`, block_id: b.id, date: o.date, fixes: src.ro ? ["open_ro", "trim"] : roFix });
+    } else if (b.fill_kind === "manual" && estMs < lengthMs - 60_000) {
+      out.push({ level: "amber", code: "underrun", text: `${where}: ${hms(lengthMs - estMs)} of airtime unfilled. The safety net fills it.`, block_id: b.id, date: o.date, fixes: ["auto_fill", "leave"] });
+    }
+  }
+  return out;
+}

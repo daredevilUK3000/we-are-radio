@@ -28,9 +28,24 @@ export function fitToWindow(
   reasonFor: { dropped: string; added: (gapMs: number) => string; trimmed: (ms: number) => string }
 ): { items: PlanItem[]; changes: FitChange[] } {
   const changes: FitChange[] = [];
-  let items = input.map((i) => ({ ...i, reasons: [...i.reasons] }));
+  let items = layout(
+    input.map((i) => ({ ...i, reasons: [...i.reasons] })),
+    windowStart
+  );
+  // Fixed items are never dropped (Release 2): make room for the last one by dropping droppable items before it, nearest first.
+  for (let guard = 0; guard < 500; guard++) {
+    let lastFixed = -1;
+    for (let k = items.length - 1; k >= 0; k--) if (items[k].fixed) { lastFixed = k; break; }
+    if (lastFixed < 0 || items[lastFixed].startsAt < windowEnd) break;
+    let k = lastFixed - 1;
+    while (k >= 1 && !isDroppable(items[k])) k--;
+    if (k < 1) break;
+    const [gone] = items.splice(k, 1);
+    changes.push({ kind: "dropped", item: gone, amountMs: gone.endsAt - gone.startsAt });
+    items = layout(items, windowStart);
+  }
   // Only what starts before the anchor can play before it.
-  items = layout(items, windowStart).filter((i) => i.startsAt < windowEnd);
+  items = items.filter((i) => i.startsAt < windowEnd);
   if (items.length === 0 && windowEnd <= windowStart) return { items, changes };
 
   const end = () => (items.length ? items[items.length - 1].endsAt : windowStart);

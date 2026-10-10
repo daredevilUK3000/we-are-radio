@@ -54,6 +54,7 @@ export interface OverviewChannel {
   enabled: boolean;
   state: "scheduler" | "shadow" | "fallback" | "not_live";
   live_version: number;
+  live_plan?: number | null;
   horizon_ms: number | null;
   shadow: { checks: number; mismatches: number; since_ms: number | null; paused_until_ms: number | null; eligibility: { ok: boolean; reason: string } };
   on_air: SchedItem | null;
@@ -97,6 +98,11 @@ export interface LibraryResult {
   last_aired_ms: number | null;
   track_id?: string;
   audio_asset_id?: string;
+  /** Release 2 library drawer: playlists, templates and programmes. */
+  list_id?: string;
+  programme_id?: string;
+  slots?: number;
+  length_ms?: number | null;
 }
 
 export interface GridBlock {
@@ -205,6 +211,8 @@ export interface PlanBlock {
   mode: "auto" | "manual";
   fill_kind: "programme" | "autopilot" | "playlist" | "template" | "manual";
   programme_id: string | null;
+  list_id: string | null;
+  when_short: "fill" | "loop";
   tags_any: string[];
   public: number;
   active: number;
@@ -222,7 +230,7 @@ export interface PlanSegment {
   resumed: boolean;
 }
 
-export type FixKind = "move" | "shorten" | "replace" | "exception" | "edit";
+export type FixKind = "move" | "shorten" | "replace" | "exception" | "edit" | "open_ro" | "create_ro" | "auto_fill" | "leave" | "trim" | "flex_end" | "lengthen" | "edit_list";
 
 export interface PlanIssue {
   level: "red" | "amber";
@@ -273,6 +281,7 @@ export interface Board {
   channels: BoardLane[];
   programmes: { id: string; title: string; channel_id: string; duration_seconds: number | null; items: number }[];
   tags: string[];
+  lists?: { id: string; kind: "playlist" | "template"; name: string; archived: number; length_ms: number | null; slots: number }[];
 }
 
 export type PublishOutcome =
@@ -300,4 +309,153 @@ export const planApi = {
   plans: (channel: string) => call<{ channel: { slug: string; name: string }; plans: any[]; draft_changes: number }>(`/plan/plans?channel=${channel}`),
   plan: (channel: string, number: number) => call<{ plan: any; blocks: PlanBlock[]; compared_to_live: { text: string }[] }>(`/plan/plans/${number}?channel=${channel}`),
   pool: (tags: string[], channel: string) => call<{ tracks: number; seconds: number }>(`/plan/pool?tags=${encodeURIComponent(tags.join(","))}&channel=${channel}`),
+};
+
+// ------------------------------------------------------------------ Release 2B/2C: playlists, templates, running orders, Hold, report
+
+export interface SlotRule {
+  item_type: "song" | "station_id" | "link" | "promo";
+  tags_any?: string[];
+  album_id?: string;
+  link_kind?: string;
+}
+
+/** One slot as the editors show it (worker/src/lib/scheduler/handCheck.ts). */
+export interface SlotView {
+  position: number;
+  slot_kind: "fixed" | "rule" | "episode";
+  label: string;
+  slot_label: string | null;
+  ms: number | null;
+  missing: boolean;
+  empty: boolean;
+  no_match: boolean;
+  at_ms: number | null;
+  auto_filled: boolean;
+  item_type: string | null;
+  track_id: string | null;
+  audio_asset_id: string | null;
+  rule: SlotRule | null;
+  starts_ms: number;
+}
+
+/** What the editors send back for a slot. */
+export interface SlotInput {
+  slot_kind: "fixed" | "rule" | "episode";
+  track_id?: string | null;
+  audio_asset_id?: string | null;
+  rule?: SlotRule | null;
+  label?: string | null;
+  at_ms?: number | null;
+  auto_filled?: boolean | number;
+}
+
+export interface ListSummary {
+  id: string;
+  kind: "playlist" | "template";
+  name: string;
+  description: string;
+  length_ms: number | null;
+  archived: number;
+  updated_at_ms: number;
+  slot_count: number;
+  total_ms: number;
+  about: boolean;
+  episode_slots: number;
+  used_by: { block_id: string; block_name: string; channel_slug: string; channel_name: string }[];
+}
+
+export interface ListDetail {
+  list: Omit<ListSummary, "slot_count" | "total_ms" | "about" | "episode_slots" | "used_by"> & { slots: SlotView[] };
+  used_by: ListSummary["used_by"];
+  link_kinds: string[];
+}
+
+export interface RunningOrderView {
+  channel: { slug: string; name: string };
+  block: { id: string; name: string; fill_kind: PlanBlock["fill_kind"]; mode: string; start_min: number; end_min: number; end_mode: string; list_id: string | null; colour: string };
+  date: string;
+  date_label: string;
+  runs_that_day: boolean;
+  start_ms: number | null;
+  end_ms: number | null;
+  length_ms: number;
+  source: "running_order" | "template" | "playlist" | "none";
+  editable: boolean;
+  list: { id: string; name: string; kind: string } | null;
+  running_order: { id: string; note: string; from_list_id: string | null; updated_at_ms: number } | null;
+  items: SlotView[];
+  fixed_ms: number;
+  est_ms: number;
+  unfilled_ms: number;
+  over_ms: number;
+  about: boolean;
+  next_flexible: boolean;
+  issues: PlanIssue[];
+  drafts: Record<string, ChannelDraft>;
+  message?: string;
+}
+
+export interface OccurrenceView {
+  channel: { slug: string; name: string };
+  block: { id: string; name: string; fill_kind: string; list_id: string | null; mode: string };
+  date: string;
+  start_ms: number;
+  end_ms: number;
+  from: "log" | "plan";
+  items: { starts_at_ms: number; ends_at_ms: number; label: string | null; type: string; fixed: boolean; filler: boolean; trimmed_ms: number; reason: string | null; in_block: boolean }[];
+  filler_ms: number;
+  editable: boolean;
+  hint: string | null;
+}
+
+export interface HoldPreview {
+  ok: true;
+  live_version: number;
+  from_ms: number;
+  minutes: number;
+  starts: { key: string; block_id: string; date: string; name: string; start_ms: number; new_start_ms: number; time: string; new_time: string; high: boolean }[];
+}
+
+export interface ReportRow {
+  status: "As planned" | "Replaced" | "Skipped" | "Inserted" | "Dropped" | "Trimmed" | "Moved" | "Late" | "Not recorded";
+  planned: { at_ms: number; end_ms: number; label: string | null; type: string } | null;
+  aired: { at_ms: number; end_ms: number | null; label: string | null; type: string; source: string } | null;
+  drift_ms: number | null;
+  airing_id: string | null;
+  who: string | null;
+  why: string | null;
+}
+
+export interface DayReport {
+  channel: { slug: string; name: string };
+  date: string;
+  date_label: string;
+  complete: boolean;
+  totals: { planned: number; not_recorded: number; as_planned: number; as_planned_pct: number | null; live_changes: number; largest_drift_ms: number; fallback_ms: number; songs_aired: number; unique_songs: number };
+  rows: ReportRow[];
+}
+
+const put = (body: unknown) => ({ method: "PUT", body: JSON.stringify(body) });
+const roPath = (blockId: string, date: string) => `/plan/running-orders/${blockId}/${date}`;
+
+export const contentApi = {
+  lists: (kind?: "playlist" | "template", archived = false) => call<{ lists: ListSummary[] }>(`/plan/lists?${kind ? `kind=${kind}&` : ""}${archived ? "archived=1" : ""}`),
+  list: (id: string) => call<ListDetail>(`/plan/lists/${id}`),
+  createList: (body: { kind: "playlist" | "template"; name: string; description?: string; length_ms?: number | null }) => call<{ ok: true; list: { id: string } }>("/plan/lists", json(body)),
+  saveList: (id: string, body: Record<string, unknown>) =>
+    call<{ ok: true; list: ListDetail["list"]; used_by: ListSummary["used_by"]; drafts: Record<string, ChannelDraft> }>(`/plan/lists/${id}`, put(body)),
+  duplicateList: (id: string) => call<{ ok: true; list: { id: string; name: string } }>(`/plan/lists/${id}/duplicate`, json({})),
+  runningOrder: (blockId: string, date: string) => call<RunningOrderView>(roPath(blockId, date)),
+  saveRunningOrder: (blockId: string, date: string, body: { items: SlotInput[]; note?: string; expected_updated_at_ms?: number | null }) =>
+    call<RunningOrderView>(roPath(blockId, date), put(body)),
+  deleteRunningOrder: (blockId: string, date: string) => call<RunningOrderView>(roPath(blockId, date), { method: "DELETE" }),
+  fromTemplate: (blockId: string, date: string, listId?: string) => call<RunningOrderView>(`${roPath(blockId, date)}/from-template`, json(listId ? { list_id: listId } : {})),
+  nextEpisode: (blockId: string) => call<RunningOrderView>(`/plan/blocks/${blockId}/next-episode`, json({})),
+  autoFill: (blockId: string, date: string) => call<RunningOrderView>(`${roPath(blockId, date)}/auto-fill`, json({})),
+  occurrence: (blockId: string, date: string, view: "draft" | "live") => call<OccurrenceView>(`/plan/occurrence?block=${blockId}&date=${date}&view=${view}`),
+  holdPreview: (slug: string, minutes: number) => call<HoldPreview>(`/channels/${slug}/hold?minutes=${minutes}`),
+  hold: (slug: string, body: { minutes: number; move: string[]; expected_version: number }) => call<ActionResult>(`/channels/${slug}/hold`, json(body)),
+  report: (slug: string, date: string) => call<DayReport>(`/report?channel=${slug}&date=${date}`),
+  reportCsvUrl: (slug: string, date: string) => `${BASE}/report?channel=${slug}&date=${date}&format=csv`,
 };

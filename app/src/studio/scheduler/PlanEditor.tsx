@@ -41,8 +41,10 @@ export interface EditorDraft {
   start_mode: "hard" | "flexible";
   end_mode: "hard" | "flexible";
   priority: "high" | "normal";
-  fill_kind: "programme" | "autopilot";
+  fill_kind: PlanBlock["fill_kind"];
   programme_id: string | null;
+  list_id: string | null;
+  when_short: "fill" | "loop";
   tags_any: string[];
   public: boolean;
   active: boolean;
@@ -78,8 +80,10 @@ export function draftFromBlock(b: PlanBlock, channel: string): EditorDraft {
     start_mode: b.start_mode ?? "hard",
     end_mode: b.end_mode ?? "hard",
     priority: b.priority ?? "normal",
-    fill_kind: b.fill_kind === "programme" ? "programme" : "autopilot",
+    fill_kind: b.fill_kind ?? "autopilot",
     programme_id: b.programme_id,
+    list_id: b.list_id ?? null,
+    when_short: b.when_short ?? "fill",
     tags_any: b.tags_any ?? [],
     public: b.public !== 0,
     active: !!b.active,
@@ -107,6 +111,8 @@ export function newDraft(channel: string, date: string, start: number, end: numb
     priority: "normal",
     fill_kind: "autopilot",
     programme_id: null,
+    list_id: null,
+    when_short: "fill",
     tags_any: [],
     public: true,
     active: true,
@@ -133,12 +139,22 @@ export function bodyFor(d: EditorDraft): Record<string, unknown> {
     priority: d.priority,
     fill_kind: d.fill_kind,
     programme_id: d.fill_kind === "programme" ? d.programme_id : null,
+    list_id: d.fill_kind === "playlist" || d.fill_kind === "template" ? d.list_id : null,
+    when_short: d.when_short,
     tags_any: d.tags_any,
     public: d.public,
     active: d.active,
     exceptions: d.recurrence === "once" ? [] : d.exceptions,
   };
 }
+
+const FILLS: [EditorDraft["fill_kind"], string][] = [
+  ["autopilot", "Songs by tag (autopilot)"],
+  ["programme", "A programme"],
+  ["playlist", "A playlist"],
+  ["template", "A template (a show with a set shape)"],
+  ["manual", "Built by hand (manual)"],
+];
 
 const NTH = [
   { v: 1, l: "First" },
@@ -170,7 +186,7 @@ export function PlanEditor({
   const set = <K extends keyof EditorDraft>(k: K, v: EditorDraft[K]) => setD((x) => ({ ...x, [k]: v }));
 
   useEffect(() => {
-    if (d.fill_kind !== "autopilot") return;
+    if (d.fill_kind === "programme" || d.fill_kind === "manual") return;
     const id = window.setTimeout(() => planApi.pool(d.tags_any, d.channel).then(setPool).catch(() => setPool(null)), 250);
     return () => window.clearTimeout(id);
   }, [d.tags_any, d.fill_kind, d.channel]);
@@ -462,14 +478,49 @@ export function PlanEditor({
         <fieldset className="sch-field">
           <legend className="sch-label">Fill with</legend>
           <div className="sch-radios">
-            <label>
-              <input type="radio" name="fill" checked={d.fill_kind === "autopilot"} onChange={() => set("fill_kind", "autopilot")} /> Songs by tag (autopilot)
-            </label>
-            <label>
-              <input type="radio" name="fill" checked={d.fill_kind === "programme"} onChange={() => set("fill_kind", "programme")} /> A programme
-            </label>
+            {FILLS.map(([k, label]) => (
+              <label key={k}>
+                <input type="radio" name="fill" checked={d.fill_kind === k} onChange={() => setD((x) => ({ ...x, fill_kind: k, list_id: k === x.fill_kind ? x.list_id : null, colour: !x.id && (k === "template" || k === "manual") ? "purple" : x.colour }))} /> {label}
+              </label>
+            ))}
           </div>
-          {d.fill_kind === "programme" ? (
+          {(d.fill_kind === "playlist" || d.fill_kind === "template") && (
+            <label className="sch-field">
+              <span className="sch-label">{d.fill_kind === "template" ? "Template" : "Playlist"}</span>
+              <select className="sch-input" value={d.list_id ?? ""} onChange={(e) => set("list_id", e.target.value || null)} aria-invalid={error?.field === "list_id" || undefined}>
+                <option value="">Choose…</option>
+                {(board.lists ?? [])
+                  .filter((l) => l.kind === d.fill_kind && (!l.archived || l.id === draft.list_id))
+                  .map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} ({l.slots} item{l.slots === 1 ? "" : "s"}){l.archived ? " · archived" : ""}
+                    </option>
+                  ))}
+              </select>
+              <span className="sch-dim">
+                {d.fill_kind === "template"
+                  ? "Each airing plays its own episode (Create next episode), or the template as it stands. Items with a time start exactly then."
+                  : "Plays in order from the block's start."}{" "}
+                <a href="/studio/scheduler/lists">Playlists & templates</a>
+              </span>
+              {fieldError("list_id")}
+            </label>
+          )}
+          {d.fill_kind === "playlist" && (
+            <div className="sch-seg" role="radiogroup" aria-label="If the playlist is shorter than the block">
+              <button type="button" role="radio" aria-checked={d.when_short === "fill"} className={d.when_short === "fill" ? "is-on" : ""} onClick={() => set("when_short", "fill")}>
+                Shorter than the block: fill the rest with songs
+              </button>
+              <button type="button" role="radio" aria-checked={d.when_short === "loop"} className={d.when_short === "loop" ? "is-on" : ""} onClick={() => set("when_short", "loop")}>
+                Loop the playlist
+              </button>
+            </div>
+          )}
+          {d.fill_kind === "manual" ? (
+            <p className="sch-dim">
+              You build each airing item by item (Open running order on the Timeline). Anything left empty is filled by the channel's own music, never silence.
+            </p>
+          ) : d.fill_kind === "programme" ? (
             <label className="sch-field">
               <span className="sch-label">Programme (published)</span>
               <select className="sch-input" value={d.programme_id ?? ""} onChange={(e) => set("programme_id", e.target.value || null)} aria-invalid={error?.field === "programme_id" || undefined}>
@@ -485,6 +536,7 @@ export function PlanEditor({
             </label>
           ) : (
             <div className="sch-field">
+              {d.fill_kind !== "autopilot" && <span className="sch-label">Songs that top it up (by tag)</span>}
               <div className="sch-chips sch-tl-tags" role="group" aria-label="Tags">
                 {board.tags.map((t) => (
                   <button key={t} type="button" className={`sch-chip${d.tags_any.includes(t) ? " is-on" : ""}`} aria-pressed={d.tags_any.includes(t)} onClick={() => set("tags_any", d.tags_any.includes(t) ? d.tags_any.filter((x) => x !== t) : [...d.tags_any, t])}>

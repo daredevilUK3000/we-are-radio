@@ -22,6 +22,8 @@ export interface PlanItem {
   sourceRef: string | null;
   reasons: string[];
   airingId?: string;
+  /** Hand-planned content (a template's fixed slot, a running-order item Patrick placed): never dropped by fitting, recovery or Hold. */
+  fixed?: boolean;
 }
 
 /** Something that can be put on the air: a song or an audio asset, before it has a time. */
@@ -30,8 +32,9 @@ export type Playable = Omit<PlanItem, "startsAt" | "endsAt" | "offset" | "airing
 export const contentKey = (i: { trackId: string | null; assetId: string | null }) =>
   i.trackId ? `t:${i.trackId}` : `a:${i.assetId}`;
 
-/** Songs and station IDs from the regular plan can be dropped to keep the clock; nothing else can. */
+/** Songs and station IDs from the regular plan can be dropped to keep the clock; nothing else can (and never a fixed item). */
 export const isDroppable = (i: PlanItem | Playable) =>
+  !i.fixed &&
   (i.source === "autopilot" || i.source === "programme" || i.source === "fallback") &&
   (i.itemType === "song" || i.itemType === "station_id");
 

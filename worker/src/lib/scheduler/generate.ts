@@ -1,7 +1,6 @@
 import type { Channel, Env } from "../types";
 import { hashSeed, ROTATION_RULES } from "../radioBrain";
-import { loadGridBlocks, type GridBlock } from "./grid";
-import { planDigests } from "./plans";
+import { airingPlan, planDigests, snapshotContent, type PlanSnapshot } from "./plans";
 import { Planner, PlanError } from "./plan";
 import { carryOverrides } from "./carry";
 import { liveMax, logChange, publishVersion, type PublishResult, type VersionKind, type VersionRow } from "./store";
@@ -113,8 +112,8 @@ export async function buildFromPlan(
     forceInvalid?: string;
     /** Test hook: make the build itself throw. */
     forceThrow?: boolean;
-    /** Build from these blocks instead of the latest published plan (publishing a new plan). */
-    blocks?: GridBlock[];
+    /** Build from this snapshot instead of the latest published plan (publishing a new plan). */
+    snapshot?: PlanSnapshot;
     action?: string | null;
     alongside?: (versionId: string) => D1PreparedStatement[];
   }
@@ -127,7 +126,8 @@ export async function buildFromPlan(
     let planner: Planner;
     try {
       if (opts.forceThrow) throw new Error("Generation forced to fail (test)");
-      planner = new Planner(env.DB, env.CONFIG, channel, opts.blocks ?? (await loadGridBlocks(env.DB, channel.id)), now);
+      const source = opts.snapshot ? { blocks: opts.snapshot.blocks.filter((b) => b.active), content: snapshotContent(opts.snapshot) } : await airingPlan(env.DB, channel.id);
+      planner = new Planner(env.DB, env.CONFIG, channel, source.blocks, now, source.content);
       // What ends right where this build starts: the new plan mustn't open with it again.
       const before = basedOn ? await itemAt(env.DB, channel.id, opts.from - 1) : null;
       const avoidFirst = before && before.item.endsAt === opts.from ? contentKey(before.item) : null;
@@ -187,6 +187,28 @@ async function recordRun(db: D1Database, channelId: string, kind: string, starte
     .run();
 }
 
+/**
+ * A Hold in progress (Release 2, §8): a rebuild after a library change waits
+ * until it has caught up, so a show Patrick moved isn't snapped back to its
+ * usual time. Its catch-up anchor is an item boundary in the held log. Back
+ * on schedule or a rollback after the hold ends it.
+ */
+export async function holdAnchor(db: D1Database, channelId: string, nowMs: number): Promise<number> {
+  const hold = await db
+    .prepare(
+      `SELECT number, anchor_ms FROM sched_versions WHERE channel_id = ? AND status = 'published' AND action = 'hold' AND anchor_ms > ?
+       ORDER BY number DESC LIMIT 1`
+    )
+    .bind(channelId, nowMs)
+    .first<{ number: number; anchor_ms: number }>();
+  if (!hold) return 0;
+  const undone = await db
+    .prepare("SELECT 1 FROM sched_versions WHERE channel_id = ? AND status = 'published' AND number > ? AND kind IN ('back_on_schedule','rollback') LIMIT 1")
+    .bind(channelId, hold.number)
+    .first();
+  return undone ? 0 : hold.anchor_ms;
+}
+
 /** Where a regeneration takes over: the end of whatever is on air now, so it's never cut. */
 export async function nextBoundary(db: D1Database, channelId: string, nowMs: number): Promise<number> {
   const on = await itemAt(db, channelId, nowMs);
@@ -212,7 +234,7 @@ export async function tickChannel(
     buildFromPlan(env, channel, {
       kind: "generate",
       actor: "generator",
-      from: latest ? await nextBoundary(env.DB, channel.id, nowMs) : nowMs,
+      from: latest ? Math.max(await nextBoundary(env.DB, channel.id, nowMs), await holdAnchor(env.DB, channel.id, nowMs)) : nowMs,
       to: nowMs + HORIZON_MS,
       nowMs,
       forceThrow: test.forceThrow,
