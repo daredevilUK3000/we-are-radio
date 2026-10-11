@@ -263,8 +263,9 @@ audioAssetRoutes.patch("/:id/afg", async (c) => {
   }
 
   if (body.afg === true && !asset.afg) {
-    if (!["jingle", "station_id", "promo"].includes(asset.type)) {
-      return c.json({ error: "Only jingles, station IDs and promos can be Advertising For Good." }, 400);
+    // House promos (migrations/0026) never go near Advertising For Good.
+    if (!["jingle", "station_id"].includes(asset.type)) {
+      return c.json({ error: "Only jingles and station IDs can be Advertising For Good." }, 400);
     }
     const slug = asset.afg_slug ?? (await freeSlug(c.env.DB, asset.title, id));
     const last = await c.env.DB.prepare("SELECT MAX(afg_order) AS n FROM audio_assets WHERE afg = 1").first<{ n: number | null }>();

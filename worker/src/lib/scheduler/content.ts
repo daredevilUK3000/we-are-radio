@@ -4,6 +4,7 @@ import { autopilotTracks } from "../station";
 import type { GridBlock } from "./grid";
 import { addDaysTo, parisDate } from "./time";
 import { contentKey, type Playable } from "./types";
+import { loadPromoConfig } from "../promos";
 
 /**
  * Hand-planned content (handoff_scheduler_release2.md §3): playlists and
@@ -242,7 +243,9 @@ export class SlotResolver {
   constructor(
     readonly db: D1Database,
     /** The tags a song rule with no tags uses: the block's, else the channel's. */
-    readonly poolTags: string[]
+    readonly poolTags: string[],
+    /** The channel, for "A promo" rules: only promos switched on for it count (lib/promos.ts). */
+    readonly channelId?: string
   ) {}
 
   track(id: string): Promise<Track | null> {
@@ -288,7 +291,18 @@ export class SlotResolver {
           if (rule.album_id) tracks = tracks.filter((t) => t.album_id === rule.album_id);
           return tracks.map(trackPlayable).filter((x): x is Playable => !!x);
         }
-        const types = rule.item_type === "station_id" ? ["station_id", "jingle"] : rule.item_type === "promo" ? ["promo"] : ["link"];
+        if (rule.item_type === "promo") {
+          // House promos: those set up and on for this channel. Their dates and daily caps are applied when the slot is laid out (plan.ts).
+          const cfg = await loadPromoConfig(this.db);
+          if (!cfg.perHour) return [];
+          return cfg.promos
+            .filter((p) => !this.channelId || !p.channels || p.channels.includes(this.channelId))
+            .map((p): Playable => ({
+              itemType: "station_id", trackId: null, assetId: p.audio_asset_id, label: p.on_air_title, audioUrl: p.audio_url, artworkUrl: null,
+              fileMs: p.duration_seconds * 1000, blockId: null, blockDate: null, source: "programme", sourceRef: null, reasons: [],
+            }));
+        }
+        const types = rule.item_type === "station_id" ? ["station_id", "jingle"] : ["link"];
         const { results } = await this.db
           .prepare(
             `SELECT * FROM audio_assets WHERE status IN ('published','ready') AND type IN (${types.map(() => "?").join(",")})

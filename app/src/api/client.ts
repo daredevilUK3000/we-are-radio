@@ -88,7 +88,12 @@ export const publicApi = {
     request<{ version: number; fallback: boolean }>(`${API_BASE}/now-playing/version?channel=${encodeURIComponent(channel)}`),
   /** "Just played": the last songs on the channel (newest first). available is false off the Scheduler. */
   recentlyPlayed: (channel: string, limit = 10) =>
-    request<{ available: boolean; items: { track_id: string; title: string; artist: string | null; artwork_url: string | null; aired_at: number }[] }>(
+    request<{
+      available: boolean;
+      items: { track_id: string; title: string; artist: string | null; artwork_url: string | null; aired_at: number }[];
+      /** The last house promo aired on the channel (migrations/0026), with its link. */
+      last_promo?: { title: string; link_url: string; link_label: string; short_url: string; cover_url: string | null; aired_at: number };
+    }>(
       `${API_BASE}/recently-played?channel=${encodeURIComponent(channel)}&limit=${limit}`
     ),
   /** The channel's running order from now on, each item with its on-air start (unix seconds). */
@@ -414,6 +419,14 @@ export const studioApi = {
     request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/tags`, { method: "PUT", body: JSON.stringify({ tags }) }),
   /** Advertising For Good: every AFG ad (on the site or not) and the "Got a cause?" switch. */
   goodAds: () => request<{ ads: any[]; cause_enabled: boolean }>(`${STUDIO_BASE}/audio-assets/afg`),
+  // House promos (migrations/0026): the Audio page's Promos tab.
+  promos: () =>
+    request<{ promos: any[]; promos_per_hour: number; promos_per_hour_max: number; channels: { id: string; name: string; slug: string }[] }>(`${STUDIO_BASE}/promos`),
+  savePromo: (id: string, data: Record<string, unknown>) => request<{ ok: true }>(`${STUDIO_BASE}/promos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  setPromoActive: (id: string, active: boolean) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/promos/${id}/active`, { method: "PUT", body: JSON.stringify({ active }) }),
+  setPromoSettings: (promos_per_hour: number) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/promos/settings`, { method: "PUT", body: JSON.stringify({ promos_per_hour }) }),
   updateGoodAd: (id: string, data: { afg?: boolean; title?: string; afg_published?: boolean }) =>
     request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/afg`, { method: "PATCH", body: JSON.stringify(data) }),
   featureGoodAd: (id: string) => request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/afg/feature`, { method: "POST" }),

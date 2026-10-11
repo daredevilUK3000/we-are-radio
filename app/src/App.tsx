@@ -53,6 +53,7 @@ import { RecordLink } from "./studio/pages/RecordLink";
 import { ProgrammeTitles } from "./studio/pages/ProgrammeTitles";
 import { TimeCapsules } from "./studio/pages/TimeCapsules";
 import { UploadAudioAsset } from "./studio/pages/UploadAudioAsset";
+import { PromoWizard } from "./studio/pages/PromoWizard";
 import { Guide } from "./studio/pages/Guide";
 import { Analytics } from "./studio/pages/Analytics";
 import { Albums as StudioAlbums } from "./studio/pages/Albums";
@@ -223,6 +224,7 @@ function StudioApp() {
         <Route path="albums/:id" element={<StudioAlbumDetail />} />
         <Route path="audio" element={<AudioAssets />} />
         <Route path="audio/upload" element={<UploadAudioAsset />} />
+        <Route path="promos/new" element={<PromoWizard />} />
         <Route path="channels" element={<Channels />} />
         <Route path="podcasts" element={<PodcastEpisodes />} />
         <Route path="podcast-import" element={<PodcastImporter />} />

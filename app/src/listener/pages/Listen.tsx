@@ -20,6 +20,7 @@ import { usePauseForRecording } from "../components/onair/recording";
 import { OnAirSheet, SayItOnAirButton } from "../components/onair/OnAirSheet";
 import { ListenerVoicePill, voiceLines } from "../components/onair/voice";
 import { GOOD_ON_AIR_SUB, GoodOnAirPill, GoodOnAirTitle, isGood } from "../components/good/GoodOnAir";
+import { PromoButton, PromoPill, promoOf } from "../components/promo/PromoOnAir";
 import { fadeIn, useRewind } from "../lib/useRewind";
 import { BackToLivePill, StartOverButton } from "../components/PlayerRewind";
 import { ComingUpAt } from "../components/ComingUpAt";
@@ -405,7 +406,7 @@ export function Listen() {
 
           <div className="lp-nowplaying-row">
             <span className="lp-nowplaying-label" style={{ color: accent }}>
-              {voice ? <ListenerVoicePill /> : isGood(now) ? <GoodOnAirPill /> : isSong ? "Now Playing" : "On Air Now"}
+              {voice ? <ListenerVoicePill /> : isGood(now) ? <GoodOnAirPill /> : promoOf(now) ? <PromoPill /> : isSong ? "Now Playing" : "On Air Now"}
             </span>
             <span className="lp-eq" aria-hidden="true">
               <span style={{ background: accent }} />
@@ -413,9 +414,14 @@ export function Listen() {
               <span style={{ background: accent }} />
             </span>
           </div>
-          <div className="lp-track-title">{voice ? voice.title : isGood(now) ? <GoodOnAirTitle item={now} /> : (now?.label ?? "We Are Radio")}</div>
+          <div className="lp-track-title">{voice ? voice.title : isGood(now) ? <GoodOnAirTitle item={now} /> : promoOf(now) ? promoOf(now)!.title : (now?.label ?? "We Are Radio")}</div>
           {voice?.sub && <div className="lv-sub lp-voice-sub">{voice.sub}</div>}
           {!voice && isGood(now) && <div className="afg-onair-sub lp-voice-sub">{GOOD_ON_AIR_SUB}</div>}
+          {!voice && !isGood(now) && promoOf(now) && (
+            <div className="promo-onair">
+              <PromoButton promo={promoOf(now)!} source="player" />
+            </div>
+          )}
 
           <FlagshipPlayer
             audioRef={audioRef}

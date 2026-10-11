@@ -6,6 +6,7 @@ import { JingleSettings, JinglePreviewButton, PreviewSongPicker } from "../compo
 import { MOOD_OPTIONS } from "../lib/presets";
 import { LINK_KINDS } from "./RecordLink";
 import { GoodAdsPanel } from "../components/GoodAdsPanel";
+import { PromosPanel } from "../components/PromosPanel";
 
 // The Audio library is split in two so a jingle is never lost among the
 // spoken material: each type belongs to exactly one section, so anything
@@ -65,6 +66,8 @@ export function AudioAssets() {
   const tab: TabKey = tabParam === "spoken" || tabParam === "voices" ? tabParam : "jingles";
   // Advertising For Good: its own tab, with its own list (components/GoodAdsPanel.tsx).
   const goodTab = tabParam === "good";
+  // House promos: their own tab too (components/PromosPanel.tsx).
+  const promosTab = tabParam === "promos";
 
   const [assets, setAssets] = useState<any[]>([]);
   const [voiceAssets, setVoiceAssets] = useState<any[]>([]);
@@ -111,9 +114,9 @@ export function AudioAssets() {
       (!query || a.title.toLowerCase().includes(query) || tagsFor(a).some((t) => t.toLowerCase().includes(query)))
   );
 
-  const switchTab = (key: TabKey | "good") => {
+  const switchTab = (key: TabKey | "good" | "promos") => {
     setSearchParams(key === "jingles" ? {} : { tab: key });
-    if (key === "good") return;
+    if (key === "good" || key === "promos") return;
     setSearch("");
     setPlayingId(null);
     setEditingTagsId(null);
@@ -137,6 +140,10 @@ export function AudioAssets() {
             <Link to="/studio/audio/upload?kind=good" className="btn primary">
               Upload an Advertising For Good ad
             </Link>
+          ) : promosTab ? (
+            <Link to="/studio/promos/new" className="btn primary">
+              + New promo (step by step)
+            </Link>
           ) : (
           <Link to={`/studio/audio/upload?kind=${tab}`} className={tab === "spoken" ? "btn" : "btn primary"}>
             {current.upload}
@@ -147,7 +154,7 @@ export function AudioAssets() {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         {(Object.keys(TABS) as TabKey[]).map((key) => (
-          <button key={key} className={`chip${tab === key && !goodTab ? " selected" : ""}`} onClick={() => switchTab(key)}>
+          <button key={key} className={`chip${tab === key && !goodTab && !promosTab ? " selected" : ""}`} onClick={() => switchTab(key)}>
             {TABS[key].label}
             {loaded ? ` (${countFor(key)})` : ""}
           </button>
@@ -155,10 +162,15 @@ export function AudioAssets() {
         <button className={`chip${goodTab ? " selected" : ""}`} onClick={() => switchTab("good")}>
           For Good{loaded ? ` (${assets.filter((a) => a.afg).length})` : ""}
         </button>
+        <button className={`chip${promosTab ? " selected" : ""}`} onClick={() => switchTab("promos")}>
+          Promos{loaded ? ` (${assets.filter((a) => a.type === "promo").length})` : ""}
+        </button>
       </div>
 
       {goodTab ? (
         <GoodAdsPanel jingles={assets} onChanged={load} />
+      ) : promosTab ? (
+        <PromosPanel onChanged={load} />
       ) : (
       <>
       <p style={{ color: "var(--text-dim)" }}>{current.blurb}</p>

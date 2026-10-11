@@ -1,6 +1,7 @@
 import type { AudioAsset, Channel, Programme, Track } from "./types";
 import { loadCapsulesFor, loadTodaysCapsules, stationToday, withCapsules, type CapsuleClip } from "./capsules";
 import { buildRotation, hashSeed, ROTATION_RULES, withPinnedJingles, type PinnedJingle, type RotationItem } from "./radioBrain";
+import { promoInfoFor } from "./promos";
 
 /**
  * A channel's loop: what /now-playing has always played, and what the
@@ -156,7 +157,7 @@ export async function autopilotTracks(db: D1Database, tagsAny: string[]): Promis
 
 export async function stationIdAssets(db: D1Database): Promise<AudioAsset[]> {
   const { results } = await db
-    .prepare("SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle','promo')")
+    .prepare("SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle')")
     .all<AudioAsset>();
   return results;
 }
@@ -317,6 +318,8 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
       .all<{ id: string; slug: string | null }>();
     for (const row of results) goodByAsset.set(row.id, { slug: row.slug });
   }
+  // House promos on air (migrations/0026) carry `promo`: title, link and cover for the players' button and the TV's QR code.
+  const promoByAsset = await promoInfoFor(db, assetIds);
 
   return items.map((item) => {
     if (!item) return item;
@@ -326,9 +329,10 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
       artist: album?.artist ?? null,
       album_id: album?.album_id ?? null,
       album_title: album?.album_title ?? null,
-      artwork_url: item.artwork_url ?? album?.album_artwork_url ?? null,
+      artwork_url: item.artwork_url ?? album?.album_artwork_url ?? (!item.track_id && item.audio_asset_id ? promoByAsset.get(item.audio_asset_id)?.cover_url : null) ?? null,
       ...(item.item_type === "song" ? { is_contest_entry: !!album?.is_contest_entry } : {}),
       ...(!item.track_id && item.audio_asset_id && goodByAsset.has(item.audio_asset_id) ? { good: goodByAsset.get(item.audio_asset_id) } : {}),
+      ...(!item.track_id && item.audio_asset_id && promoByAsset.has(item.audio_asset_id) ? { promo: promoByAsset.get(item.audio_asset_id) } : {}),
     };
   });
 }

@@ -18,6 +18,7 @@ import { describeRule, EMPTY_CONTENT, parseRule, SlotResolver, trackPlayable, ty
 import { addDaysTo, DAY, HOUR, mmss, parisHHMM, shortDay, stationDate, stationDayStartMs } from "./time";
 import { allowedIn, bandDistance, daypartReason, daypartsApply, daypartsBetween, daypartSeconds, MIN_DAYPART_SONGS, songBands, type TimeBand } from "./dayparts";
 import { contentKey, REPEAT_WINDOW_MS, type ItemSource, type PlanItem, type Playable } from "./types";
+import { clockHour, dayPlan, hourSlots, loadPromoConfig, promoAllowed, PROMO_MIN_GAP_MS, PROMO_WINDOW_END_MARGIN_MS, slotOpensAt, type AirablePromo, type PromoConfig } from "../promos";
 
 /**
  * The plan: what a channel should air, as a pure function of time and its
@@ -340,6 +341,11 @@ export class Planner {
     const all: PlanItem[] = [];
     let cursor = origin;
     let skipped = 0;
+    // House promos (lib/promos.ts): only in an autopilot channel's own rotation, never in a programme or hand-planned block.
+    const promos = content.source === "autopilot" && daypartsApply(this.channel) ? await this.promoConfig() : null;
+    const promoIds = new Set(promos?.promos.map((p) => p.audio_asset_id) ?? []);
+    const promoStarts = promos?.perHour ? before.filter((i) => !i.trackId && i.assetId && promoIds.has(i.assetId)).map((i) => i.startsAt) : [];
+    const promoQueue = promos?.perHour ? { plays: this.promoPlays(promos, origin, occ.endMs), next: 0 } : null;
     for (let k = 0; cursor < emitEnd && k < 20_000; k++) {
       const p = seq[k % seq.length];
       const key = contentKey(p);
@@ -350,6 +356,14 @@ export class Planner {
         continue;
       }
       skipped = 0;
+      if (promos && promoQueue && p.itemType === "song") {
+        const promo = this.promoDue(promos, occ, cursor, all[all.length - 1], p, promoStarts, promoQueue, content, reasons);
+        if (promo) {
+          all.push({ ...promo, startsAt: cursor, endsAt: cursor + promo.fileMs, offset: 0 });
+          promoStarts.push(cursor);
+          cursor += promo.fileMs;
+        }
+      }
       const item: PlanItem = { ...p, startsAt: cursor, endsAt: cursor + p.fileMs, offset: 0 };
       all.push(item);
       recent.set(key, cursor);
@@ -374,6 +388,106 @@ export class Planner {
     }).items;
   }
 
+  // ------------------------------------------------------------ house promos (lib/promos.ts)
+
+  private promoCfg: Promise<PromoConfig> | null = null;
+  promoConfig(): Promise<PromoConfig> {
+    return (this.promoCfg ??= loadPromoConfig(this.db));
+  }
+
+  private promoPlayable(p: AirablePromo, occ: Occurrence, source: ItemSource, sourceRef: string | null, reasons: string[]): Playable {
+    return {
+      // On air a promo is a station ID to everything that already handles one; now-playing adds `promo` (station.ts enrichItems).
+      itemType: "station_id",
+      trackId: null,
+      assetId: p.audio_asset_id,
+      label: p.on_air_title,
+      audioUrl: p.audio_url,
+      artworkUrl: null,
+      fileMs: p.duration_seconds * 1000,
+      blockId: !occ.daypart ? occ.block.id : null,
+      blockDate: !occ.daypart ? occ.date : null,
+      source,
+      sourceRef,
+      reasons,
+    };
+  }
+
+  /**
+   * The promo plays this channel was given (lib/promos.ts dayPlan) in the
+   * clock hours of a window, in time order, each with when it may go out.
+   */
+  private promoPlays(cfg: PromoConfig, from: number, to: number): { promo: AirablePromo; date: string; opensAt: number }[] {
+    const out: { promo: AirablePromo; date: string; opensAt: number }[] = [];
+    let h = clockHour(from);
+    for (let guard = 0; h.startMs < to && guard < 24 * 8; guard++) {
+      hourSlots(cfg, dayPlan(cfg, h.date), this.channel.id, h.hour).forEach((promo, k) =>
+        out.push({ promo, date: h.date, opensAt: slotOpensAt(cfg, this.channel.id, h, k) })
+      );
+      h = clockHour(h.endMs);
+    }
+    return out;
+  }
+
+  /**
+   * The promo to air at `cursor`, between `prev` and the song `next`, or null.
+   * The next of the window's plays (promoPlays) once it has opened; one that
+   * finds no gap in its own hour waits for the next gap in the window, but
+   * never into another Paris day (the daily cap is per day). There must be
+   * fewer than the hourly setting already in this clock hour, the last promo
+   * at least PROMO_MIN_GAP_MS back, songs on both sides (a promo never
+   * touches a jingle, an AFG ad, a voice note or another promo), and it isn't
+   * so near the window's end that the fit there could drop the song beside it.
+   */
+  private promoDue(
+    cfg: PromoConfig,
+    occ: Occurrence,
+    cursor: number,
+    prev: PlanItem | undefined,
+    next: Playable,
+    promoStarts: number[],
+    queue: { plays: { promo: AirablePromo; date: string; opensAt: number }[]; next: number },
+    content: BlockContent,
+    reasons: string[]
+  ): Playable | null {
+    const h = clockHour(cursor);
+    while (queue.next < queue.plays.length && queue.plays[queue.next].date < h.date) queue.next++;
+    const due = queue.plays[queue.next];
+    if (!due || due.opensAt > cursor) return null;
+    if (!prev || prev.itemType !== "song" || prev.endsAt !== cursor) return null;
+    // A song opening with a jingle or an AFG ad over its intro counts as one next to it.
+    if (next.overlays?.some((o) => o.start_offset_seconds <= 30)) return null;
+    if (cursor > occ.endMs - PROMO_WINDOW_END_MARGIN_MS) return null;
+    let inHour = 0;
+    let last = -Infinity;
+    for (const s of promoStarts) {
+      if (s >= h.startMs && s < h.endMs) inHour++;
+      if (s <= cursor && s > last) last = s;
+    }
+    if (inHour >= cfg.perHour || cursor - last < PROMO_MIN_GAP_MS) return null;
+    queue.next++;
+    const promo = due.promo;
+    return this.promoPlayable(promo, occ, content.source, content.sourceRef, [...reasons, `House promo: ${promo.on_air_title} (${cfg.perHour} an hour at most, ${promo.max_per_day} a day)`]);
+  }
+
+  /**
+   * A Scheduler "A promo" slot (§4.2): the promo this channel's clock hour was
+   * given in the day's plan, else one with plays to spare that day; never one
+   * that's off, out of its dates, not on this channel or at its daily cap.
+   */
+  private async promoForSlot(occ: Occurrence, at: number, reasons: string[]): Promise<Playable | null> {
+    const cfg = await this.promoConfig();
+    if (!cfg.perHour) return null;
+    const h = clockHour(at);
+    const plan = dayPlan(cfg, h.date);
+    const own = hourSlots(cfg, plan, this.channel.id, h.hour)[0];
+    const spare = cfg.promos
+      .filter((p) => promoAllowed(p, this.channel.id, h.date) && (plan.counts.get(p.audio_asset_id) ?? 0) < p.max_per_day)
+      .sort((a, b) => (plan.counts.get(a.audio_asset_id) ?? 0) - (plan.counts.get(b.audio_asset_id) ?? 0) || a.audio_asset_id.localeCompare(b.audio_asset_id))[0];
+    const pick = own ?? spare;
+    return pick ? this.promoPlayable(pick, occ, "programme", null, [...reasons, `House promo: ${pick.on_air_title}`]) : null;
+  }
+
   // ------------------------------------------------------------ hand-planned blocks (§3)
 
   private resolvers = new Map<string, SlotResolver>();
@@ -381,7 +495,7 @@ export class Planner {
     let r = this.resolvers.get(b.id);
     if (!r) {
       const tags = blockTags(b);
-      r = new SlotResolver(this.db, tags.length ? tags : channelTags(this.channel));
+      r = new SlotResolver(this.db, tags.length ? tags : channelTags(this.channel), this.channel.id);
       this.resolvers.set(b.id, r);
     }
     return r;
@@ -469,7 +583,11 @@ export class Planner {
       if (s.slot_kind === "fixed") p = await resolver.fixed(s);
       else if (s.slot_kind === "rule") {
         const rule = parseRule(s.rule_json);
-        if (rule) {
+        if (rule?.item_type === "promo") {
+          p = await this.promoForSlot(occ, cursor, reasons);
+          reasons = [...reasons, `Rule slot: ${describeRule(rule)}`];
+          ref = `rule:${e.owner}:${s.position}`;
+        } else if (rule) {
           p = await resolver.pick(rule, `${b.id}:${occ.date}:${s.position}${round ? `:${round}` : ""}`, cursor, recent, picked, REPEAT_WINDOW_MS);
           reasons = [...reasons, `Rule slot: ${describeRule(rule)}`];
           ref = `rule:${e.owner}:${s.position}`;

@@ -1,0 +1,109 @@
+/*
+ * House promos on air (PromoOnAir.tsx). Amber (#f0a12a, as Offline and My
+ * Radio already use): not the AFG green, the on-air red or the Top 3 gold.
+ * Nothing here moves or pulses.
+ */
+
+.promo-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f0a12a;
+  color: #1c1203;
+  font-family: "Oswald", -apple-system, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.promo-pill-small {
+  padding: 1px 7px;
+  font-size: 9px;
+  margin-right: 4px;
+}
+
+.promo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 100%;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #f0a12a;
+  background: rgba(240, 161, 42, 0.12);
+  color: #f6c167;
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.promo-btn:hover,
+.promo-btn:focus-visible {
+  background: #f0a12a;
+  color: #1c1203;
+}
+
+.promo-btn:focus-visible {
+  outline: 2px solid #f6c167;
+  outline-offset: 2px;
+}
+
+.promo-btn-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The now-playing bar: a smaller button, and on the narrowest phones just the arrow. */
+.promo-btn-compact {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  max-width: 34vw;
+}
+
+@media (max-width: 420px) {
+  .promo-btn-compact {
+    padding: 6px 10px;
+  }
+  .promo-btn-compact .promo-btn-label {
+    display: none;
+  }
+  /* The bar's title line is too short for the pill as well: the title wins (the amber button still marks it). */
+  .mp-title .promo-pill {
+    display: none;
+  }
+}
+
+/* The button under the title in the expanded player and on Listen (the cover is the item's artwork). */
+.promo-onair {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* Just played: the last promo, with its button. */
+.jp-promo-row .jp-promo-text {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px;
+}
+
+.jp-promo-row .promo-btn {
+  padding: 5px 11px;
+  font-size: 0.8rem;
+}
+
+.jp-art-promo {
+  background: linear-gradient(135deg, rgba(240, 161, 42, 0.4), rgba(240, 161, 42, 0.06));
+}

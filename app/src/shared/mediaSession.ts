@@ -203,10 +203,12 @@ export function radioSessionInfo(data: any): MediaSessionInfo | null {
   const station: string = data.channel?.name ?? "We Are Radio";
   const isSong = now?.item_type === "song";
   const art = now?.artwork_url ? mediaUrl(now.artwork_url) : STATION_ARTWORK;
+  // A house promo (now_playing.promo) shows its on-air title, labelled as on the players; its cover is the artwork.
+  const promoTitle: string | undefined = !isSong && !now?.good ? now?.promo?.title : undefined;
   return {
-    title: now?.label ?? station,
+    title: promoTitle || (now?.label ?? station),
     // An Advertising For Good ad shows as that on the lock screen, not as the station.
-    artist: isSong ? now?.artist || "Kizzi" : now?.good ? "Advertising For Good" : station,
+    artist: isSong ? now?.artist || "Kizzi" : now?.good ? "Advertising For Good" : promoTitle ? "We Are Radio recommends" : station,
     album: (isSong && now?.album_title) || station,
     artworkUrl: new URL(art, window.location.href).href,
   };

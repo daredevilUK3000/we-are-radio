@@ -9,6 +9,7 @@ import { trackTv } from "../../shared/analytics";
 import { ChannelStill, EqBars, HintBar, Icon, OnAirPill, RoundControl, TvButton, TvClock } from "../components";
 import { useTvPlayer } from "../TvPlayer";
 import { clockText, mmss, stillFor, useTvData } from "../tvData";
+import { PromoQr } from "../PromoQr";
 import { useTvUi } from "../tvUi";
 
 /** Screen 2: Now Playing (handoff_tv_firetv.md §A5). */
@@ -114,7 +115,8 @@ export function NowPlaying() {
   }, [player.canStartOver, player.rewound]);
 
   const comingUp: any[] = (data?.coming_up ?? []).slice(0, meta?.next_block ? 3 : 4);
-  const title = voice ? voice.title : (now?.label ?? channelName);
+  const promo: { title: string; short_url: string } | null = !voice && !now?.good && now?.promo?.short_url ? now.promo : null;
+  const title = voice ? voice.title : promo ? promo.title : (now?.label ?? channelName);
 
   return (
     <FocusContext.Provider value={focusKey}>
@@ -142,12 +144,14 @@ export function NowPlaying() {
             {now?.artwork_url ? <img src={mediaUrl(now.artwork_url)} alt="" /> : <ChannelStill slug={slug} />}
             {!now?.artwork_url && <img className="tv-np-artwork-logo" src="/weareradio-logo-hero.webp" alt="" />}
           </div>
-          <div className="tv-np-details">
+          <div className={`tv-np-details${promo ? " has-promo" : ""}`}>
             <div className="tv-np-eyebrow">
               {voice ? (
                 <span className="tv-voice-pill">Listener voice</span>
               ) : now?.good ? (
                 <span className="tv-good-pill">Advertising For Good</span>
+              ) : promo ? (
+                <span className="tv-promo-pill">We Are Radio recommends</span>
               ) : (
                 "Now playing"
               )}{" "}
@@ -156,9 +160,19 @@ export function NowPlaying() {
             <h1 className="tv-np-title" style={{ fontSize: titleSize(title) }}>
               {title}
             </h1>
-            <div className={`tv-np-artist${now?.good && !voice ? " is-good" : ""}`}>
-              {voice ? voice.sub : now?.good ? "A short message that asks you to be kind, not to buy" : (now?.artist ?? "")}
-            </div>
+            {promo ? (
+              <div className="tv-np-promo">
+                <PromoQr url={`${promo.short_url}?s=tv`} />
+                <div className="tv-np-promo-text">
+                  <div className="tv-np-promo-scan">Scan with your phone</div>
+                  <div className="tv-np-promo-url">{promo.short_url.replace(/^https:\/\//, "")}</div>
+                </div>
+              </div>
+            ) : (
+              <div className={`tv-np-artist${now?.good && !voice ? " is-good" : ""}`}>
+                {voice ? voice.sub : now?.good ? "A short message that asks you to be kind, not to buy" : (now?.artist ?? "")}
+              </div>
+            )}
             {meta?.block && (
               <div className="tv-block-row">
                 <span className="tv-block-chip">{meta.block.name}</span>

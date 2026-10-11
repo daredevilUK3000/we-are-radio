@@ -4,7 +4,7 @@ import { nowIso } from "./id";
 import { KIND_WORD, onAirTemplates, sendEmail } from "./email";
 import { runAction, type ItemRef } from "./scheduler/actions";
 import { liveMax, logChange } from "./scheduler/store";
-import { clearTimelineCache, itemsBetween } from "./scheduler/timeline";
+import { clearTimelineCache, itemAt, itemsBetween } from "./scheduler/timeline";
 import { DAY, HOUR, MINUTE, PARIS_TZ } from "./scheduler/time";
 
 /**
@@ -228,6 +228,21 @@ export async function channelBusy(db: D1Database, channelId: string, nowMs: numb
 
 // -------------------------------------------------------------- placing
 
+/** Is the item on air now, or the one after it, a house promo? (insert_next would put the voice note between them.) */
+async function promoAround(db: D1Database, channelId: string, nowMs: number): Promise<boolean> {
+  const cur = await itemAt(db, channelId, nowMs);
+  if (!cur) return false;
+  const next = await itemAt(db, channelId, cur.item.endsAt);
+  const ids = [cur.item, next?.item].map((i) => (i && !i.trackId ? i.assetId : null)).filter((x): x is string => !!x);
+  if (ids.length === 0) return false;
+  const r = await db
+    .prepare(`SELECT 1 FROM promos p JOIN audio_assets a ON a.id = p.audio_asset_id WHERE a.type = 'promo' AND p.audio_asset_id IN (${ids.map(() => "?").join(",")}) LIMIT 1`)
+    .bind(...ids)
+    .first()
+    .catch(() => null);
+  return !!r;
+}
+
 export type PlaceResult = { ok: true; message: string; expectedAt: number } | { ok: false; waiting?: boolean; message: string };
 
 /**
@@ -255,6 +270,10 @@ export async function placeVoiceNote(env: Env, m: OnAirRow, nowMs = Date.now(), 
   if (m.air_when === "at" && m.air_after_ms && nowMs < m.air_after_ms) return { ok: false, waiting: true, message: "Not due yet." };
   const busy = await channelBusy(db, channel.id, nowMs, m.id);
   if (busy) return { ok: false, waiting: true, message: busy };
+  // A voice note never sits right next to a house promo (migrations/0026): it goes out a song later.
+  if (await promoAround(db, channel.id, nowMs)) {
+    return { ok: false, waiting: true, message: "A promo is on air or due next, so this one goes out a song later." };
+  }
 
   const items: ItemRef[] = [{ audio_asset_id: m.audio_asset_id }];
   let songNote: string | null = null;

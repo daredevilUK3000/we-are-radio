@@ -9,6 +9,7 @@ import { useActiveChannel } from "../context/ActiveChannelContext";
 import { OnAirSheet, SayItOnAirButton } from "./onair/OnAirSheet";
 import { ListenerVoicePill, voiceLines } from "./onair/voice";
 import { GOOD_ON_AIR_SUB, GoodOnAirPill, GoodOnAirTitle, isGood } from "./good/GoodOnAir";
+import { PromoButton, PromoPill, promoOf } from "./promo/PromoOnAir";
 import { BackToLivePill, StartOverButton } from "./PlayerRewind";
 import { ComingUpAt } from "./ComingUpAt";
 import { JustPlayed, useJustPlayed } from "./JustPlayed";
@@ -136,6 +137,7 @@ export function NowPlayingExpanded({
   const justPlayed = useJustPlayed(channelSlug, (liveNow ?? now)?.id);
   const voice = now?.voice ? voiceLines(now.voice) : null;
   const good = !voice && isGood(now);
+  const promo = !voice && !good ? promoOf(now) : null;
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // Focus, Escape to close, and no scrolling of the page behind.
@@ -225,14 +227,18 @@ export function NowPlayingExpanded({
             </div>
 
             <div className="np-block np-block-current">
-              <div className="np-eyebrow">{voice ? <ListenerVoicePill /> : good ? <GoodOnAirPill /> : isSong ? "Now playing" : "On air now"}</div>
+              <div className="np-eyebrow">{voice ? <ListenerVoicePill /> : good ? <GoodOnAirPill /> : promo ? <PromoPill /> : isSong ? "Now playing" : "On air now"}</div>
               <h1 className="np-title" key={now?.id}>
-                {voice ? voice.title : good ? <GoodOnAirTitle item={now} onNavigate={onClose} /> : (now?.label ?? "We Are Radio")}
+                {voice ? voice.title : good ? <GoodOnAirTitle item={now} onNavigate={onClose} /> : promo ? promo.title : (now?.label ?? "We Are Radio")}
               </h1>
               {voice?.sub ? (
                 <div className="np-meta lv-sub">{voice.sub}</div>
               ) : good ? (
                 <div className="np-meta afg-onair-sub">{GOOD_ON_AIR_SUB}</div>
+              ) : promo ? (
+                <div className="promo-onair">
+                  <PromoButton promo={promo} source="player" />
+                </div>
               ) : (
                 meta && <div className="np-meta">{meta}</div>
               )}

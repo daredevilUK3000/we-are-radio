@@ -4,7 +4,7 @@ import { studioApi, uploadFileToR2 } from "../../api/client";
 import { LINK_KINDS, NEED_TAGS } from "./RecordLink";
 import { decodedDuration } from "../lib/audio";
 
-async function readAudioDuration(file: File): Promise<number> {
+export async function readAudioDuration(file: File): Promise<number> {
   const exact = await decodedDuration(file);
   if (exact) return Math.max(1, Math.round(exact));
   return new Promise((resolve, reject) => {
@@ -34,7 +34,11 @@ export function UploadAudioAsset() {
   const [searchParams] = useSearchParams();
   const spoken = searchParams.get("kind") === "spoken";
   const TYPES = spoken ? SPOKEN_TYPES : JINGLE_TYPES;
-  const [type, setType] = useState(TYPES[0].value);
+  // From the Audio page's Promos tab (?kind=promo) a promo is preselected.
+  const fromPromos = searchParams.get("kind") === "promo";
+  const [type, setType] = useState(fromPromos ? "promo" : TYPES[0].value);
+  // A house promo (migrations/0026) never airs as a jingle: it starts switched off, and airs once it's set up in the Promos tab.
+  const isPromo = type === "promo";
   // Jingles, station IDs and promos go live the moment they're uploaded (they
   // start out as ordinary "sequenced" clips between songs); spoken content
   // is still reviewed and published by hand.
@@ -78,6 +82,10 @@ export function UploadAudioAsset() {
       });
 
       if (type === "link" && linkNeeds.length > 0) await studioApi.setAudioAssetTags(created.id, linkNeeds);
+      if (isPromo) {
+        navigate("/studio/audio?tab=promos");
+        return;
+      }
       if (goesLive && afg) {
         await studioApi.updateGoodAd(created.id, { afg: true });
         navigate("/studio/audio?tab=good");
@@ -94,7 +102,7 @@ export function UploadAudioAsset() {
 
   return (
     <div style={{ maxWidth: 480 }}>
-      <h1>{spoken ? "Upload spoken audio" : fromGood ? "Upload an Advertising For Good ad" : "Upload jingle"}</h1>
+      <h1>{spoken ? "Upload spoken audio" : fromGood ? "Upload an Advertising For Good ad" : fromPromos ? "Upload a promo" : "Upload jingle"}</h1>
       <form onSubmit={submit}>
         <div className="form-row">
           <label>Type</label>
@@ -143,7 +151,7 @@ export function UploadAudioAsset() {
           <label>Description</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         </div>
-        {goesLive && (
+        {goesLive && !isPromo && (
           <div className="form-row">
             <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input type="checkbox" checked={afg} onChange={(e) => setAfg(e.target.checked)} style={{ width: "auto" }} />
@@ -160,7 +168,9 @@ export function UploadAudioAsset() {
           <input type="file" accept="audio/*" onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)} required />
         </div>
         <p style={{ color: "var(--text-dim)", fontSize: "0.85rem" }}>
-          {goesLive
+          {isPromo
+            ? "A promo starts switched off. Then click Set up next to it in the Promos tab, which walks you through the rest."
+            : goesLive
             ? "This goes live as soon as it's uploaded. You can change how it plays, or take it off air, from the Audio page afterwards."
             : "This is saved ready for you to review - publish it from the Audio page when you're happy."}
         </p>

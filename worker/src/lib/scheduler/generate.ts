@@ -1,5 +1,6 @@
 import type { Channel, Env } from "../types";
 import { hashSeed, ROTATION_RULES } from "../radioBrain";
+import { promoDigest } from "../promos";
 import { airingPlan, planDigests, snapshotContent, type PlanSnapshot } from "./plans";
 import { Planner, PlanError } from "./plan";
 import { carryOverrides } from "./carry";
@@ -74,7 +75,9 @@ export async function catalogueDigest(db: D1Database): Promise<string> {
          (SELECT COUNT(*) || ':' || COALESCE(group_concat(programme_id || position || COALESCE(track_id, audio_asset_id)), '') FROM programme_items) AS items`
     )
     .first<Record<string, string>>();
-  return String(hashSeed(JSON.stringify(r)));
+  // House promos (lib/promos.ts): only when one can air, so with none switched on the digest is what it always was.
+  const promos = await promoDigest(db);
+  return String(hashSeed(JSON.stringify(promos ? { ...r, promos } : r)));
 }
 
 export function channelFingerprint(channel: Channel, catalogue: string, gridDigest: string): string {

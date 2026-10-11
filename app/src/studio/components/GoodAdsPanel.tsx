@@ -66,7 +66,8 @@ export function GoodAdsPanel({ jingles, onChanged }: { jingles: any[]; onChanged
   };
 
   const shown = ads.filter((a) => a.afg_published && a.status === "published").length;
-  const candidates = jingles.filter((a) => !a.afg && ["jingle", "station_id", "promo"].includes(a.type));
+  // House promos never go near For Good (migrations/0026).
+  const candidates = jingles.filter((a) => !a.afg && ["jingle", "station_id"].includes(a.type));
 
   return (
     <div>

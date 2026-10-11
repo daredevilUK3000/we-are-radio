@@ -67,6 +67,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (url.origin === self.location.origin) {
+    // A house promo's short link (/go/<slug>) counts the click and redirects: always the network, never the app shell.
+    if (url.pathname.startsWith("/go/")) return;
     if (url.pathname.startsWith("/media/")) {
       const key = url.origin + url.pathname;
       if (downloaded && !downloaded.has(key)) return;

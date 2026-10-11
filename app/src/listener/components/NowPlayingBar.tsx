@@ -20,6 +20,7 @@ import { useStationLog } from "../lib/useStationLog";
 import { usePauseForRecording } from "./onair/recording";
 import { voiceLines } from "./onair/voice";
 import { GoodOnAirPill, isGood } from "./good/GoodOnAir";
+import { PromoButton, PromoPill, promoOf } from "./promo/PromoOnAir";
 import { fadeIn, useRewind } from "../lib/useRewind";
 import { BackToLivePill } from "./PlayerRewind";
 
@@ -518,6 +519,10 @@ export function NowPlayingBar() {
                 <>
                   <GoodOnAirPill small /> {shown.now_playing.label}
                 </>
+              ) : promoOf(shown.now_playing) ? (
+                <>
+                  <PromoPill small /> {promoOf(shown.now_playing)!.title}
+                </>
               ) : (
                 (shown.now_playing?.label ?? "We Are Radio")
               )}
@@ -540,6 +545,9 @@ export function NowPlayingBar() {
             <path d="M6 15l6-6 6 6" />
           </svg>
         </button>
+
+        {/* A house promo's button sits beside the bar's open button (a link can't go inside a button). */}
+        {promoOf(shown.now_playing) && <PromoButton promo={promoOf(shown.now_playing)!} source="player" compact />}
 
         {rw.rewound && <BackToLivePill compact behindSeconds={rw.behindSeconds} onClick={backToLive} />}
 

@@ -411,10 +411,11 @@ export function Home() {
               </div>
               <div className="tv-np-text">
                 <div className="tv-np-eyebrow">
-                  {n?.good ? <span className="tv-good-pill">Advertising For Good</span> : "Now playing"} <EqBars />
+                  {n?.good ? <span className="tv-good-pill">Advertising For Good</span> : n?.promo ? <span className="tv-promo-pill">We Are Radio recommends</span> : "Now playing"} <EqBars />
                 </div>
-                <div className="tv-np-title">{n?.voice ? `${n.voice.first_name}${n.voice.place ? ` in ${n.voice.place}` : ""}` : (n?.title ?? hero.name)}</div>
-                <div className="tv-np-artist">{n?.voice ? "Listener voice" : (n?.artist ?? " ")}</div>
+                <div className="tv-np-title">{n?.voice ? `${n.voice.first_name}${n.voice.place ? ` in ${n.voice.place}` : ""}` : n?.promo ? n.promo.title : (n?.title ?? hero.name)}</div>
+                {/* A promo's QR code would be too small to scan from the sofa here: it's on Now Playing. */}
+                <div className="tv-np-artist">{n?.voice ? "Listener voice" : n?.promo ? "Scan the code on Now Playing" : (n?.artist ?? " ")}</div>
                 {prog && (
                   <div className="tv-np-progress">
                     <span>{mmss(prog.elapsed)}</span>

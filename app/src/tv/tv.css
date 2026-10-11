@@ -1555,3 +1555,52 @@ html.tv-mode body {
 .tv-home.is-more .tv-top-fade {
   opacity: 1;
 }
+
+/* ---- house promos (PromoQr.tsx): amber, never the AFG green ---- */
+
+.tv-promo-pill {
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: #f0a12a;
+  color: #1c1203;
+  font-family: var(--tv-display);
+  letter-spacing: 0.14em;
+}
+
+/* The QR code sits to the right of the title, so the progress bar and controls keep their place. */
+.tv-np-details.has-promo {
+  position: relative;
+  padding-right: 360px;
+}
+
+.tv-np-promo {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.tv-promo-qr {
+  flex: none;
+  padding: 20px;
+}
+
+.tv-promo-qr img {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.tv-np-promo-scan {
+  font-size: 30px;
+  font-weight: 600;
+}
+
+.tv-np-promo-url {
+  margin-top: 8px;
+  font-size: 26px;
+  color: #f6c167;
+}

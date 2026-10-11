@@ -3,6 +3,7 @@ import type { Env, Programme, Channel, Track, AudioAsset } from "../lib/types";
 import { findNeed, NEEDS, NEED_KEYS } from "../lib/needs";
 import { addDays, parseCapsuleFields, stationToday } from "../lib/capsules";
 import { enrichItems, loadPinnedJingles, loadStation } from "../lib/station";
+import { promoInfoFor } from "../lib/promos";
 import { nowPlayingFromLog, scheduleFromLog, schedState } from "../lib/scheduler/read";
 import { blocksAround, buildGuide } from "../lib/guide";
 import { icsForBlock } from "../lib/ics";
@@ -316,6 +317,8 @@ publicRoutes.get("/now-playing/all", async (c) => {
         voice: item?.voice ?? null,
         // An Advertising For Good ad on air: the TV labels it in green (as the site's players do).
         good: item?.good ?? null,
+        // A house promo on air (migrations/0026): the TV shows its title, cover and a QR code for the short link.
+        promo: item?.promo ?? null,
         block: blocks?.block ?? null,
         next_block: blocks?.next_block ?? null,
       };
@@ -425,7 +428,7 @@ publicRoutes.get("/recently-played", async (c) => {
   const channel = await liveChannel(c.env.DB, slug);
   if (!channel) return c.json({ error: "channel not found or not live" }, 404);
   const sched = await schedState(c.env.DB, channel.id).catch(() => null);
-  let body: { available: boolean; items: unknown[] };
+  let body: { available: boolean; items: unknown[]; last_promo?: unknown };
   if (!sched?.enabled) {
     // Channels not on the Scheduler have no record of what aired: the players hide the section.
     body = { available: false, items: [] };
@@ -444,6 +447,16 @@ publicRoutes.get("/recently-played", async (c) => {
     )
       .bind(channel.id, now - 3 * 60 * 60 * 1000, now, limit)
       .all<{ track_id: string; title: string; artist: string | null; artwork_url: string | null; aired_ms: number }>();
+    // The last house promo aired in the same window (migrations/0026), so a listener who reacts a song later can still tap it. Only the last one.
+    const lastPromo = await c.env.DB.prepare(
+      `SELECT a.audio_asset_id, a.starts_at_ms FROM sched_aired a JOIN promos p ON p.audio_asset_id = a.audio_asset_id
+       WHERE a.channel_id = ?1 AND a.track_id IS NULL AND a.starts_at_ms > ?2 AND a.starts_at_ms <= ?3
+       ORDER BY a.starts_at_ms DESC LIMIT 1`
+    )
+      .bind(channel.id, now - 3 * 60 * 60 * 1000, now)
+      .first<{ audio_asset_id: string; starts_at_ms: number }>()
+      .catch(() => null);
+    const promo = lastPromo ? (await promoInfoFor(c.env.DB, [lastPromo.audio_asset_id])).get(lastPromo.audio_asset_id) : undefined;
     body = {
       available: true,
       items: results.map((r) => ({
@@ -453,6 +466,7 @@ publicRoutes.get("/recently-played", async (c) => {
         artwork_url: r.artwork_url,
         aired_at: Math.round(r.aired_ms / 1000),
       })),
+      ...(promo && lastPromo ? { last_promo: { ...promo, aired_at: Math.round(lastPromo.starts_at_ms / 1000) } } : {}),
     };
   }
   const res = c.json(body, 200, { "Cache-Control": "public, max-age=30" });
@@ -548,7 +562,7 @@ publicRoutes.post("/sessions", async (c) => {
   }
 
   const { results: stationIds } = await c.env.DB.prepare(
-    "SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle','promo')"
+    "SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle')"
   ).all<AudioAsset>();
 
   const seedKey = `session:${mood}:${durationMinutes}:${Date.now()}`;
@@ -627,7 +641,7 @@ publicRoutes.post("/radio-for-you", async (c) => {
   }));
 
   const { results: stationIds } = await c.env.DB.prepare(
-    "SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle','promo')"
+    "SELECT * FROM audio_assets WHERE status = 'published' AND type IN ('station_id','jingle')"
   ).all<AudioAsset>();
   const { results: titles } = await c.env.DB.prepare(
     "SELECT title, time_band FROM programme_titles WHERE need = ?"
@@ -726,7 +740,7 @@ publicRoutes.post("/time-capsules", async (c) => {
  * channel - a time-of-day boundary passing, or a listener using Vibe Shift
  * - this picks a jingle to sweep the transition with, so it feels like a
  * live broadcast handing over rather than an app switching screens.
- * Prefers a jingle/station ID/promo tagged with the given time band; falls
+ * Prefers a jingle/station ID tagged with the given time band; falls
  * back to any published one of those types if none match that band (or no
  * band is given), and to nothing at all if none exist yet - the transition
  * just cuts silently rather than erroring.
@@ -740,7 +754,7 @@ publicRoutes.get("/sweeper", async (c) => {
       `SELECT aa.* FROM audio_assets aa
        JOIN audio_asset_tags aat ON aat.audio_asset_id = aa.id
        JOIN tags tg ON tg.id = aat.tag_id
-       WHERE aa.status = 'published' AND aa.type IN ('jingle','station_id','promo') AND tg.name = ?
+       WHERE aa.status = 'published' AND aa.type IN ('jingle','station_id') AND tg.name = ?
        ORDER BY RANDOM() LIMIT 1`
     )
       .bind(band)
@@ -750,7 +764,7 @@ publicRoutes.get("/sweeper", async (c) => {
   if (!asset) {
     asset = await c.env.DB.prepare(
       `SELECT * FROM audio_assets
-       WHERE status = 'published' AND type IN ('jingle','station_id','promo')
+       WHERE status = 'published' AND type IN ('jingle','station_id')
        ORDER BY RANDOM() LIMIT 1`
     ).first<AudioAsset>();
   }
