@@ -208,7 +208,7 @@ export function radioSessionInfo(data: any): MediaSessionInfo | null {
   return {
     title: promoTitle || (now?.label ?? station),
     // An Advertising For Good ad shows as that on the lock screen, not as the station.
-    artist: isSong ? now?.artist || "Kizzi" : now?.good ? "Advertising For Good" : promoTitle ? "We Are Radio recommends" : station,
+    artist: isSong ? now?.artist || "Kizzi" : now?.good ? "Advertising For Good" : promoTitle ? now?.promo?.pill || "We Are Radio recommends" : station,
     album: (isSong && now?.album_title) || station,
     artworkUrl: new URL(art, window.location.href).href,
   };

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../lib/types";
 import { nowIso } from "../lib/id";
-import { parseChannelIds, PROMOS_PER_HOUR_MAX, promosPerHour, SHORT_LINK_BASE, type PromoRow } from "../lib/promos";
+import { parseChannelIds, PROMO_PILLS, PROMOS_PER_HOUR_MAX, promosPerHour, SHORT_LINK_BASE, type PromoRow } from "../lib/promos";
 import { DAY, parisDate, parisWallClockToUtcMs } from "../lib/scheduler/time";
 
 /**
@@ -74,7 +74,7 @@ promoStudioRoutes.get("/", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT a.id, a.title, a.audio_url, a.duration_seconds, a.status, a.created_at,
             p.on_air_title, p.link_url, COALESCE(p.link_label, 'Find out more') AS link_label, p.slug, p.cover_url,
-            COALESCE(p.active, 0) AS active, p.runs_from, p.runs_to, COALESCE(p.max_per_day, 4) AS max_per_day, p.channel_ids,
+            COALESCE(p.active, 0) AS active, p.runs_from, p.runs_to, COALESCE(p.max_per_day, 4) AS max_per_day, p.channel_ids, COALESCE(p.pill, 'recommends') AS pill,
             (SELECT COUNT(*) FROM sched_aired s WHERE s.audio_asset_id = a.id AND s.starts_at_ms >= ?1 AND s.starts_at_ms <= ?3) AS plays_today,
             (SELECT COUNT(*) FROM sched_aired s WHERE s.audio_asset_id = a.id AND s.starts_at_ms >= ?2 AND s.starts_at_ms <= ?3) AS plays_7d,
             (SELECT COUNT(*) FROM promo_clicks k WHERE k.audio_asset_id = a.id AND k.timestamp >= ?4) AS clicks_7d,
@@ -121,6 +121,7 @@ interface PromoBody {
   runs_to?: string | null;
   max_per_day?: number;
   channel_ids?: string[] | null;
+  pill?: string;
 }
 
 // Save a promo's settings (all of them, as the edit form sends).
@@ -159,15 +160,17 @@ promoStudioRoutes.put("/:id", async (c) => {
     channels = [...new Set(b.channel_ids.filter((x) => typeof x === "string" && known.has(x)))].sort();
     if (channels.length === 0) return c.json({ error: "Choose at least one channel, or all of them." }, 400);
   }
+  const pill = b.pill ?? "recommends";
+  if (!(pill in PROMO_PILLS)) return c.json({ error: "The label must be recommends or advert." }, 400);
   const cover = b.cover_url ? String(b.cover_url).slice(0, 300) : null;
 
   await c.env.DB.prepare(
-    `INSERT INTO promos (audio_asset_id, on_air_title, link_url, link_label, slug, cover_url, active, runs_from, runs_to, max_per_day, channel_ids, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+    `INSERT INTO promos (audio_asset_id, on_air_title, link_url, link_label, slug, cover_url, active, runs_from, runs_to, max_per_day, channel_ids, updated_at, pill)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
      ON CONFLICT(audio_asset_id) DO UPDATE SET on_air_title = ?2, link_url = ?3, link_label = ?4, slug = ?5, cover_url = ?6,
-       active = ?7, runs_from = ?8, runs_to = ?9, max_per_day = ?10, channel_ids = ?11, updated_at = ?12`
+       active = ?7, runs_from = ?8, runs_to = ?9, max_per_day = ?10, channel_ids = ?11, updated_at = ?12, pill = ?13`
   )
-    .bind(id, title, link, label, slug, cover, b.active ? 1 : 0, from, to, max, channels ? JSON.stringify(channels) : null, nowIso())
+    .bind(id, title, link, label, slug, cover, b.active ? 1 : 0, from, to, max, channels ? JSON.stringify(channels) : null, nowIso(), pill)
     .run();
   return c.json({ ok: true });
 });

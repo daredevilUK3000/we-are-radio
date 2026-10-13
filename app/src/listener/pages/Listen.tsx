@@ -406,7 +406,7 @@ export function Listen() {
 
           <div className="lp-nowplaying-row">
             <span className="lp-nowplaying-label" style={{ color: accent }}>
-              {voice ? <ListenerVoicePill /> : isGood(now) ? <GoodOnAirPill /> : promoOf(now) ? <PromoPill /> : isSong ? "Now Playing" : "On Air Now"}
+              {voice ? <ListenerVoicePill /> : isGood(now) ? <GoodOnAirPill /> : promoOf(now) ? <PromoPill promo={promoOf(now)} /> : isSong ? "Now Playing" : "On Air Now"}
             </span>
             <span className="lp-eq" aria-hidden="true">
               <span style={{ background: accent }} />

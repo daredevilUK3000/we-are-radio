@@ -92,7 +92,7 @@ export const publicApi = {
       available: boolean;
       items: { track_id: string; title: string; artist: string | null; artwork_url: string | null; aired_at: number }[];
       /** The last house promo aired on the channel (migrations/0026), with its link. */
-      last_promo?: { title: string; link_url: string; link_label: string; short_url: string; cover_url: string | null; aired_at: number };
+      last_promo?: { title: string; pill?: string; link_url: string; link_label: string; short_url: string; cover_url: string | null; aired_at: number };
     }>(
       `${API_BASE}/recently-played?channel=${encodeURIComponent(channel)}&limit=${limit}`
     ),

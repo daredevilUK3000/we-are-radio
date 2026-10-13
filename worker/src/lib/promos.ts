@@ -34,6 +34,7 @@ export interface PromoRow {
   runs_to: string | null;
   max_per_day: number;
   channel_ids: string | null;
+  pill: string;
 }
 
 /** A promo that can air: set up, switched on, with audio. */
@@ -206,19 +207,32 @@ export function slotOpensAt(cfg: PromoConfig, channelId: string, h: ClockHour, k
   return h.startMs + (offset + k * span) * MINUTE;
 }
 
+/**
+ * The label a promo carries on the players, the TV and the lock screen
+ * (migrations/0027): Kizzi's books are recommendations, an ad for one of his
+ * own businesses says it's an ad.
+ */
+export const PROMO_PILLS: Record<string, string> = {
+  recommends: "We Are Radio recommends",
+  advert: "Advertisement",
+};
+
 /** What the players are told about a promo on air (now-playing's `promo`). */
 export interface PromoInfo {
   title: string;
+  /** The label's text, e.g. "Advertisement". */
+  pill: string;
   link_url: string;
   link_label: string;
   short_url: string;
   cover_url: string | null;
 }
 
-export const promoInfo = (p: Pick<PromoRow, "on_air_title" | "link_url" | "link_label" | "slug" | "cover_url">, fallbackTitle: string | null): PromoInfo | null =>
+export const promoInfo = (p: Pick<PromoRow, "on_air_title" | "link_url" | "link_label" | "slug" | "cover_url" | "pill">, fallbackTitle: string | null): PromoInfo | null =>
   p.link_url && p.slug
     ? {
         title: p.on_air_title || fallbackTitle || "",
+        pill: PROMO_PILLS[p.pill] ?? PROMO_PILLS.recommends,
         link_url: p.link_url,
         link_label: p.link_label || "Find out more",
         short_url: `${SHORT_LINK_BASE}${p.slug}`,

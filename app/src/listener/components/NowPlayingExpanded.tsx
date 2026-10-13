@@ -227,7 +227,7 @@ export function NowPlayingExpanded({
             </div>
 
             <div className="np-block np-block-current">
-              <div className="np-eyebrow">{voice ? <ListenerVoicePill /> : good ? <GoodOnAirPill /> : promo ? <PromoPill /> : isSong ? "Now playing" : "On air now"}</div>
+              <div className="np-eyebrow">{voice ? <ListenerVoicePill /> : good ? <GoodOnAirPill /> : promo ? <PromoPill promo={promo} /> : isSong ? "Now playing" : "On air now"}</div>
               <h1 className="np-title" key={now?.id}>
                 {voice ? voice.title : good ? <GoodOnAirTitle item={now} onNavigate={onClose} /> : promo ? promo.title : (now?.label ?? "We Are Radio")}
               </h1>

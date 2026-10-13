@@ -13,6 +13,8 @@ import "./promo.css";
 /** now_playing.promo */
 export interface PromoOnAirInfo {
   title: string;
+  /** The label (migrations/0027): "We Are Radio recommends", or "Advertisement" for an ad. */
+  pill?: string;
   link_url: string;
   link_label: string;
   short_url: string;
@@ -20,11 +22,12 @@ export interface PromoOnAirInfo {
 }
 
 export const PROMO_PILL_TEXT = "We Are Radio recommends";
+export const pillText = (promo: { pill?: string } | null | undefined) => promo?.pill || PROMO_PILL_TEXT;
 
 export const promoOf = (item: any): PromoOnAirInfo | null => (item?.promo?.short_url ? (item.promo as PromoOnAirInfo) : null);
 
-export function PromoPill({ small = false }: { small?: boolean }) {
-  return <span className={small ? "promo-pill promo-pill-small" : "promo-pill"}>{PROMO_PILL_TEXT}</span>;
+export function PromoPill({ promo, small = false }: { promo: { pill?: string } | null | undefined; small?: boolean }) {
+  return <span className={small ? "promo-pill promo-pill-small" : "promo-pill"}>{pillText(promo)}</span>;
 }
 
 /** Where the click came from, for the counts in Studio (the short link's ?s=). */

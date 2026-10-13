@@ -115,7 +115,7 @@ export function NowPlaying() {
   }, [player.canStartOver, player.rewound]);
 
   const comingUp: any[] = (data?.coming_up ?? []).slice(0, meta?.next_block ? 3 : 4);
-  const promo: { title: string; short_url: string } | null = !voice && !now?.good && now?.promo?.short_url ? now.promo : null;
+  const promo: { title: string; pill?: string; short_url: string } | null = !voice && !now?.good && now?.promo?.short_url ? now.promo : null;
   const title = voice ? voice.title : promo ? promo.title : (now?.label ?? channelName);
 
   return (
@@ -151,7 +151,7 @@ export function NowPlaying() {
               ) : now?.good ? (
                 <span className="tv-good-pill">Advertising For Good</span>
               ) : promo ? (
-                <span className="tv-promo-pill">We Are Radio recommends</span>
+                <span className="tv-promo-pill">{promo.pill || "We Are Radio recommends"}</span>
               ) : (
                 "Now playing"
               )}{" "}

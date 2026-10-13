@@ -521,7 +521,7 @@ export function NowPlayingBar() {
                 </>
               ) : promoOf(shown.now_playing) ? (
                 <>
-                  <PromoPill small /> {promoOf(shown.now_playing)!.title}
+                  <PromoPill promo={promoOf(shown.now_playing)} small /> {promoOf(shown.now_playing)!.title}
                 </>
               ) : (
                 (shown.now_playing?.label ?? "We Are Radio")

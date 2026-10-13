@@ -66,7 +66,7 @@ export function JustPlayed({ items, className = "" }: { items: PlayedList; class
         <span className="jp-text">
           <span className="jp-title">{promo.title}</span>
           <span className="jp-artist">
-            <PromoPill small />
+            <PromoPill promo={promo} small />
           </span>
         </span>
         <span className="jp-when">{when(promo.aired_at, nowSec)}</span>

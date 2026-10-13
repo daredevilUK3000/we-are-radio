@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { mediaUrl, studioApi, uploadFileToR2 } from "../../api/client";
-import { PromoPill } from "../../listener/components/promo/PromoOnAir";
+import { PromoPill, PROMO_PILL_TEXT } from "../../listener/components/promo/PromoOnAir";
 import { readAudioDuration } from "./UploadAudioAsset";
 import "./promoWizard.css";
 
@@ -66,6 +66,8 @@ export function PromoWizard() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [perDay, setPerDay] = useState(4);
+  // The label (migrations/0027): a recommendation, or an ad for one of Kizzi's own businesses.
+  const [pill, setPill] = useState<"recommends" | "advert">("recommends");
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export function PromoWizard() {
             setTo(p.runs_to ?? "");
           }
           setPerDay(p.max_per_day ?? 4);
+          setPill(p.pill === "advert" ? "advert" : "recommends");
         }
       }
     });
@@ -192,6 +195,7 @@ export function PromoWizard() {
         runs_to: useDates && to ? to : null,
         max_per_day: perDay,
         channel_ids: allChannels ? null : picked,
+        pill,
       });
       setDone({ on: switchOn });
     } catch (e) {
@@ -308,6 +312,18 @@ export function PromoWizard() {
                 <input aria-label="Or type your own button words" value={label} maxLength={30} onChange={(e) => setLabel(e.target.value)} placeholder="Or type your own" />
               </div>
               <div className="form-row">
+                <label>Label</label>
+                <div className="pw-chips">
+                  <button type="button" className={`chip${pill === "recommends" ? " selected" : ""}`} onClick={() => setPill("recommends")}>
+                    {PROMO_PILL_TEXT}
+                  </button>
+                  <button type="button" className={`chip${pill === "advert" ? " selected" : ""}`} onClick={() => setPill("advert")}>
+                    Advertisement
+                  </button>
+                </div>
+                <p className="pw-hint">Choose Advertisement for an ad for a business, including your own. A book you publish is a recommendation.</p>
+              </div>
+              <div className="form-row">
                 <label htmlFor="pw-cover">Cover picture (optional): the book cover or the platform's logo</label>
                 <input id="pw-cover" type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)} />
                 {(coverFile || coverKey) && (
@@ -329,7 +345,7 @@ export function PromoWizard() {
               <div className="pw-preview">
                 {coverUrl ? <img src={coverUrl} alt="" className="pw-preview-cover" /> : <div className="pw-preview-cover pw-preview-blank" />}
                 <div className="pw-preview-text">
-                  <PromoPill small />
+                  <PromoPill promo={{ pill: pill === "advert" ? "Advertisement" : PROMO_PILL_TEXT }} small />
                   <div className="pw-preview-title">{title || "Your title here"}</div>
                   <span className="promo-btn pw-preview-btn">{label || "Find out more"} →</span>
                 </div>

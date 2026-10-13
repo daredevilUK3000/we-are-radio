@@ -28,7 +28,7 @@ export interface ChannelNow {
   /** An Advertising For Good ad on air (slug null when it's hidden from the site). */
   good?: { slug: string | null } | null;
   /** A house promo on air (migrations/0026): its title and short link (for the QR code). */
-  promo?: { title: string; link_label: string; short_url: string; cover_url: string | null } | null;
+  promo?: { title: string; pill?: string; link_label: string; short_url: string; cover_url: string | null } | null;
   block: { name: string; description: string; starts_at: number; ends_at: number } | null;
   next_block: { name: string; starts_at: number; ends_at?: number } | null;
   /** When this answer arrived (ms), so progress can advance locally between polls. */

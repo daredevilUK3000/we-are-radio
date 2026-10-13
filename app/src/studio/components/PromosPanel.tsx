@@ -34,6 +34,7 @@ interface Draft {
   max_per_day: number;
   all_channels: boolean;
   channel_ids: string[];
+  pill: string;
 }
 
 const draftOf = (p: any): Draft => ({
@@ -48,6 +49,7 @@ const draftOf = (p: any): Draft => ({
   max_per_day: p.max_per_day ?? 4,
   all_channels: !p.channel_ids,
   channel_ids: p.channel_ids ?? [],
+  pill: p.pill === "advert" ? "advert" : "recommends",
 });
 
 export function PromosPanel({ onChanged }: { onChanged: () => void }) {
@@ -111,6 +113,7 @@ export function PromosPanel({ onChanged }: { onChanged: () => void }) {
         runs_to: draft.runs_to || null,
         max_per_day: Number(draft.max_per_day),
         channel_ids: draft.all_channels ? null : draft.channel_ids,
+        pill: draft.pill,
       })
     );
     setBusy(false);
@@ -275,6 +278,13 @@ export function PromosPanel({ onChanged }: { onChanged: () => void }) {
                               Test link
                             </a>
                           </div>
+                        </div>
+                        <div className="form-row">
+                          <label>Label on the players</label>
+                          <select value={draft.pill} onChange={(e) => set({ pill: e.target.value })}>
+                            <option value="recommends">We Are Radio recommends</option>
+                            <option value="advert">Advertisement (an ad for a business)</option>
+                          </select>
                         </div>
                         <div className="form-row">
                           <label>Button label</label>
