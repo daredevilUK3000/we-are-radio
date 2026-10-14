@@ -246,3 +246,30 @@
 .pw-error {
   color: var(--accent);
 }
+
+/* ---- Book of the Month (BookWizard.tsx): the airing rows and the warnings ---- */
+
+.bw-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.bw-row input[type="time"] {
+  width: auto;
+}
+
+.pw-warnings {
+  margin: 14px 0 0;
+  padding: 10px 14px 10px 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(217, 181, 108, 0.5);
+  background: rgba(217, 181, 108, 0.1);
+}
+
+.pw-warnings li + li {
+  margin-top: 6px;
+}

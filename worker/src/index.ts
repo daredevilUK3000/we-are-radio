@@ -33,6 +33,7 @@ import { schedulerDevRoutes } from "./routes/schedulerDev";
 import { runMinute } from "./lib/scheduler/cron";
 import { promoGoRoutes, promoStudioRoutes } from "./routes/promos";
 import { schedulerRoutes } from "./routes/scheduler";
+import { bookPublicRoutes, bookStudioRoutes } from "./routes/books";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -67,6 +68,8 @@ app.route("/api/likes", likePublicRoutes);
 app.route("/api/contact", contactRoutes);
 // "Say it on air" voice notes (/on-air) - public for the same reason.
 app.route("/api/on-air", onAirPublicRoutes);
+// Book of the Month (the landing card and /books) - public for the same reason.
+app.route("/api/books", bookPublicRoutes);
 // Local-only Scheduler test hooks (404 unless SCHED_DEV = "1").
 app.route("/dev/scheduler", schedulerDevRoutes);
 
@@ -106,6 +109,7 @@ studio.route("/likes", likeStudioRoutes);
 studio.route("/scheduler", schedulerRoutes);
 studio.route("/on-air", onAirStudioRoutes);
 studio.route("/promos", promoStudioRoutes);
+studio.route("/books", bookStudioRoutes);
 app.route("/studio/api", studio);
 
 // Streams audio straight out of R2 - not gated on Studio auth, since
@@ -115,7 +119,7 @@ app.route("/studio/api", studio);
 // approved songs are served (see routes/media.ts).
 app.route("/media", mediaRoutes);
 
-// House promos' short links (migrations/0026): count a click, redirect to the promo's link.
+// Short links for house promos (migrations/0026) and Books of the Month (0028): count a click, redirect.
 app.route("/go", promoGoRoutes);
 
 // Shareable pages (track/album/channel/mood) get the SPA shell with Open

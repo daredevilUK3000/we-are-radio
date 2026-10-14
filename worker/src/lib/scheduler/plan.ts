@@ -65,6 +65,15 @@ export interface BlockContent {
 
 const CAPSULE_ID = /^capsule-(.+)-\d+$/;
 
+/** Into a flexible-start block (Book of the Month): the fit's last song plays to its natural end instead of fading. */
+function unfaded(items: PlanItem[]): PlanItem[] {
+  const last = items[items.length - 1];
+  if (!last) return items;
+  const natural = last.startsAt + last.fileMs - last.offset;
+  if (last.endsAt >= natural) return items;
+  return [...items.slice(0, -1), { ...last, endsAt: natural, reasons: last.reasons.filter((r) => !r.startsWith("Faded")) }];
+}
+
 export class Planner {
   private loops = new Map<string, Promise<LoopResult>>();
   private loopsByCapsules = new Map<string, Promise<LoopResult>>();
@@ -263,7 +272,11 @@ export class Planner {
    * boundary when it would otherwise land in the last hour before one, so a
    * version never ends in the middle of a fit.
    */
-  async build(fromMs: number, toMs: number, opts: { avoidFirst?: string | null } = {}): Promise<{ items: PlanItem[]; toMs: number }> {
+  async build(
+    fromMs: number,
+    toMs: number,
+    opts: { avoidFirst?: string | null; before?: { startsAt: number; endsAt: number } | null } = {}
+  ): Promise<{ items: PlanItem[]; toMs: number }> {
     this.avoidFirst = opts.avoidFirst ?? null;
     const occs = occurrencesBetween(this.blocks, fromMs - 8 * DAY, toMs + 2 * DAY);
     // Autopilot channels: the time no block covers is split into time-of-day day-parts (dayparts.ts).
@@ -286,21 +299,40 @@ export class Planner {
 
     const out: PlanItem[] = [];
     let t = fromMs;
-    let afterFlex = false;
+    // This build starts inside a flexible-start block because the item before it (in the published log) ran
+    // into it: the block started late, so it still opens with its first item.
+    const first = occs.find((o) => o.startMs <= fromMs && fromMs < o.endMs);
+    let afterFlex = !!(first && first.block.start_mode === "flexible" && opts.before && opts.before.startsAt < first.startMs && opts.before.endsAt === fromMs);
     for (let guard = 0; t < toMs && guard < 200; guard++) {
       const occ = occs.find((o) => o.startMs <= t && t < o.endMs) ?? daypartAt(t);
       const next = occ ? occ.endMs : occs.find((o) => o.startMs > t)?.startMs ?? Infinity;
       // A flexible boundary (§2.3): this block ends flexibly AND the next one starts flexibly, right where it ends.
       const following = occ && !occ.cut && !occ.daypart ? occs.find((o) => o.startMs === occ.endMs) : undefined;
-      const flexEnd = !!(occ && following && occ.block.end_mode === "flexible" && following.block.start_mode === "flexible");
+      // The same with the channel's own music (Book of the Month): into a flexible-start block from the default or a
+      // day-part, the song on air plays out and the block starts after it; out of a flexible-end block with no block
+      // right after it, its last item plays to its natural end and the music carries on from there.
+      const nextBlock = !occ || occ.daypart ? occs.find((o) => o.startMs === next) : undefined;
+      const intoFlexStart = !!(nextBlock && nextBlock.block.start_mode === "flexible");
+      const outOfFlexEnd = !!(occ && !occ.cut && !occ.daypart && !following && occ.block.end_mode === "flexible");
+      const flexEnd = !!(occ && following && occ.block.end_mode === "flexible" && following.block.start_mode === "flexible") || outOfFlexEnd;
       // Starting late after a flexible hand-over: a hand-planned block's content starts from its first item.
       const layoutFrom = afterFlex && occ && t > occ.startMs && (occ.originMs ?? occ.startMs) === occ.startMs ? t : undefined;
-      afterFlex = flexEnd;
-      const items = occ
-        ? isHandPlanned(occ.block) && !occ.daypart
-          ? await this.handWindow(occ, t, out, flexEnd, layoutFrom)
-          : await this.blockWindow(occ, t, toMs, out, flexEnd)
-        : await this.defaultWindow(t, next, toMs, occs, out);
+      // Into a flexible start, the music is still fitted to land on time (dropping or adding a song), but the
+      // fit's last resort, fading the last song, becomes letting it finish.
+      const windowItems = (noFade: boolean) =>
+        occ
+          ? isHandPlanned(occ.block) && !occ.daypart
+            ? this.handWindow(occ, t, out, flexEnd, layoutFrom)
+            : this.blockWindow(occ, t, toMs, out, flexEnd, noFade)
+          : this.defaultWindow(t, next, toMs, occs, out, noFade);
+      let items = await windowItems(intoFlexStart);
+      let lateStart = intoFlexStart;
+      // A song so long it would play past the whole flexible-start block: that block starts on time after all.
+      if (intoFlexStart && nextBlock && items.length && items[items.length - 1].endsAt >= nextBlock.endMs) {
+        lateStart = false;
+        items = await windowItems(false);
+      }
+      afterFlex = flexEnd || lateStart;
       if (items.length === 0) {
         throw new PlanError(`Nothing to play from ${parisHHMM(t)}`);
       }
@@ -317,7 +349,7 @@ export class Planner {
   }
 
   /** A block's items from `t` (its start, or later when resuming) up to its end - or past `limit` if that comes first. */
-  private async blockWindow(occ: Occurrence, t: number, limit: number, before: PlanItem[], flexEnd = false): Promise<PlanItem[]> {
+  private async blockWindow(occ: Occurrence, t: number, limit: number, before: PlanItem[], flexEnd = false, noFade = false): Promise<PlanItem[]> {
     const content = await this.contentFor(occ);
     const reasons = [occ.daypart ? daypartReason(occ) : blockReason(occ)];
     const seq = content.items
@@ -336,7 +368,9 @@ export class Planner {
     // Laid out from the block's start, deterministically, so resuming part-way lands where the published log is.
     // After a higher layer cut into it, that's still the occurrence's own start (originMs, §2.2).
     const origin = occ.originMs ?? occ.startMs;
-    const recent = this.recentMap(before.filter((i) => i.startsAt >= origin - REPEAT_WINDOW_MS));
+    // Only what aired before the origin: resuming part-way, `before` also holds this layout's own earlier
+    // items, which would otherwise count as heard and (with a small pool) skip every song.
+    const recent = this.recentMap(before.filter((i) => i.startsAt >= origin - REPEAT_WINDOW_MS && i.startsAt < origin));
     const emitEnd = Math.min(occ.endMs, limit);
     const all: PlanItem[] = [];
     let cursor = origin;
@@ -381,11 +415,12 @@ export class Planner {
     // Flexible into flexible: the last item that starts before the boundary plays to its natural end, and the next block starts after it.
     if (flexEnd) return items;
     const endLabel = parisHHMM(occ.endMs);
-    return fitToWindow(items, t, occ.endMs, content.pool, this.recentMap([...before, ...all.slice(0, from)]), {
+    const fitted = fitToWindow(items, t, occ.endMs, content.pool, this.recentMap([...before, ...all.slice(0, from)]), {
       dropped: `Dropped so the ${occ.block.name} block ends on time at ${endLabel}`,
       added: (gap) => `Added to fill ${mmss(gap)} at the end of the ${occ.block.name} block`,
       trimmed: (ms) => `Faded ${mmss(ms)} early so ${endLabel} starts on time`,
     }).items;
+    return noFade ? unfaded(fitted) : fitted;
   }
 
   // ------------------------------------------------------------ house promos (lib/promos.ts)
@@ -679,7 +714,7 @@ export class Planner {
   }
 
   /** The channel default from `t` until `windowEnd` (the next block start, or open-ended), or past `limit`. */
-  private async defaultWindow(t: number, windowEnd: number, limit: number, occs: Occurrence[], before: PlanItem[]): Promise<PlanItem[]> {
+  private async defaultWindow(t: number, windowEnd: number, limit: number, occs: Occurrence[], before: PlanItem[], noFade = false): Promise<PlanItem[]> {
     // A stretch after a block is re-anchored at the block's end; otherwise it's the exact old loop.
     const prev = [...occs].reverse().find((o) => o.endMs <= t);
     const emitEnd = Math.min(windowEnd, limit);
@@ -744,11 +779,12 @@ export class Planner {
     const nextOcc = occs.find((o) => o.startMs === windowEnd);
     const name = nextOcc?.block.name ?? "the next block";
     const at = parisHHMM(windowEnd);
-    return fitToWindow(items, t, windowEnd, await this.defaultPool(stationDate(t)), this.recentMap(before), {
+    const fitted = fitToWindow(items, t, windowEnd, await this.defaultPool(stationDate(t)), this.recentMap(before), {
       dropped: `Dropped so the ${name} block starts on time at ${at}`,
       added: (gap) => `Added to fill ${mmss(gap)} before the ${name} block at ${at}`,
       trimmed: (ms) => `Faded ${mmss(ms)} early so the ${name} block starts on time at ${at}`,
     }).items;
+    return noFade ? unfaded(fitted) : fitted;
   }
 
   /**

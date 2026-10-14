@@ -29,6 +29,8 @@ export interface ChannelNow {
   good?: { slug: string | null } | null;
   /** A house promo on air (migrations/0026): its title and short link (for the QR code). */
   promo?: { title: string; pill?: string; link_label: string; short_url: string; cover_url: string | null } | null;
+  /** A Book of the Month on air (migrations/0028): buy_url is its short link (for the QR code). */
+  book?: { title: string; author: string; cover_url: string | null; buy_url: string | null; buy_label: string; slug: string } | null;
   block: { name: string; description: string; starts_at: number; ends_at: number } | null;
   next_block: { name: string; starts_at: number; ends_at?: number } | null;
   /** When this answer arrived (ms), so progress can advance locally between polls. */

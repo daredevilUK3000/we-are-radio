@@ -9,7 +9,7 @@ import { useActiveChannel } from "../context/ActiveChannelContext";
 import { OnAirSheet, SayItOnAirButton } from "./onair/OnAirSheet";
 import { ListenerVoicePill, voiceLines } from "./onair/voice";
 import { GOOD_ON_AIR_SUB, GoodOnAirPill, GoodOnAirTitle, isGood } from "./good/GoodOnAir";
-import { PromoButton, PromoPill, promoOf } from "./promo/PromoOnAir";
+import { PromoButton, PromoByline, PromoPill, promoOf } from "./promo/PromoOnAir";
 import { BackToLivePill, StartOverButton } from "./PlayerRewind";
 import { ComingUpAt } from "./ComingUpAt";
 import { JustPlayed, useJustPlayed } from "./JustPlayed";
@@ -237,6 +237,7 @@ export function NowPlayingExpanded({
                 <div className="np-meta afg-onair-sub">{GOOD_ON_AIR_SUB}</div>
               ) : promo ? (
                 <div className="promo-onair">
+                  <PromoByline promo={promo} />
                   <PromoButton promo={promo} source="player" />
                 </div>
               ) : (

@@ -278,6 +278,11 @@ td {
   --good-soft: rgba(47, 194, 143, 0.14);
   --good-line: rgba(47, 194, 143, 0.45);
   --good-ink: #06231a;
+  /* Book of the Month: the Timeline's gold for its blocks, apart from the promo amber and the Top 3 gold. */
+  --book: #d9b56c;
+  --book-soft: rgba(217, 181, 108, 0.13);
+  --book-line: rgba(217, 181, 108, 0.45);
+  --book-ink: #1f1606;
   --font-display: "Oswald", -apple-system, sans-serif;
   --font-body: "Work Sans", -apple-system, sans-serif;
   background: var(--bg);

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { mediaUrl, publicApi } from "../../api/client";
 import { LikeButton, useLikes } from "./LikeButton";
-import { PromoButton, PromoPill, type PromoOnAirInfo } from "./promo/PromoOnAir";
+import { bookAsPromo, PromoButton, PromoPill, type PromoOnAirInfo } from "./promo/PromoOnAir";
 import "./playerExtras.css";
 
 /**
@@ -14,8 +14,9 @@ import "./playerExtras.css";
  */
 
 type Played = { track_id: string; title: string; artist: string | null; artwork_url: string | null; aired_at: number };
-/** The songs, carrying the last house promo aired (if any) so it stays listed with its button. */
-type PlayedList = Played[] & { lastPromo?: (PromoOnAirInfo & { aired_at: number }) | null };
+type Extra = PromoOnAirInfo & { aired_at: number };
+/** The songs, carrying the last house promo and Book of the Month aired (if any) so they stay listed with their buttons. */
+type PlayedList = Played[] & { lastPromo?: Extra | null; lastBook?: Extra | null };
 
 const SHOWN = 5;
 const MORE = 10;
@@ -36,7 +37,18 @@ export function useJustPlayed(channelSlug: string, nowPlayingId: string | null |
     let live = true;
     publicApi
       .recentlyPlayed(channelSlug, MORE)
-      .then((r) => live && setItems(r.available ? Object.assign(r.items, { lastPromo: r.last_promo ?? null }) : []))
+      .then(
+        (r) =>
+          live &&
+          setItems(
+            r.available
+              ? Object.assign(r.items, {
+                  lastPromo: r.last_promo ?? null,
+                  lastBook: r.last_book ? { ...bookAsPromo(r.last_book)!, aired_at: r.last_book.aired_at } : null,
+                })
+              : []
+          )
+      )
       .catch(() => live && setItems([]));
     return () => {
       live = false;
@@ -56,31 +68,32 @@ export function JustPlayed({ items, className = "" }: { items: PlayedList; class
   }, []);
   if (items.length === 0) return null;
   const shown = items.slice(0, more ? MORE : SHOWN);
-  // The last promo, in its place among the songs shown (only the last one, never a history of them).
-  const promo = items.lastPromo && shown.length && items.lastPromo.aired_at >= shown[shown.length - 1].aired_at ? items.lastPromo : null;
-  const promoAt = promo ? shown.findIndex((i) => i.aired_at <= promo.aired_at) : -1;
-  const promoRow = promo && (
-    <li key="promo" className="jp-row jp-promo-row">
+  // The last promo and the last Book of the Month, each in its place among the songs shown (only the last one, never a history of them).
+  const placed = (x: Extra | null | undefined) => (x && shown.length && x.aired_at >= shown[shown.length - 1].aired_at ? x : null);
+  const extras = [placed(items.lastPromo), placed(items.lastBook)].filter((x): x is Extra => !!x).sort((a, b) => b.aired_at - a.aired_at);
+  const extraRow = (x: Extra) => (
+    <li key={x.kind ?? "promo"} className="jp-row jp-promo-row">
       <span className="jp-promo-text">
-        {promo.cover_url ? <img className="jp-art" src={mediaUrl(promo.cover_url)} alt="" loading="lazy" /> : <span className="jp-art jp-art-promo" />}
+        {x.cover_url ? <img className="jp-art" src={mediaUrl(x.cover_url)} alt="" loading="lazy" /> : <span className={`jp-art ${x.kind === "book" ? "jp-art-book" : "jp-art-promo"}`} />}
         <span className="jp-text">
-          <span className="jp-title">{promo.title}</span>
+          <span className="jp-title">{x.title}</span>
           <span className="jp-artist">
-            <PromoPill promo={promo} small />
+            <PromoPill promo={x} small />
           </span>
         </span>
-        <span className="jp-when">{when(promo.aired_at, nowSec)}</span>
+        <span className="jp-when">{when(x.aired_at, nowSec)}</span>
       </span>
-      <PromoButton promo={promo} source="jp" />
+      <PromoButton promo={x} source="jp" />
     </li>
   );
+  const extrasAt = (n: number) => extras.filter((x) => shown.findIndex((i) => i.aired_at <= x.aired_at) === n).map(extraRow);
 
   return (
     <section className={`jp ${className}`} aria-label="Just played">
       <div className="jp-head">Just played</div>
       <ul className="jp-list">
         {shown.map((i, n) => [
-          n === promoAt ? promoRow : null,
+          ...extrasAt(n),
           <li key={i.track_id} className="jp-row">
             <Link to={`/track/${i.track_id}`} className="jp-link">
               {i.artwork_url ? <img className="jp-art" src={mediaUrl(i.artwork_url)} alt="" loading="lazy" /> : <span className="jp-art jp-art-empty" />}

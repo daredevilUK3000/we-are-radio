@@ -1568,6 +1568,12 @@ html.tv-mode body {
 }
 
 /* The QR code sits to the right of the title, so the progress bar and controls keep their place. */
+/* A Book of the Month (migrations/0028): the same, in the gold of its blocks on the Timeline. */
+.tv-promo-pill.is-book {
+  background: #d9b56c;
+  color: #1f1606;
+}
+
 .tv-np-details.has-promo {
   position: relative;
   padding-right: 360px;

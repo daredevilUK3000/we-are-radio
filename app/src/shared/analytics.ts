@@ -139,6 +139,11 @@ export function trackGoodPreview(adId: string) {
   post("/afg", { id: adId });
 }
 
+/** A Book of the Month segment was played on demand (the landing card or /books). Its own event, never a station play. */
+export function trackBookPreview(bookId: string, source: "page" | "books") {
+  post("/book", { id: bookId, source });
+}
+
 function trackFirstPlay() {
   if (firstTime("first_play")) post("/site", { type: "first_play", session_id: sessionId() });
 }

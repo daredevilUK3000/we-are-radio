@@ -19,15 +19,41 @@ export interface PromoOnAirInfo {
   link_label: string;
   short_url: string;
   cover_url: string | null;
+  /** A Book of the Month (now_playing.book, migrations/0028): shown as a promo is, in its own gold, with its author. */
+  kind?: "book";
+  author?: string;
 }
 
 export const PROMO_PILL_TEXT = "We Are Radio recommends";
+export const BOOK_PILL_TEXT = "Book of the Month";
 export const pillText = (promo: { pill?: string } | null | undefined) => promo?.pill || PROMO_PILL_TEXT;
 
-export const promoOf = (item: any): PromoOnAirInfo | null => (item?.promo?.short_url ? (item.promo as PromoOnAirInfo) : null);
+/** now_playing.book in a promo's shape. A book with no shop link still gets its label, just no button. */
+export const bookAsPromo = (book: any): PromoOnAirInfo | null =>
+  book?.title
+    ? {
+        kind: "book",
+        title: book.title,
+        author: book.author,
+        pill: BOOK_PILL_TEXT,
+        link_url: book.buy_url ?? "",
+        link_label: book.buy_label || "Get the book",
+        short_url: book.buy_url ?? "",
+        cover_url: book.cover_url ?? null,
+      }
+    : null;
 
-export function PromoPill({ promo, small = false }: { promo: { pill?: string } | null | undefined; small?: boolean }) {
-  return <span className={small ? "promo-pill promo-pill-small" : "promo-pill"}>{pillText(promo)}</span>;
+export const promoOf = (item: any): PromoOnAirInfo | null => (item?.promo?.short_url ? (item.promo as PromoOnAirInfo) : bookAsPromo(item?.book));
+
+const bookClass = (promo: { kind?: string } | null | undefined) => (promo?.kind === "book" ? " is-book" : "");
+
+export function PromoPill({ promo, small = false }: { promo: { pill?: string; kind?: string } | null | undefined; small?: boolean }) {
+  return <span className={`${small ? "promo-pill promo-pill-small" : "promo-pill"}${bookClass(promo)}`}>{pillText(promo)}</span>;
+}
+
+/** A book's author, under its title in the expanded player and on Listen. */
+export function PromoByline({ promo }: { promo: PromoOnAirInfo }) {
+  return promo.author ? <span className="promo-byline">by {promo.author}</span> : null;
 }
 
 /** Where the click came from, for the counts in Studio (the short link's ?s=). */
@@ -43,10 +69,10 @@ export const promoHref = (promo: PromoOnAirInfo, source: PromoClickSource) => `$
  */
 export function PromoButton({ promo, source, compact = false, className = "" }: { promo: PromoOnAirInfo; source: PromoClickSource; compact?: boolean; className?: string }) {
   const online = useOnline();
-  if (!online) return null;
+  if (!online || !promo.short_url) return null;
   return (
     <a
-      className={`promo-btn${compact ? " promo-btn-compact" : ""} ${className}`}
+      className={`promo-btn${compact ? " promo-btn-compact" : ""}${bookClass(promo)} ${className}`}
       href={promoHref(promo, source)}
       target="_blank"
       rel="noopener"

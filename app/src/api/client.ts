@@ -59,6 +59,29 @@ export interface GoodAd {
 }
 
 
+/** A Book of the Month, as /api/books returns it (migrations/0028). buy_url is the short link (/go/<slug>). */
+export interface PublicBook {
+  id: string;
+  month: string;
+  title: string;
+  author: string;
+  blurb: string;
+  cover_url: string | null;
+  buy_url: string | null;
+  buy_label: string;
+  slug: string;
+  /** The segment, for Listen now (null if its audio is switched off). */
+  audio_url: string | null;
+  duration_seconds: number | null;
+}
+
+/** A book's next airing in the published schedule. */
+export interface BookAiring {
+  starts_at: number;
+  channel_name: string;
+  channel_slug: string;
+}
+
 export const publicApi = {
   channels: () => request<{ channels: any[] }>(`${API_BASE}/channels`),
   channel: (slug: string) => request<{ channel: any }>(`${API_BASE}/channels/${slug}`),
@@ -81,6 +104,10 @@ export const publicApi = {
   featuredAlbum: () => request<{ album: any | null; tracks: any[] }>(`${API_BASE}/featured-album`),
   /** Advertising For Good: the ads on the site, in display order (migrations/0022). */
   good: () => request<{ ads: GoodAd[]; cause_enabled: boolean }>(`${API_BASE}/good`),
+  /** Book of the Month: this month's book (only once its airings are published) for the landing card. */
+  currentBook: () => request<{ book: (PublicBook & { next_airing: BookAiring | null }) | null; more: boolean }>(`${API_BASE}/books/current`),
+  /** /books: the current book and every past month's, newest first. */
+  books: () => request<{ books: PublicBook[]; current_id: string | null; next_airing: BookAiring | null }>(`${API_BASE}/books`),
   nowPlaying: (channel = "kizzi-radio") =>
     request<any>(`${API_BASE}/now-playing?channel=${encodeURIComponent(channel)}`),
   /** The Scheduler's live log version (0 for channels still on the old playback). Cheap enough to poll every 10 s. */
@@ -93,6 +120,8 @@ export const publicApi = {
       items: { track_id: string; title: string; artist: string | null; artwork_url: string | null; aired_at: number }[];
       /** The last house promo aired on the channel (migrations/0026), with its link. */
       last_promo?: { title: string; pill?: string; link_url: string; link_label: string; short_url: string; cover_url: string | null; aired_at: number };
+      /** The last Book of the Month segment aired on the channel (migrations/0028), with its link. */
+      last_book?: { title: string; author: string; cover_url: string | null; buy_url: string | null; buy_label: string; slug: string; aired_at: number };
     }>(
       `${API_BASE}/recently-played?channel=${encodeURIComponent(channel)}&limit=${limit}`
     ),
@@ -427,6 +456,27 @@ export const studioApi = {
     request<{ ok: true }>(`${STUDIO_BASE}/promos/${id}/active`, { method: "PUT", body: JSON.stringify({ active }) }),
   setPromoSettings: (promos_per_hour: number) =>
     request<{ ok: true }>(`${STUDIO_BASE}/promos/settings`, { method: "PUT", body: JSON.stringify({ promos_per_hour }) }),
+  // Book of the Month (migrations/0028): the Audio page's tab and its form.
+  books: () =>
+    request<{
+      books: any[];
+      channels: { id: string; name: string; slug: string }[];
+      features: { id: string; title: string; duration_seconds: number | null; audio_url: string; status: string }[];
+      jingle_asset_id: string | null;
+      default_rows: { days_mask: number; start_min: number }[];
+      current_month: string;
+    }>(`${STUDIO_BASE}/books`),
+  createBook: (data: Record<string, unknown>) => request<{ ok: true; id: string }>(`${STUDIO_BASE}/books`, { method: "POST", body: JSON.stringify(data) }),
+  saveBook: (id: string, data: Record<string, unknown>) => request<{ ok: true; id: string }>(`${STUDIO_BASE}/books/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  /** "Create draft airings" (or with dry: what it would write, and the warnings). Working copy only: nothing airs until published. */
+  saveBookAirings: (id: string, data: Record<string, unknown>) =>
+    request<{ ok: true; dry?: boolean; length_min: number; blocks: number; rows: string[]; channels: string[]; warnings: string[] }>(`${STUDIO_BASE}/books/${id}/airings`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  setBookArchived: (id: string, archived: boolean) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/books/${id}/archived`, { method: "PUT", body: JSON.stringify({ archived }) }),
+  deleteBook: (id: string, confirm = false) => request<{ ok: true }>(`${STUDIO_BASE}/books/${id}${confirm ? "?confirm=1" : ""}`, { method: "DELETE" }),
   updateGoodAd: (id: string, data: { afg?: boolean; title?: string; afg_published?: boolean }) =>
     request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/afg`, { method: "PATCH", body: JSON.stringify(data) }),
   featureGoodAd: (id: string) => request<{ ok: true }>(`${STUDIO_BASE}/audio-assets/${id}/afg/feature`, { method: "POST" }),

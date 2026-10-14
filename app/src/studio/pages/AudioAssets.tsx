@@ -7,6 +7,7 @@ import { MOOD_OPTIONS } from "../lib/presets";
 import { LINK_KINDS } from "./RecordLink";
 import { GoodAdsPanel } from "../components/GoodAdsPanel";
 import { PromosPanel } from "../components/PromosPanel";
+import { BooksPanel } from "../components/BooksPanel";
 
 // The Audio library is split in two so a jingle is never lost among the
 // spoken material: each type belongs to exactly one section, so anything
@@ -68,6 +69,8 @@ export function AudioAssets() {
   const goodTab = tabParam === "good";
   // House promos: their own tab too (components/PromosPanel.tsx).
   const promosTab = tabParam === "promos";
+  // Book of the Month: its own tab (components/BooksPanel.tsx).
+  const booksTab = tabParam === "books";
 
   const [assets, setAssets] = useState<any[]>([]);
   const [voiceAssets, setVoiceAssets] = useState<any[]>([]);
@@ -114,9 +117,9 @@ export function AudioAssets() {
       (!query || a.title.toLowerCase().includes(query) || tagsFor(a).some((t) => t.toLowerCase().includes(query)))
   );
 
-  const switchTab = (key: TabKey | "good" | "promos") => {
+  const switchTab = (key: TabKey | "good" | "promos" | "books") => {
     setSearchParams(key === "jingles" ? {} : { tab: key });
-    if (key === "good" || key === "promos") return;
+    if (key === "good" || key === "promos" || key === "books") return;
     setSearch("");
     setPlayingId(null);
     setEditingTagsId(null);
@@ -144,6 +147,10 @@ export function AudioAssets() {
             <Link to="/studio/promos/new" className="btn primary">
               + New promo (step by step)
             </Link>
+          ) : booksTab ? (
+            <Link to="/studio/books/new" className="btn primary">
+              + New Book of the Month
+            </Link>
           ) : (
           <Link to={`/studio/audio/upload?kind=${tab}`} className={tab === "spoken" ? "btn" : "btn primary"}>
             {current.upload}
@@ -154,7 +161,7 @@ export function AudioAssets() {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         {(Object.keys(TABS) as TabKey[]).map((key) => (
-          <button key={key} className={`chip${tab === key && !goodTab && !promosTab ? " selected" : ""}`} onClick={() => switchTab(key)}>
+          <button key={key} className={`chip${tab === key && !goodTab && !promosTab && !booksTab ? " selected" : ""}`} onClick={() => switchTab(key)}>
             {TABS[key].label}
             {loaded ? ` (${countFor(key)})` : ""}
           </button>
@@ -165,12 +172,17 @@ export function AudioAssets() {
         <button className={`chip${promosTab ? " selected" : ""}`} onClick={() => switchTab("promos")}>
           Promos{loaded ? ` (${assets.filter((a) => a.type === "promo").length})` : ""}
         </button>
+        <button className={`chip${booksTab ? " selected" : ""}`} onClick={() => switchTab("books")}>
+          Book of the Month
+        </button>
       </div>
 
       {goodTab ? (
         <GoodAdsPanel jingles={assets} onChanged={load} />
       ) : promosTab ? (
         <PromosPanel onChanged={load} />
+      ) : booksTab ? (
+        <BooksPanel />
       ) : (
       <>
       <p style={{ color: "var(--text-dim)" }}>{current.blurb}</p>

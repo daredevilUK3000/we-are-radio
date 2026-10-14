@@ -107,3 +107,35 @@
 .jp-art-promo {
   background: linear-gradient(135deg, rgba(240, 161, 42, 0.4), rgba(240, 161, 42, 0.06));
 }
+
+/* ---- Book of the Month (now_playing.book): the same pieces in its own gold (--book in global.css). ---- */
+
+.promo-pill.is-book {
+  background: #d9b56c;
+  color: #1f1606;
+}
+
+.promo-btn.is-book {
+  border-color: #d9b56c;
+  background: rgba(217, 181, 108, 0.12);
+  color: #e6cb92;
+}
+
+.promo-btn.is-book:hover,
+.promo-btn.is-book:focus-visible {
+  background: #d9b56c;
+  color: #1f1606;
+}
+
+.promo-btn.is-book:focus-visible {
+  outline-color: #e6cb92;
+}
+
+.promo-byline {
+  color: #d9b56c;
+  font-weight: 600;
+}
+
+.jp-art-book {
+  background: linear-gradient(135deg, rgba(217, 181, 108, 0.4), rgba(217, 181, 108, 0.06));
+}

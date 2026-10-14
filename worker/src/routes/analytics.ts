@@ -226,6 +226,22 @@ analyticsPublicRoutes.post("/afg", async (c) => {
   return c.json({ logged: 1 });
 });
 
+// A Book of the Month segment played on demand from the landing card or /books
+// (migrations/0028). Never a station play, as the AFG previews above.
+analyticsPublicRoutes.post("/book", async (c) => {
+  const body = await c.req.json<{ id?: string; source?: string }>().catch(() => ({}) as { id?: string; source?: string });
+  if (!ID_PATTERN.test(String(body.id))) return c.json({ logged: 0 });
+  const source = body.source === "books" ? "books" : "page";
+  if (isBot(c.req.header("user-agent"))) return c.json({ logged: 0 });
+  if (tooMany(c.req.header("cf-connecting-ip") ?? "unknown", 1)) return c.json({ error: "slow down" }, 429);
+  const book = await c.env.DB.prepare("SELECT id FROM books WHERE id = ?").bind(body.id).first();
+  if (!book) return c.json({ logged: 0 });
+  await c.env.DB.prepare("INSERT INTO book_preview_events (book_id, source, timestamp) VALUES (?, ?, ?)")
+    .bind(body.id, source, new Date().toISOString())
+    .run();
+  return c.json({ logged: 1 });
+});
+
 analyticsPublicRoutes.post("/site", async (c) => {
   const body = await c.req
     .json<{ type?: string; session_id?: string; source?: string }>()

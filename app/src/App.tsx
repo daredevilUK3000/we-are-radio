@@ -27,6 +27,7 @@ import { Privacy } from "./listener/pages/legal/Privacy";
 import { OnAir, OnAirListenBack, OnAirManage, OnAirShare } from "./listener/pages/OnAir";
 import { SiteFooter } from "./listener/components/SiteFooter";
 import { Good } from "./listener/pages/Good";
+import { Books } from "./listener/pages/Books";
 import { GoodNavPill } from "./listener/components/good/GoodSection";
 import { rememberPage } from "./shared/navHistory";
 import { NowPlayingBar } from "./listener/components/NowPlayingBar";
@@ -54,6 +55,7 @@ import { ProgrammeTitles } from "./studio/pages/ProgrammeTitles";
 import { TimeCapsules } from "./studio/pages/TimeCapsules";
 import { UploadAudioAsset } from "./studio/pages/UploadAudioAsset";
 import { PromoWizard } from "./studio/pages/PromoWizard";
+import { BookWizard } from "./studio/pages/BookWizard";
 import { Guide } from "./studio/pages/Guide";
 import { Analytics } from "./studio/pages/Analytics";
 import { Albums as StudioAlbums } from "./studio/pages/Albums";
@@ -225,6 +227,7 @@ function StudioApp() {
         <Route path="audio" element={<AudioAssets />} />
         <Route path="audio/upload" element={<UploadAudioAsset />} />
         <Route path="promos/new" element={<PromoWizard />} />
+        <Route path="books/new" element={<BookWizard />} />
         <Route path="channels" element={<Channels />} />
         <Route path="podcasts" element={<PodcastEpisodes />} />
         <Route path="podcast-import" element={<PodcastImporter />} />
@@ -295,6 +298,8 @@ export default function App() {
                     <Route path="privacy" element={<Privacy />} />
                     <Route path="good" element={<Good />} />
                     <Route path="good/:slug" element={<Good />} />
+                    <Route path="books" element={<Books />} />
+                    <Route path="books/:slug" element={<Books />} />
                   </Routes>
                 </ListenerLayout>
               </ActiveChannelProvider>

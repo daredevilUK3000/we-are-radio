@@ -3,6 +3,7 @@ import type { Env } from "../lib/types";
 import { nowIso } from "../lib/id";
 import { parseChannelIds, PROMO_PILLS, PROMOS_PER_HOUR_MAX, promosPerHour, SHORT_LINK_BASE, type PromoRow } from "../lib/promos";
 import { DAY, parisDate, parisWallClockToUtcMs } from "../lib/scheduler/time";
+import { slugInUse } from "../lib/books";
 
 /**
  * House promos (handoff_house_promos.md, migrations/0026).
@@ -17,6 +18,8 @@ export const promoGoRoutes = new Hono<{ Bindings: Env }>();
 
 /** ?s= on the short link: where the click came from. Anything else (typed, said on air) is "direct". */
 const CLICK_SOURCES: Record<string, string> = { player: "player", jp: "just_played", tv: "tv" };
+/** A Book of the Month (migrations/0028) is also linked from the landing card and /books. */
+const BOOK_CLICK_SOURCES: Record<string, string> = { ...CLICK_SOURCES, pg: "page", bk: "books" };
 const BOT_PATTERN = /bot|crawl|spider|headless|lighthouse|preview|monitor|facebookexternalhit|slurp/i;
 
 // A best-effort brake per address, held only in memory (as routes/analytics.ts): bursts, not a quota.
@@ -41,20 +44,23 @@ promoGoRoutes.get("/:slug", async (c) => {
     .bind(slug)
     .first<{ audio_asset_id: string; link_url: string }>();
   const noStore = { "Cache-Control": "no-store" };
+  // Not a promo: a Book of the Month's short link (any status: an archived book's link keeps working).
+  const book = row
+    ? null
+    : await c.env.DB.prepare("SELECT id, buy_url FROM books WHERE slug = ? AND buy_url IS NOT NULL").bind(slug).first<{ id: string; buy_url: string }>();
+  const target = row?.link_url ?? book?.buy_url;
   // Unknown or switched off: the home page, never an error.
-  if (!row || !/^https:\/\//i.test(row.link_url)) return c.redirect("/", 302);
+  if (!target || !/^https:\/\//i.test(target)) return c.redirect("/", 302);
 
   const ua = c.req.header("user-agent");
   if (ua && !BOT_PATTERN.test(ua) && !tooMany(c.req.header("cf-connecting-ip") ?? "unknown")) {
-    const source = CLICK_SOURCES[c.req.query("s") ?? ""] ?? "direct";
-    c.executionCtx.waitUntil(
-      c.env.DB.prepare("INSERT INTO promo_clicks (audio_asset_id, source, timestamp) VALUES (?,?,?)")
-        .bind(row.audio_asset_id, source, nowIso())
-        .run()
-        .catch(() => {})
-    );
+    const s = c.req.query("s") ?? "";
+    const insert = row
+      ? c.env.DB.prepare("INSERT INTO promo_clicks (audio_asset_id, source, timestamp) VALUES (?,?,?)").bind(row.audio_asset_id, CLICK_SOURCES[s] ?? "direct", nowIso())
+      : c.env.DB.prepare("INSERT INTO book_clicks (book_id, source, timestamp) VALUES (?,?,?)").bind(book!.id, BOOK_CLICK_SOURCES[s] ?? "direct", nowIso());
+    c.executionCtx.waitUntil(insert.run().catch(() => {}));
   }
-  return new Response(null, { status: 302, headers: { Location: row.link_url, ...noStore } });
+  return new Response(null, { status: 302, headers: { Location: target, ...noStore } });
 });
 
 // ---------------------------------------------------------------- Studio
@@ -145,8 +151,9 @@ promoStudioRoutes.put("/:id", async (c) => {
   if (label.length > 30) return c.json({ error: "Keep the button label to 30 characters." }, 400);
   const slug = String(b.slug ?? "").trim().toLowerCase();
   if (!SLUG.test(slug)) return c.json({ error: "The short link needs lower-case letters, numbers and hyphens, e.g. wedding." }, 400);
-  const taken = await c.env.DB.prepare("SELECT 1 FROM promos WHERE slug = ? AND audio_asset_id != ?").bind(slug, id).first();
-  if (taken) return c.json({ error: `weareradio.app/go/${slug} is already used by another promo.` }, 409);
+  // Books of the Month share /go/<slug> (migrations/0028), so their slugs count too.
+  const taken = await slugInUse(c.env.DB, slug, { promoAssetId: id });
+  if (taken) return c.json({ error: `weareradio.app/go/${slug} is already used by another promo or a Book of the Month.` }, 409);
   const from = b.runs_from ? String(b.runs_from) : null;
   const to = b.runs_to ? String(b.runs_to) : null;
   if ((from && !DATE.test(from)) || (to && !DATE.test(to))) return c.json({ error: "Dates must be YYYY-MM-DD." }, 400);

@@ -134,7 +134,8 @@ export async function buildFromPlan(
       // What ends right where this build starts: the new plan mustn't open with it again.
       const before = basedOn ? await itemAt(env.DB, channel.id, opts.from - 1) : null;
       const avoidFirst = before && before.item.endsAt === opts.from ? contentKey(before.item) : null;
-      plan = await planner.build(opts.from, opts.to, { avoidFirst });
+      // ...and if it ran into a flexible-start block, that block started late (plan.ts build).
+      plan = await planner.build(opts.from, opts.to, { avoidFirst, before: before && before.item.endsAt === opts.from ? before.item : null });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // A channel with no programme or songs at all isn't failing: there's simply nothing to schedule.

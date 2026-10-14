@@ -4,6 +4,7 @@ import { findNeed, NEEDS, NEED_KEYS } from "../lib/needs";
 import { addDays, parseCapsuleFields, stationToday } from "../lib/capsules";
 import { enrichItems, loadPinnedJingles, loadStation } from "../lib/station";
 import { promoInfoFor } from "../lib/promos";
+import { bookInfoFor } from "../lib/books";
 import { nowPlayingFromLog, scheduleFromLog, schedState } from "../lib/scheduler/read";
 import { blocksAround, buildGuide } from "../lib/guide";
 import { icsForBlock } from "../lib/ics";
@@ -319,6 +320,8 @@ publicRoutes.get("/now-playing/all", async (c) => {
         good: item?.good ?? null,
         // A house promo on air (migrations/0026): the TV shows its title, cover and a QR code for the short link.
         promo: item?.promo ?? null,
+        // A Book of the Month on air (migrations/0028): the TV shows its cover, title and a QR code for the short link.
+        book: item?.book ?? null,
         block: blocks?.block ?? null,
         next_block: blocks?.next_block ?? null,
       };
@@ -428,7 +431,7 @@ publicRoutes.get("/recently-played", async (c) => {
   const channel = await liveChannel(c.env.DB, slug);
   if (!channel) return c.json({ error: "channel not found or not live" }, 404);
   const sched = await schedState(c.env.DB, channel.id).catch(() => null);
-  let body: { available: boolean; items: unknown[]; last_promo?: unknown };
+  let body: { available: boolean; items: unknown[]; last_promo?: unknown; last_book?: unknown };
   if (!sched?.enabled) {
     // Channels not on the Scheduler have no record of what aired: the players hide the section.
     body = { available: false, items: [] };
@@ -457,6 +460,16 @@ publicRoutes.get("/recently-played", async (c) => {
       .first<{ audio_asset_id: string; starts_at_ms: number }>()
       .catch(() => null);
     const promo = lastPromo ? (await promoInfoFor(c.env.DB, [lastPromo.audio_asset_id])).get(lastPromo.audio_asset_id) : undefined;
+    // Likewise the last Book of the Month segment (migrations/0028), so it stays listed with its button.
+    const lastBook = await c.env.DB.prepare(
+      `SELECT a.audio_asset_id, a.starts_at_ms FROM sched_aired a JOIN books b ON b.segment_asset_id = a.audio_asset_id
+       WHERE a.channel_id = ?1 AND a.track_id IS NULL AND a.starts_at_ms > ?2 AND a.starts_at_ms <= ?3
+       ORDER BY a.starts_at_ms DESC LIMIT 1`
+    )
+      .bind(channel.id, now - 3 * 60 * 60 * 1000, now)
+      .first<{ audio_asset_id: string; starts_at_ms: number }>()
+      .catch(() => null);
+    const book = lastBook ? (await bookInfoFor(c.env.DB, [lastBook.audio_asset_id])).get(lastBook.audio_asset_id) : undefined;
     body = {
       available: true,
       items: results.map((r) => ({
@@ -467,6 +480,7 @@ publicRoutes.get("/recently-played", async (c) => {
         aired_at: Math.round(r.aired_ms / 1000),
       })),
       ...(promo && lastPromo ? { last_promo: { ...promo, aired_at: Math.round(lastPromo.starts_at_ms / 1000) } } : {}),
+      ...(book && lastBook ? { last_book: { ...book, aired_at: Math.round(lastBook.starts_at_ms / 1000) } } : {}),
     };
   }
   const res = c.json(body, 200, { "Cache-Control": "public, max-age=30" });

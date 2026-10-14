@@ -13,6 +13,7 @@ import { Top3HeroButton, Top3HeroPill } from "../components/contest/Top3HeroPill
 import { Top3FeatureBand } from "../components/contest/Top3FeatureBand";
 import { GoodHeroLine, GoodSection } from "../components/good/GoodSection";
 import { MakersSection } from "../components/MakersSection";
+import { BookSection } from "../components/book/BookSection";
 import {
   FeaturedAlbumSection,
   PodcastShowcase,
@@ -183,6 +184,8 @@ export function Home() {
       </section>
 
       <GoodSection />
+
+      <BookSection />
 
       <RadioThatKnowsYou />
 

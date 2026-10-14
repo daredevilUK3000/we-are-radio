@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../lib/types";
 import { findNeed } from "../lib/needs";
-import { pageWithOg, absoluteMedia, defaultImage } from "../lib/og";
+import { pageWithOg, absoluteMedia, defaultImage, type OgTags } from "../lib/og";
 import { countryFlag, countryName } from "../lib/countries";
 
 /**
@@ -242,5 +242,33 @@ shareLinkRoutes.get("/good/:slug{[a-z0-9-]{1,80}}", async (c) => {
     description: "A short message that asks you to be kind, not to buy. Have a listen, and pass it on.",
     image: await goodImage(c),
     url: `${new URL(c.req.raw.url).origin}/good/${c.req.param("slug")}`,
+  });
+});
+
+// Book of the Month (migrations/0028): /books, and /books/<slug> scrolled to that book.
+const booksHomeTags = async (c: { env: Env; req: { raw: Request } }): Promise<OgTags> => {
+  const latest = await c.env.DB.prepare("SELECT cover_url FROM books WHERE status IN ('scheduled','archived') AND cover_url IS NOT NULL ORDER BY month DESC LIMIT 1")
+    .first<{ cover_url: string }>()
+    .catch(() => null);
+  return {
+    title: "Book of the Month · We Are Radio",
+    description: "Each month one of Kizzi Nkwocha's books, with a five-minute radio feature you can listen to any time.",
+    image: absoluteMedia(c.req.raw, latest?.cover_url) ?? defaultImage(c.req.raw),
+    url: `${new URL(c.req.raw.url).origin}/books`,
+  };
+};
+
+shareLinkRoutes.get("/books", async (c) => pageWithOg(c.env, c.req.raw, await booksHomeTags(c)));
+
+shareLinkRoutes.get("/books/:slug{[a-z0-9-]{1,40}}", async (c) => {
+  const book = await c.env.DB.prepare("SELECT title, author, blurb, cover_url FROM books WHERE slug = ? AND status IN ('scheduled','archived')")
+    .bind(c.req.param("slug"))
+    .first<{ title: string; author: string; blurb: string; cover_url: string | null }>();
+  if (!book) return pageWithOg(c.env, c.req.raw, await booksHomeTags(c));
+  return pageWithOg(c.env, c.req.raw, {
+    title: `${book.title} by ${book.author} · Book of the Month · We Are Radio`,
+    description: book.blurb || `Kizzi's Book of the Month: listen to the five-minute feature on ${book.title}.`,
+    image: absoluteMedia(c.req.raw, book.cover_url) ?? defaultImage(c.req.raw),
+    url: `${new URL(c.req.raw.url).origin}/books/${c.req.param("slug")}`,
   });
 });

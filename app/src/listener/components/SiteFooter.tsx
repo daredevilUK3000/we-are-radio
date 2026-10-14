@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { GoodFooterLink } from "./good/GoodSection";
+import { BookFooterLink } from "./book/BookSection";
 import { MakersFooter } from "./MakersSection";
 
 /** The footer on every listener page (ListenerLayout). The Studio has none. */
@@ -13,6 +14,7 @@ export function SiteFooter() {
         </div>
         <nav aria-label="Footer">
           <GoodFooterLink />
+          <BookFooterLink />
           <Link to="/schedule">Schedule</Link>
           <Link to="/on-air">Send a shout out</Link>
           <Link to="/contact">Contact</Link>

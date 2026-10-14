@@ -205,10 +205,20 @@ export function radioSessionInfo(data: any): MediaSessionInfo | null {
   const art = now?.artwork_url ? mediaUrl(now.artwork_url) : STATION_ARTWORK;
   // A house promo (now_playing.promo) shows its on-air title, labelled as on the players; its cover is the artwork.
   const promoTitle: string | undefined = !isSong && !now?.good ? now?.promo?.title : undefined;
+  // A Book of the Month (now_playing.book): the book's title, "Book of the Month · We Are Radio", its cover.
+  const bookTitle: string | undefined = !isSong && !now?.good && !promoTitle ? now?.book?.title : undefined;
   return {
-    title: promoTitle || (now?.label ?? station),
+    title: promoTitle || bookTitle || (now?.label ?? station),
     // An Advertising For Good ad shows as that on the lock screen, not as the station.
-    artist: isSong ? now?.artist || "Kizzi" : now?.good ? "Advertising For Good" : promoTitle ? now?.promo?.pill || "We Are Radio recommends" : station,
+    artist: isSong
+      ? now?.artist || "Kizzi"
+      : now?.good
+        ? "Advertising For Good"
+        : promoTitle
+          ? now?.promo?.pill || "We Are Radio recommends"
+          : bookTitle
+            ? "Book of the Month · We Are Radio"
+            : station,
     album: (isSong && now?.album_title) || station,
     artworkUrl: new URL(art, window.location.href).href,
   };

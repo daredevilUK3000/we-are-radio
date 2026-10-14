@@ -1,0 +1,225 @@
+/* Book of the Month (BookSection.tsx, /books). Its own gold (--book tokens in
+   global.css .listener-shell), the gold of its blocks on the Timeline: apart
+   from the AFG green, the promo amber and the Top 3 gold. Same card family as
+   Advertising For Good: radius, padding and eyebrow pill. */
+
+.botm-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: 44px;
+  align-items: start;
+  border-radius: 28px;
+  padding: 48px 56px;
+  background: radial-gradient(circle at 10% 10%, var(--book-soft), transparent 55%), var(--bg-raised);
+  border: 1px solid var(--book-line);
+}
+
+.botm-card.is-highlighted {
+  border-color: var(--book);
+  box-shadow: 0 0 0 2px var(--book-line);
+}
+
+.botm-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.botm-cover-blank {
+  background: linear-gradient(160deg, var(--book-line), var(--book-soft));
+}
+
+.botm-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: var(--book-soft);
+  border: 1px solid var(--book-line);
+  color: var(--book);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.botm-title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: clamp(2rem, 4.6vw, 3.2rem);
+  line-height: 1.04;
+  letter-spacing: -0.005em;
+  margin: 20px 0 8px;
+}
+
+h3.botm-title {
+  font-size: clamp(1.6rem, 3.4vw, 2.4rem);
+}
+
+.botm-author {
+  color: var(--book);
+  font-weight: 600;
+  font-size: 1.02rem;
+}
+
+.botm-blurb {
+  margin: 16px 0 0;
+  max-width: 560px;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.botm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.botm-listen,
+.botm-buy {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.botm-listen {
+  border: 0;
+  background: var(--book);
+  color: var(--book-ink);
+}
+
+.botm-listen-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* How far through the segment, along the bottom of the button. */
+.botm-listen-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--book-ink);
+  opacity: 0.45;
+}
+
+.botm-buy {
+  border: 1px solid var(--book-line);
+  background: transparent;
+  color: var(--book);
+}
+
+.botm-buy:hover {
+  border-color: var(--book);
+  background: var(--book-soft);
+}
+
+.botm-listen:focus-visible,
+.botm-buy:focus-visible,
+.botm-more:focus-visible {
+  outline: 2px solid var(--book);
+  outline-offset: 3px;
+}
+
+.botm-next {
+  margin: 18px 0 0;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+}
+
+.botm-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 10px;
+  color: var(--book);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.botm-more:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .botm-listen-progress {
+    transition: width 0.25s linear;
+  }
+}
+
+/* Phones: the cover above the text. */
+@media (max-width: 720px) {
+  .botm-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+    padding: 28px 22px;
+    border-radius: 22px;
+  }
+  .botm-cover {
+    width: min(200px, 60%);
+  }
+  .botm-listen,
+  .botm-buy {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+/* ---------------------------------------------------------------- /books */
+
+.books-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 30px 20px 60px;
+}
+
+.books-page h1 {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  margin: 0 0 10px;
+}
+
+.books-intro {
+  color: var(--text-dim);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  max-width: 640px;
+  margin: 0 0 30px;
+}
+
+.books-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 24px;
+}
+
+.books-past-heading {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1.4rem;
+  margin: 40px 0 16px;
+  color: var(--text-dim);
+}

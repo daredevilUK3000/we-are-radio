@@ -20,7 +20,7 @@ import { usePauseForRecording } from "../components/onair/recording";
 import { OnAirSheet, SayItOnAirButton } from "../components/onair/OnAirSheet";
 import { ListenerVoicePill, voiceLines } from "../components/onair/voice";
 import { GOOD_ON_AIR_SUB, GoodOnAirPill, GoodOnAirTitle, isGood } from "../components/good/GoodOnAir";
-import { PromoButton, PromoPill, promoOf } from "../components/promo/PromoOnAir";
+import { PromoButton, PromoByline, PromoPill, promoOf } from "../components/promo/PromoOnAir";
 import { fadeIn, useRewind } from "../lib/useRewind";
 import { BackToLivePill, StartOverButton } from "../components/PlayerRewind";
 import { ComingUpAt } from "../components/ComingUpAt";
@@ -419,6 +419,7 @@ export function Listen() {
           {!voice && isGood(now) && <div className="afg-onair-sub lp-voice-sub">{GOOD_ON_AIR_SUB}</div>}
           {!voice && !isGood(now) && promoOf(now) && (
             <div className="promo-onair">
+              <PromoByline promo={promoOf(now)!} />
               <PromoButton promo={promoOf(now)!} source="player" />
             </div>
           )}
