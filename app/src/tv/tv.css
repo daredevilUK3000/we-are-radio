@@ -20,6 +20,24 @@ html.tv-mode body {
   overflow: hidden;
 }
 
+/* The LG app's crash screen (TvRecovery in TvApp.tsx), drawn outside the scaled stage. */
+.tv-recovering {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #c9c7c1;
+  font-family: "Work Sans", -apple-system, sans-serif;
+  font-size: 2vw;
+}
+.tv-recovering img {
+  width: 24vw;
+  margin-bottom: 3vh;
+}
+.tv-recovering p {
+  margin: 0;
+}
+
 .tv {
   --tv-bg: #08080a;
   --tv-text: #f5f4f0;
@@ -61,6 +79,16 @@ html.tv-mode body {
 
 .tv :where(button):focus {
   outline: none; /* focus is drawn by .is-focused, exactly as designed */
+}
+
+/* The LG app (?shell=webos, src/tv/pointer.ts): the Magic Remote's pointer is part of the remote, so it shows. */
+html.tv-mode.tv-pointer,
+html.tv-mode.tv-pointer body {
+  cursor: default;
+}
+html.tv-pointer .tv button,
+html.tv-pointer .tv-slot {
+  cursor: pointer;
 }
 
 .tv-screen {

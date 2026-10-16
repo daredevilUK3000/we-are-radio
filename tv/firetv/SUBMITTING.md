@@ -37,7 +37,8 @@ The console shows the exact current sizes. At the time of writing:
 
 - Music and talk.
 - No user-generated content is **shown** in the app: shout-outs are moderated by Kizzi and only played as audio on air.
-- No ads, no purchases, no account.
+- **Advertising: yes.** Since 13 October 2026 the station's **audio** contains advertising: promos labelled "Advertisement" on screen (InvoiceHawk at the time of writing) and "We Are Radio recommends" (Kizzi's books), alongside Book of the Month and Advertising For Good messages. If a question asks whether the app contains ads, answer **Yes**. They're part of the radio programme: on screen they're a label and a QR code, and nothing opens on the TV. There are no ad banners, and no ad tracking.
+- No in-app purchases. No accounts or sign-in.
 
 ## 6. Live App Testing (optional, recommended)
 

@@ -14,6 +14,7 @@ import { publicApi } from "../../api/client";
 import { copyFor } from "../../listener/components/contest/phaseCopy";
 import { currentTimeBand } from "../../listener/lib/timeOfDay";
 import { countryFlag } from "../../shared/countries";
+import { hoverFocus } from "../pointer";
 
 /** Screen 1: Home (handoff_tv_firetv.md §A4). */
 
@@ -28,10 +29,10 @@ const VISIBLE_BEFORE_SHIFT = 3;
 const dur = (s?: number | null) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}` : "");
 
 function ChannelCard({ ch, now, onFocus, onPress }: { ch: TvChannel; now: ChannelNow | undefined; onFocus: () => void; onPress: () => void }) {
-  const { ref, focused } = useFocusable({ focusKey: `ch-${ch.slug}`, onEnterPress: onPress, onFocus: () => onFocus() });
+  const { ref, focused, focusSelf } = useFocusable({ focusKey: `ch-${ch.slug}`, onEnterPress: onPress, onFocus: () => onFocus() });
   const line = [now?.title, now?.artist].filter(Boolean).join(" · ");
   return (
-    <button ref={ref} type="button" tabIndex={-1} className={`tv-card${focused ? " is-focused" : ""}`} onClick={onPress}>
+    <button ref={ref} type="button" tabIndex={-1} className={`tv-card${focused ? " is-focused" : ""}`} onClick={onPress} onMouseMove={hoverFocus(focused, focusSelf)}>
       <ChannelStill slug={ch.slug} className="tv-card-img" />
       <span className="tv-card-scrim" />
       {focused && (
@@ -70,7 +71,7 @@ function MediaCard({
   onFocus: () => void;
   onPress: () => void;
 }) {
-  const { ref, focused } = useFocusable({ focusKey, onEnterPress: onPress, onFocus: () => onFocus() });
+  const { ref, focused, focusSelf } = useFocusable({ focusKey, onEnterPress: onPress, onFocus: () => onFocus() });
   // A picture that won't load becomes the card's plain coloured tile.
   const [broken, setBroken] = useState(false);
   if (broken) image = null;
@@ -81,6 +82,7 @@ function MediaCard({
       tabIndex={-1}
       className={`tv-card tv-media${image ? "" : ` tv-tile is-${tone ?? "plain"}`}${focused ? " is-focused" : ""}`}
       onClick={onPress}
+      onMouseMove={hoverFocus(focused, focusSelf)}
     >
       {image && <img className="tv-card-img" src={image} alt="" onError={() => setBroken(true)} />}
       {image && <span className="tv-card-scrim" />}

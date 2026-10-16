@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>We Are Radio</title>
+<style>
+  /* We Are Radio on LG TVs (handoff_lg_webos.md): the app's start page. It
+     checks We Are Radio can be reached, then hands the whole app over to the
+     TV app at weareradio.app/tv (a hosted web app, like the Fire TV app's
+     WebView). Without a connection it shows the offline screen below and
+     keeps trying. Plain ES5: it runs on the oldest supported TVs (webOS 4). */
+  html, body { margin: 0; height: 100%; background: #08080a; color: #f5f4f0; font-family: "Work Sans", Arial, sans-serif; overflow: hidden; }
+  .screen { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; text-align: center; padding: 5vh 5vw; box-sizing: border-box; }
+  #starting { background: #08080a url(splash.png) center / cover no-repeat; }
+  #offline, .is-offline #starting { display: none; }
+  .is-offline #offline { display: -webkit-flex; display: flex; }
+  #offline > * + * { margin-top: 4vh; }
+  img { width: 28vw; max-width: 520px; height: auto; }
+  h1 { margin: 0; font-family: Oswald, "Arial Narrow", Arial, sans-serif; font-weight: 600; font-size: 4.2vw; }
+  p { margin: 0; font-size: 2vw; color: #c9c7c1; max-width: 60vw; line-height: 1.4; }
+  button { margin-top: 6vh; font: 600 2.1vw "Work Sans", Arial, sans-serif; padding: 1.6vw 4vw; border-radius: 999px; border: none; background: #e11d2e; color: #fff; cursor: pointer; }
+  button:focus, button.is-focused { outline: none; background: #f5f4f0; color: #08080a; box-shadow: 0 0 0 0.5vw rgba(245, 244, 240, 0.25); }
+  .small { font-size: 1.4vw; color: #a9a7a1; }
+</style>
+</head>
+<body>
+<div class="screen" id="starting"></div>
+<main class="screen" id="offline">
+  <img src="logo.png" alt="We Are Radio">
+  <h1>We can't reach We Are Radio right now.</h1>
+  <p>Check your TV's internet connection.</p>
+  <button id="retry" type="button">Try again</button>
+  <p class="small">We'll keep trying every 15 seconds.</p>
+</main>
+<script>
+  (function () {
+    var HOME = "https://weareradio.app/tv?shell=webos&v=1.0.0";
+    // A test build can open a preview of the site instead (README.md):
+    //   ares-launch app.weareradio.tv -p "{\"url\":\"https://<preview>/tv?shell=webos\"}"
+    // Only We Are Radio's own addresses are accepted.
+    var ALLOWED = /^https:\/\/(weareradio\.app|([a-z0-9-]+-)?kizzi-radio-api\.[a-z0-9-]+\.workers\.dev)\/tv(\/|\?|$)/;
+    var RETRY_MS = 15000;
+    var PROBE_TIMEOUT_MS = 10000;
+
+    function launchUrl(params) {
+      try {
+        var p = typeof params === "string" ? JSON.parse(params || "{}") : params || {};
+        if (p.url && ALLOWED.test(p.url)) return p.url.indexOf("shell=webos") >= 0 ? p.url : p.url + (p.url.indexOf("?") >= 0 ? "&" : "?") + "shell=webos";
+      } catch (e) {}
+      return HOME;
+    }
+    var target;
+    var origin;
+    function setTarget(params) {
+      target = launchUrl(params);
+      origin = target.match(/^https:\/\/[^\/]+/)[0];
+    }
+    setTarget(window.PalmSystem && window.PalmSystem.launchParams);
+    // LG also hands launch parameters over in the webOSLaunch event.
+    document.addEventListener("webOSLaunch", function (e) {
+      if (e && e.detail && e.detail.url) setTarget(e.detail);
+    });
+
+    var retryButton = document.getElementById("retry");
+    var retryTimer = null;
+    var probing = false;
+    var leaving = false;
+    var isOffline = false;
+
+    function exitApp() {
+      if (window.webOS && window.webOS.platformBack) window.webOS.platformBack();
+      else if (window.PalmSystem && window.PalmSystem.platformBack) window.PalmSystem.platformBack();
+      else window.close();
+    }
+
+    function showOffline() {
+      isOffline = true;
+      document.body.className = "is-offline";
+      retryButton.focus();
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(tryConnect, RETRY_MS);
+    }
+
+    // A picture from the site loads only if the site can be reached; then the TV app takes over the window.
+    function tryConnect() {
+      if (probing || leaving) return;
+      probing = true;
+      clearTimeout(retryTimer);
+      var done = false;
+      var probe = new Image();
+      var timeout = setTimeout(function () { finish(false); }, PROBE_TIMEOUT_MS);
+      function finish(ok) {
+        if (done) return;
+        done = true;
+        probing = false;
+        clearTimeout(timeout);
+        if (ok) {
+          leaving = true;
+          window.location.replace(target);
+        } else showOffline();
+      }
+      probe.onload = function () { finish(true); };
+      probe.onerror = function () { finish(false); };
+      probe.src = origin + "/favicon.svg?r=" + new Date().getTime();
+    }
+
+    retryButton.addEventListener("click", tryConnect);
+    retryButton.addEventListener("mouseover", function () { retryButton.focus(); });
+    window.addEventListener("online", tryConnect);
+    // Opened again from the launcher while still on this screen: try straight away.
+    document.addEventListener("webOSRelaunch", function (e) {
+      if (e && e.detail && e.detail.url) setTarget(e.detail);
+      tryConnect();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.keyCode === 461) {
+        // Back: nothing to go back to here, so leave the app.
+        e.preventDefault();
+        exitApp();
+      } else if (e.keyCode === 13 && isOffline) {
+        e.preventDefault();
+        tryConnect();
+      } else if (e.keyCode >= 37 && e.keyCode <= 40 && isOffline) {
+        retryButton.focus();
+      }
+    });
+
+    tryConnect();
+  })();
+</script>
+</body>
+</html>

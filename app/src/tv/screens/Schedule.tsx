@@ -4,6 +4,7 @@ import { FocusContext, setFocus, useFocusable } from "@noriginmedia/norigin-spat
 import { HintBar, Icon, OnAirPill, TvButton, TvClock } from "../components";
 import { useTvPlayer } from "../TvPlayer";
 import { clockText, stillFor, useGuide, useNow, type GuideChannel, type GuideSlot } from "../tvData";
+import { pointerEnabled, pointerMoved } from "../pointer";
 
 /** Screen 3: What's on (handoff_tv_firetv.md §A6). Times in the TV's own zone. */
 
@@ -122,9 +123,8 @@ export function Schedule() {
     return true;
   };
 
-  const onGridEnter = () => {
-    const l = lanes[lane];
-    const s = slotAt(l, cursor);
+  const onGridEnter = () => enterSlot(lanes[lane], slotAt(lanes[lane], cursor));
+  const enterSlot = (l: GuideChannel | undefined, s: GuideSlot | null) => {
     const t = Date.now();
     // Only a programme on now plays; later ones do nothing on TV in v1.
     if (l && s && s.starts_at * 1000 <= t && t < s.ends_at * 1000) {
@@ -135,6 +135,14 @@ export function Schedule() {
 
   const grid = useFocusable({ focusKey: "tv-grid", onArrowPress: (dir) => onGridArrow(dir), onEnterPress: onGridEnter });
   const gridFocused = grid.focused;
+
+  // The LG Magic Remote's pointer: pointing at a programme moves the grid's cursor to it, a click is OK.
+  const pointer = pointerEnabled();
+  const pointAt = (li: number, s: GuideSlot) => {
+    setLane(li);
+    setCursor(Math.max(s.starts_at * 1000, winStart));
+    if (!gridFocused) setFocus("tv-grid");
+  };
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => i), []);
   const onNow = current && current.starts_at * 1000 <= nowMs && nowMs < current.ends_at * 1000;
@@ -222,6 +230,21 @@ export function Schedule() {
                         key={`${s.starts_at}-${s.name}`}
                         className={`tv-slot is-${s.kind}${isCursor ? " is-focused" : ""}`}
                         style={{ left: xOf(a) + 3, width: Math.max(8, xOf(b) - xOf(a) - 6) }}
+                        onMouseMove={
+                          pointer
+                            ? () => {
+                                if (pointerMoved() && !isCursor) pointAt(li, s);
+                              }
+                            : undefined
+                        }
+                        onClick={
+                          pointer
+                            ? () => {
+                                pointAt(li, s);
+                                enterSlot(g, s);
+                              }
+                            : undefined
+                        }
                       >
                         <span className="tv-slot-name">
                           {s.starts_at * 1000 < winStart ? "‹ " : ""}

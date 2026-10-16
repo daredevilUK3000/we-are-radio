@@ -73,7 +73,7 @@ interface ListeningEventInput {
   platform?: string | null;
 }
 
-const PLATFORMS = ["tv", "firetv"];
+const PLATFORMS = ["tv", "firetv", "webos"];
 const TV_EVENT_TYPES = ["tv_open", "tv_channel_change", "tv_lean_back", "tv_shout_out_qr_shown"];
 
 analyticsPublicRoutes.post("/listening", async (c) => {

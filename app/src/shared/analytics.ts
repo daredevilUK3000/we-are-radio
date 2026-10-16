@@ -167,8 +167,8 @@ export interface PlayInfo {
 type EventType = "play_started" | "play_completed" | "play_skipped";
 
 /** Set once by the TV app (/tv): every play from this page is tagged with it. */
-let platform: "tv" | "firetv" | null = null;
-export function setAnalyticsPlatform(p: "tv" | "firetv" | null) {
+let platform: "tv" | "firetv" | "webos" | null = null;
+export function setAnalyticsPlatform(p: "tv" | "firetv" | "webos" | null) {
   platform = p;
 }
 

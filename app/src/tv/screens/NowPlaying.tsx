@@ -11,6 +11,7 @@ import { useTvPlayer } from "../TvPlayer";
 import { clockText, mmss, stillFor, useTvData } from "../tvData";
 import { PromoQr } from "../PromoQr";
 import { useTvUi } from "../tvUi";
+import { hoverFocus } from "../pointer";
 
 /** Screen 2: Now Playing (handoff_tv_firetv.md §A5). */
 
@@ -21,9 +22,9 @@ function titleSize(title: string): number {
 }
 
 function LivePill({ behind, onPress, onArrow }: { behind: number; onPress: () => void; onArrow: (dir: string) => boolean }) {
-  const { ref, focused } = useFocusable({ focusKey: "tv-live-pill", onEnterPress: onPress, onArrowPress: (dir) => onArrow(dir) });
+  const { ref, focused, focusSelf } = useFocusable({ focusKey: "tv-live-pill", onEnterPress: onPress, onArrowPress: (dir) => onArrow(dir) });
   return (
-    <button ref={ref} type="button" tabIndex={-1} className={`tv-live-pill${focused ? " is-focused" : ""}`} onClick={onPress}>
+    <button ref={ref} type="button" tabIndex={-1} className={`tv-live-pill${focused ? " is-focused" : ""}`} onClick={onPress} onMouseMove={hoverFocus(focused, focusSelf)}>
       <span className="tv-onair-dot" /> Back to live · {behindLabel(behind)} behind
     </button>
   );

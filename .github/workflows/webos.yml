@@ -1,0 +1,60 @@
+# Builds the LG TV app's .ipk (tv/webos) on demand, so it can be installed on
+# an LG TV in Developer Mode, or uploaded to LG Seller Lounge (LG signs
+# submitted packages itself). See tv/webos/README.md.
+name: LG TV app (webOS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Test builds only: open this address instead of https://weareradio.app/tv (a preview of the site). Leave empty for the real app."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install LG's webOS TV CLI
+        run: npm install --global @webos-tools/cli@3.2.6
+
+      - name: Point a test build at a preview address
+        if: ${{ inputs.url != '' }}
+        env:
+          PREVIEW_URL: ${{ inputs.url }}
+        run: |
+          case "$PREVIEW_URL" in
+            https://*/tv*) ;;
+            *) echo "The address must start with https:// and end in /tv"; exit 1 ;;
+          esac
+          node -e '
+            const fs = require("fs");
+            const file = "tv/webos/app/index.html";
+            const url = process.env.PREVIEW_URL + (process.env.PREVIEW_URL.includes("?") ? "&" : "?") + "shell=webos&v=1.0.0-test";
+            const html = fs.readFileSync(file, "utf8");
+            const out = html.replace(/var HOME = "[^"]*";/, "var HOME = " + JSON.stringify(url) + ";")
+              .replace(/var ALLOWED = .*/, "var ALLOWED = /^https:\\/\\//;");
+            if (out === html) throw new Error("index.html no longer has var HOME / var ALLOWED");
+            fs.writeFileSync(file, out);
+            console.log("Test build opens", url);
+          '
+
+      - name: Check and package
+        run: |
+          ares-package --check tv/webos/app
+          ares-package tv/webos/app -o out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.url != '' && 'we-are-radio-lg-TEST-build' || 'we-are-radio-lg' }}
+          path: out/*.ipk
+          retention-days: 30

@@ -1,0 +1,16 @@
+{
+  "id": "app.weareradio.tv",
+  "version": "1.0.0",
+  "vendor": "We Are Radio",
+  "type": "web",
+  "main": "index.html",
+  "title": "We Are Radio",
+  "appDescription": "Live radio from Kizzi, on your TV",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "iconColor": "#0b0b0d",
+  "splashBackground": "splash.png",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "requiredACG": []
+}

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useFocusable } from "@noriginmedia/norigin-spatial-navigation";
 import { channelAccent } from "../listener/lib/channelAccent";
 import { clockText, dateText, stillFor, useNow } from "./tvData";
+import { hoverFocus } from "./pointer";
 
 /** Clock over the date, top right of every screen (the TV's own time). */
 export function TvClock({ big = false }: { big?: boolean }) {
@@ -50,7 +51,7 @@ export function TvButton({
   className?: string;
   onFocus?: () => void;
 }) {
-  const { ref, focused } = useFocusable({ focusKey, onEnterPress: onPress, onFocus: onFocus ? () => onFocus() : undefined });
+  const { ref, focused, focusSelf } = useFocusable({ focusKey, onEnterPress: onPress, onFocus: onFocus ? () => onFocus() : undefined });
   return (
     <button
       ref={ref}
@@ -58,6 +59,7 @@ export function TvButton({
       tabIndex={-1}
       className={`tv-pill${primary ? " is-primary" : ""}${focused ? " is-focused" : ""} ${className}`}
       onClick={onPress}
+      onMouseMove={hoverFocus(focused, focusSelf)}
     >
       {children}
     </button>
@@ -82,7 +84,7 @@ export function RoundControl({
   active?: boolean;
   onArrowPress?: (direction: string) => boolean;
 }) {
-  const { ref, focused } = useFocusable({
+  const { ref, focused, focusSelf } = useFocusable({
     focusKey,
     onEnterPress: onPress,
     onArrowPress: onArrowPress ? (dir) => onArrowPress(dir) : undefined,
@@ -97,6 +99,7 @@ export function RoundControl({
         className={`tv-round${focused ? " is-focused" : ""}${active ? " is-active" : ""}`}
         style={{ width: size, height: size }}
         onClick={onPress}
+        onMouseMove={hoverFocus(focused, focusSelf)}
       >
         {icon}
       </button>

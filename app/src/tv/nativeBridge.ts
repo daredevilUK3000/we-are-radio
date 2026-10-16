@@ -1,10 +1,16 @@
 /**
- * The contract between /tv and the Fire TV app (handoff_tv_firetv.md §A9).
- * Only active with ?shell=firetv; in any other TV browser every call is a
- * no-op and the page behaves as an ordinary web page.
+ * The contract between /tv and the TV apps (handoff_tv_firetv.md §A9,
+ * handoff_lg_webos.md §2.3). Only active with ?shell=firetv or ?shell=webos;
+ * in any other TV browser every call is a no-op and the page behaves as an
+ * ordinary web page.
  *
- * Page -> native: window.WeAreRadioNative (an Android @JavascriptInterface).
- * Native -> page: window.weAreRadioTv.back() / .media(name), registered here.
+ * Fire TV: page -> native is window.WeAreRadioNative (an Android
+ * @JavascriptInterface); native -> page is window.weAreRadioTv.back() /
+ * .media(name), registered here.
+ *
+ * LG (webOS): the app is a hosted web app (tv/webos), so this page is the
+ * app's own window. Its remote keys arrive as ordinary keydowns (useTvKeys),
+ * and the few native calls go to LG's PalmSystem object instead.
  */
 
 export type MediaKey = "playpause" | "play" | "pause" | "rewind" | "fastforward" | "menu";
@@ -40,9 +46,23 @@ try {
 }
 
 export const isFireTvShell = () => shell === "firetv";
-export const tvPlatform = (): "firetv" | "tv" => (isFireTvShell() ? "firetv" : "tv");
+export const isWebOsShell = () => shell === "webos";
+export const tvPlatform = (): "firetv" | "webos" | "tv" => (isFireTvShell() ? "firetv" : isWebOsShell() ? "webos" : "tv");
 
-const native = (): NativeShell | undefined => (isFireTvShell() ? window.WeAreRadioNative : undefined);
+// The LG app's side: only exit. webOS has no way to keep the screen on for
+// audio (only full-screen video holds off its screensaver), and there's no
+// native splash or log to talk to, so the other calls stay no-ops.
+const webOsShell: NativeShell = {
+  // Back on Home: LG's own exit (the Home screen, or its exit question on some versions).
+  exitApp() {
+    const w = window as Window & { webOS?: { platformBack?: () => void }; PalmSystem?: { platformBack?: () => void } };
+    if (w.webOS?.platformBack) w.webOS.platformBack();
+    else if (w.PalmSystem?.platformBack) w.PalmSystem.platformBack();
+    else window.close();
+  },
+};
+
+const native = (): NativeShell | undefined => (isFireTvShell() ? window.WeAreRadioNative : isWebOsShell() ? webOsShell : undefined);
 
 export const nativeBridge = {
   keepScreenOn(on: boolean) {

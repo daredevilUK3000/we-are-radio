@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#08080a" />
+    <meta name="robots" content="noindex" />
+    <!--
+      We Are Radio on TV for older TV browsers (src/tv/legacy/main.tsx, built
+      by vite.tv-legacy.config.ts). /tv sends browsers that can't run the
+      site's own build here - see the check in ../index.html.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Work+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <title>We Are Radio</title>
+  </head>
+  <body style="background: #08080a">
+    <div id="root"></div>
+    <script type="module" src="/src/tv/legacy/main.tsx"></script>
+  </body>
+</html>

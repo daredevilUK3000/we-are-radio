@@ -36,6 +36,20 @@
       rel="stylesheet"
     />
     <title>We Are Radio</title>
+    <script>
+      // We Are Radio on TV for older TV browsers (LG webOS 4-6 among them):
+      // a browser that can't run this build gets the TV app's own build for
+      // old engines (src/tv/legacy). Every browser this site supports passes
+      // the check and carries on as normal.
+      (function () {
+        if (!/^\/tv(\/|$)/.test(location.pathname)) return;
+        try {
+          new Function("var a; a ??= {}; return a?.b");
+        } catch (e) {
+          location.replace("/tv-legacy/" + location.search + "#" + location.pathname);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

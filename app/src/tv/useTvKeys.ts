@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { MediaKey } from "./nativeBridge";
+import { isWebOsShell, type MediaKey } from "./nativeBridge";
 
 /**
  * The TV's global keys (handoff_tv_firetv.md §A2): Back, the media keys and
@@ -9,11 +9,18 @@ import type { MediaKey } from "./nativeBridge";
  *
  * Desktop: Esc / Backspace = Back, Space = Play/Pause, r = Start over,
  * f = Back to live, m = What's on.
+ *
+ * LG (webOS) remotes send keydowns too, with LG's own codes (Back 461 is
+ * handled below for every TV browser; the media codes only in the LG app).
  */
+
+// webostv.developer.lge.com, Magic Remote guide: Play 415, Pause 19, Fast-forward 417, Rewind 412, Stop 413.
+const WEBOS_MEDIA: Record<number, MediaKey> = { 415: "play", 19: "pause", 417: "fastforward", 412: "rewind", 413: "pause" };
 
 const BACK_KEYS = new Set(["Escape", "Backspace", "GoBack", "BrowserBack"]);
 
 export function keyToMedia(e: KeyboardEvent): MediaKey | null {
+  if (isWebOsShell() && WEBOS_MEDIA[e.keyCode]) return WEBOS_MEDIA[e.keyCode];
   switch (e.key) {
     case "MediaPlayPause":
     case " ":

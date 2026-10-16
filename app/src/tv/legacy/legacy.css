@@ -1,0 +1,75 @@
+/* Older TV browsers only (src/tv/legacy): the gaps vite.tv-legacy.config.ts
+   can't rewrite on its own. A flexbox gap also spaces bare text from an icon
+   beside it, and a margin can only go on the element, so each one is here,
+   with the gap it stands in for (tv.css). */
+
+.tv-onair-dot,
+.tv-live-pill > .tv-onair-dot {
+  margin-right: 10px; /* .tv-onair */
+}
+.tv-live-pill > .tv-onair-dot {
+  margin-right: 12px; /* .tv-live-pill */
+}
+
+.tv-pill:not(.tv-circle) > svg:first-child {
+  margin-right: 14px; /* .tv-pill: ▶ Listen */
+}
+
+.tv-chip > svg:first-child {
+  margin-right: 10px; /* .tv-chip: the clock beside "Starts at" */
+}
+
+.tv-coming > svg:first-child {
+  margin-right: 12px; /* .tv-coming: the clock beside "Coming up at" */
+}
+
+.tv-shout-eyebrow > svg:first-child {
+  margin-right: 12px; /* .tv-shout-eyebrow: the microphone */
+}
+
+/* "Now playing" (text) then the bars: only the bars can take the space. */
+.tv-np-eyebrow > .tv-eq:first-child {
+  margin-left: 12px; /* .tv-np-eyebrow */
+}
+
+.tv-live-chip > .tv-eq:first-child {
+  margin-right: 8px; /* .tv-live-chip: bars, then "Live" */
+}
+
+.tv-lean-song > .tv-eq:first-child {
+  margin-right: 18px; /* .tv-lean-song */
+}
+
+.tv-shout-steps li::before {
+  margin-right: 18px; /* .tv-shout-steps li: the step number */
+}
+
+/* Children with spacing of their own on top of their container's gap. The
+   rewritten gap is a margin that wins over theirs (it has to, to beat their
+   margin resets), so these add the two back together. */
+.tv-hero > .tv-hero-buttons:not(#_) {
+  margin-top: 20px; /* 16 + 4 */
+}
+.tv-np-details > .tv-np-progress:not(#_) {
+  margin-top: 24px; /* 14 + 10 */
+}
+.tv-np-details > .tv-controls:not(#_) {
+  margin-top: 22px; /* 14 + 8 */
+}
+.tv-sched-top > .tv-clock:not(#_) {
+  margin-left: auto;
+}
+.tv-sched-detail > .tv-sched-action:not(#_) {
+  margin-top: 16px; /* 12 + 4 */
+}
+.tv-shout-left > .tv-shout-steps:not(#_) {
+  margin-top: 26px; /* 22 + 4 */
+}
+.tv-shout-left > .tv-shout-actions:not(#_) {
+  margin-top: 30px; /* 22 + 8 */
+}
+
+/* Old flexbox lets a picture shrink below its set width beside a long name. */
+.tv-lane-label img {
+  flex: none;
+}

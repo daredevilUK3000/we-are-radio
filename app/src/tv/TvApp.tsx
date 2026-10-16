@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { init, pause as pauseNav, resume as resumeNav } from "@noriginmedia/norigin-spatial-navigation";
 import { setAnalyticsPlatform, trackTv } from "../shared/analytics";
-import { nativeBridge, registerPageBridge, tvPlatform, type MediaKey } from "./nativeBridge";
+import { isWebOsShell, nativeBridge, registerPageBridge, tvPlatform, type MediaKey } from "./nativeBridge";
 import { lastTvChannel, TvPlayerProvider, useTvPlayer } from "./TvPlayer";
 import { TvDataProvider } from "./tvData";
-import { useTvKeys } from "./useTvKeys";
+import { keyToMedia, useTvKeys } from "./useTvKeys";
 import { goBack, UiCtx } from "./tvUi";
 import { Home } from "./screens/Home";
 import { NowPlaying } from "./screens/NowPlaying";
@@ -15,6 +15,7 @@ import { LeanBack } from "./screens/LeanBack";
 import { OnDemand } from "./screens/OnDemand";
 import { TimeCapsuleQr, Top3Qr } from "./screens/QrInfo";
 import { OnDemandProvider, useOnDemand } from "./TvOnDemand";
+import { installPointer, onPointerActivity } from "./pointer";
 import "./tv.css";
 
 /**
@@ -169,6 +170,11 @@ function TvShell() {
       // A key press only wakes Lean back; Play/Pause also does its job.
       leaveLeanBack();
       if (e.key === "MediaPlayPause" || e.key === " " || e.keyCode === 179) playerRef.current.toggle();
+      else if (isWebOsShell()) {
+        // LG remotes have separate Play and Pause keys.
+        const m = keyToMedia(e);
+        if (m === "play" || m === "pause") media(m);
+      }
       return true;
     },
     onBack: () => {
@@ -180,6 +186,18 @@ function TvShell() {
       media(key);
     },
   });
+
+  // The LG Magic Remote's pointer counts as using the remote: it holds off Lean back, and wakes it.
+  useEffect(
+    () =>
+      onPointerActivity(() => {
+        lastKey.current = Date.now();
+        if (!leanRef.current) return false;
+        leaveLeanBack();
+        return true;
+      }),
+    [leaveLeanBack]
+  );
 
   // The Fire TV shell talks to the page through this (its keys never reach the page as keydowns).
   useEffect(
@@ -225,10 +243,48 @@ function TvShell() {
   );
 }
 
+/**
+ * The LG app's crash recovery (handoff_lg_webos.md §2.1): if the TV app
+ * breaks, say so and reload as soon as We Are Radio can be reached. The LG
+ * app is the page itself (a hosted web app), so there's no shell around it to
+ * do this. Anywhere else this changes nothing: the screen is left empty, as a
+ * crash always left it.
+ */
+class TvRecovery extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch() {
+    if (!isWebOsShell()) return;
+    const attempt = () => {
+      const probe = new Image();
+      probe.onload = () => window.location.reload();
+      probe.onerror = () => window.setTimeout(attempt, 15_000);
+      probe.src = `/favicon.svg?r=${Date.now()}`;
+    };
+    window.setTimeout(attempt, 2000);
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    if (!isWebOsShell()) return null;
+    return (
+      <div className="tv-letterbox tv-recovering">
+        <img src="/weareradio-logo-hero.webp" alt="We Are Radio" />
+        <p>Something went wrong. Starting again…</p>
+      </div>
+    );
+  }
+}
+
 export default function TvApp() {
   // Page-wide TV basics while /tv is open: dark, no scrolling, no pointer.
   useEffect(() => {
     document.documentElement.classList.add("tv-mode");
+    installPointer(); // LG app only
     setAnalyticsPlatform(tvPlatform());
     trackTv("tv_open", null);
     // The Fire TV splash stays up until the page is ready.
@@ -241,12 +297,14 @@ export default function TvApp() {
   }, []);
 
   return (
-    <TvDataProvider>
-      <TvPlayerProvider initialSlug={lastTvChannel() ?? "kizzi-radio"}>
-        <OnDemandProvider>
-          <TvShell />
-        </OnDemandProvider>
-      </TvPlayerProvider>
-    </TvDataProvider>
+    <TvRecovery>
+      <TvDataProvider>
+        <TvPlayerProvider initialSlug={lastTvChannel() ?? "kizzi-radio"}>
+          <OnDemandProvider>
+            <TvShell />
+          </OnDemandProvider>
+        </TvPlayerProvider>
+      </TvDataProvider>
+    </TvRecovery>
   );
 }
