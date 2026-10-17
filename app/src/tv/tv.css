@@ -1638,3 +1638,39 @@ html.tv-pointer .tv-slot {
   font-size: 26px;
   color: #f6c167;
 }
+
+/* ---- Home's welcome (Home.tsx): the website's front page, on the TV ---- */
+
+.tv-home.is-welcome .tv-logo {
+  opacity: 0;
+}
+
+.tv-welcome-logo {
+  /* The logo picture has a clear margin of its own: line its lettering up with the pill. */
+  margin: 0 0 0 -60px;
+  filter: drop-shadow(0 0 60px rgba(225, 29, 46, 0.28));
+}
+
+.tv-welcome-logo img {
+  display: block;
+  width: 620px;
+  height: auto;
+}
+
+.tv-welcome-sub {
+  margin: 0;
+  font-size: 34px;
+  color: #dedcd6;
+}
+
+.tv-welcome-np {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 900px;
+  font-size: 26px;
+  color: var(--tv-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -121,6 +121,11 @@ export function Home() {
   const nowMs = useNow(1000);
   const [heroSlug, setHeroSlug] = useState<string | null>(() => lastTvChannel());
   const [videoSlug, setVideoSlug] = useState<string | null>(null);
+  // Home opens on the website's welcome (the presenter at the mic, the big logo)
+  // while Listen and Schedule have focus; the channel row brings the channels back.
+  const [welcome, setWelcome] = useState(true);
+  const videoStart = useRef(0);
+  const onVideoLoaded = () => ui.videoLoaded(Date.now() - videoStart.current);
   // Which row has focus (0 = the channels, and the hero), and how far each row has slid along.
   const [row, setRow] = useState(0);
   const [cols, setCols] = useState<Record<string, number>>({});
@@ -369,10 +374,28 @@ export function Home() {
 
   return (
     <FocusContext.Provider value={focusKey}>
-      <div ref={ref} className={`tv-screen tv-home${moreFocused ? " is-more" : ""}`}>
+      <div ref={ref} className={`tv-screen tv-home${moreFocused ? " is-more" : ""}${welcome ? " is-welcome" : ""}`}>
         <div className="tv-bg">
-          <img key={`still-${hero.slug}`} className="tv-bg-media tv-fade" src={stillFor(hero.slug)} alt="" />
-          {videoSlug === hero.slug && !ui.stillsOnly && (
+          {welcome ? (
+            <img key="still-welcome" className="tv-bg-media tv-fade" src="/hero-video-poster.jpg" alt="" />
+          ) : (
+            <img key={`still-${hero.slug}`} className="tv-bg-media tv-fade" src={stillFor(hero.slug)} alt="" />
+          )}
+          {welcome && !ui.stillsOnly && (
+            <video
+              key="video-welcome"
+              className="tv-bg-media tv-fade"
+              src="/hero-video.mp4"
+              poster="/hero-video-poster.jpg"
+              muted
+              autoPlay
+              loop
+              playsInline
+              onLoadStart={() => (videoStart.current = Date.now())}
+              onLoadedData={onVideoLoaded}
+            />
+          )}
+          {!welcome && videoSlug === hero.slug && !ui.stillsOnly && (
             <video
               key={`video-${hero.slug}`}
               className="tv-bg-media tv-fade"
@@ -382,7 +405,8 @@ export function Home() {
               autoPlay
               loop
               playsInline
-              onLoadedData={ui.videoLoaded}
+              onLoadStart={() => (videoStart.current = Date.now())}
+              onLoadedData={onVideoLoaded}
             />
           )}
           <div className="tv-scrim-left" />
@@ -397,6 +421,31 @@ export function Home() {
         </header>
 
         <div className="tv-home-content" style={row > 0 ? { transform: `translateY(-${FIRST_SCROLL + (row - 1) * ROW_STEP}px)` } : undefined}>
+          {welcome ? (
+          <section className="tv-hero tv-welcome">
+            <div className="tv-hero-eyebrow">
+              <OnAirPill label={`On air · ${hero.name}`} />
+            </div>
+            <h1 className="tv-welcome-logo">
+              <img src="/weareradio-logo-hero.webp" alt="We Are Radio" />
+            </h1>
+            <p className="tv-welcome-sub">Kizzi's personal radio network</p>
+            {n?.title && !n.voice && !n.promo && !n.book && (
+              <div className="tv-welcome-np">
+                <EqBars /> {n.title}
+                {n.artist ? ` · ${n.artist}` : ""}
+              </div>
+            )}
+            <div className="tv-hero-buttons">
+              <TvButton focusKey="tv-listen" primary onPress={() => listen(hero.slug)} onFocus={() => setMoreFocused(false)}>
+                {Icon.play} Listen Now
+              </TvButton>
+              <TvButton focusKey="tv-schedule-btn" onPress={() => navigate("/tv/schedule")} onFocus={() => setMoreFocused(false)}>
+                Schedule
+              </TvButton>
+            </div>
+          </section>
+          ) : (
           <section className="tv-hero">
             <div className="tv-hero-eyebrow">
               <OnAirPill />
@@ -448,14 +497,30 @@ export function Home() {
               </div>
             )}
             <div className="tv-hero-buttons">
-              <TvButton focusKey="tv-listen" primary onPress={() => listen(hero.slug)} onFocus={() => setMoreFocused(false)}>
+              <TvButton
+                focusKey="tv-listen"
+                primary
+                onPress={() => listen(hero.slug)}
+                onFocus={() => {
+                  setMoreFocused(false);
+                  setWelcome(true);
+                }}
+              >
                 {Icon.play} Listen
               </TvButton>
-              <TvButton focusKey="tv-schedule-btn" onPress={() => navigate("/tv/schedule")} onFocus={() => setMoreFocused(false)}>
+              <TvButton
+                focusKey="tv-schedule-btn"
+                onPress={() => navigate("/tv/schedule")}
+                onFocus={() => {
+                  setMoreFocused(false);
+                  setWelcome(true);
+                }}
+              >
                 Schedule
               </TvButton>
             </div>
           </section>
+          )}
 
           <section className="tv-row tv-channels" aria-label="Channels">
             <h2 className="tv-row-title">Channels</h2>
@@ -468,6 +533,7 @@ export function Home() {
                   onFocus={() => {
                     setHeroSlug(ch.slug);
                     setMoreFocused(false);
+                    setWelcome(false);
                   }}
                   onPress={() => listen(ch.slug)}
                 />

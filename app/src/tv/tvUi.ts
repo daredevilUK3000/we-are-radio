@@ -7,7 +7,8 @@ export interface TvUi {
   enterLeanBack: () => void;
   /** Videos give way to stills for the session on slow hardware (handoff §A10). */
   stillsOnly: boolean;
-  videoLoaded: () => void;
+  /** tookMs: how long the video took to show, from when it started loading. */
+  videoLoaded: (tookMs: number) => void;
 }
 export const UiCtx = createContext<TvUi>({ leanBack: false, enterLeanBack: () => {}, stillsOnly: false, videoLoaded: () => {} });
 export const useTvUi = () => useContext(UiCtx);

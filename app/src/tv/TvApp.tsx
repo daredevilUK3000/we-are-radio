@@ -69,15 +69,14 @@ function TvShell() {
   const playerRef = useRef(player);
   playerRef.current = player;
 
-  // Slow hardware: no deviceMemory over 1 GB, or a hero video that took over 1.5 s.
+  // Slow hardware: no deviceMemory over 1 GB, or a hero video that took over 1.5 s to show.
   const [stillsOnly, setStillsOnly] = useState(() => {
     const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
     return typeof mem === "number" && mem <= 1;
   });
-  const mountedAt = useRef(Date.now());
   const firstVideo = useRef(true);
-  const videoLoaded = useCallback(() => {
-    if (firstVideo.current && Date.now() - mountedAt.current > 1500) setStillsOnly(true);
+  const videoLoaded = useCallback((tookMs: number) => {
+    if (firstVideo.current && tookMs > 1500) setStillsOnly(true);
     firstVideo.current = false;
   }, []);
 
