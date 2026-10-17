@@ -5,12 +5,11 @@ import type { NavigateFunction } from "react-router-dom";
 export interface TvUi {
   leanBack: boolean;
   enterLeanBack: () => void;
-  /** Videos give way to stills for the session on slow hardware (handoff §A10). */
+  /** Videos give way to stills for the session on slow hardware, or once one fails (handoff §A10). */
   stillsOnly: boolean;
-  /** tookMs: how long the video took to show, from when it started loading. */
-  videoLoaded: (tookMs: number) => void;
+  videoFailed: () => void;
 }
-export const UiCtx = createContext<TvUi>({ leanBack: false, enterLeanBack: () => {}, stillsOnly: false, videoLoaded: () => {} });
+export const UiCtx = createContext<TvUi>({ leanBack: false, enterLeanBack: () => {}, stillsOnly: false, videoFailed: () => {} });
 export const useTvUi = () => useContext(UiCtx);
 
 /** Back to the previous TV screen; a deep link with no history goes to Home. */

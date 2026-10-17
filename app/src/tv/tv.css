@@ -1674,3 +1674,16 @@ html.tv-pointer .tv-slot {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Home's background videos: no filter or fade on the video itself (a Fire TV
+   Stick decoded a filtered video but never redrew it); .tv-bg-dim darkens it
+   instead, matching the stills' brightness(0.62). */
+.tv-bg-media.tv-bg-video {
+  filter: none;
+}
+
+.tv-bg-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 8, 10, 0.38);
+}

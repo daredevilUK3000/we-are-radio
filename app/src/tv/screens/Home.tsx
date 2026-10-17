@@ -124,8 +124,8 @@ export function Home() {
   // Home opens on the website's welcome (the presenter at the mic, the big logo)
   // while Listen and Schedule have focus; the channel row brings the channels back.
   const [welcome, setWelcome] = useState(true);
-  const videoStart = useRef(0);
-  const onVideoLoaded = () => ui.videoLoaded(Date.now() - videoStart.current);
+  // A background video that fails (LG's webOS 4 errors on its loops) gives way to stills.
+  const videoProps = { onError: () => ui.videoFailed() };
   // Which row has focus (0 = the channels, and the hero), and how far each row has slid along.
   const [row, setRow] = useState(0);
   const [cols, setCols] = useState<Record<string, number>>({});
@@ -384,31 +384,31 @@ export function Home() {
           {welcome && !ui.stillsOnly && (
             <video
               key="video-welcome"
-              className="tv-bg-media tv-fade"
-              src="/hero-video.mp4"
+              className="tv-bg-media tv-bg-video"
+              src="/hero-video-tv.mp4"
               poster="/hero-video-poster.jpg"
               muted
               autoPlay
               loop
               playsInline
-              onLoadStart={() => (videoStart.current = Date.now())}
-              onLoadedData={onVideoLoaded}
+              {...videoProps}
             />
           )}
           {!welcome && videoSlug === hero.slug && !ui.stillsOnly && (
             <video
               key={`video-${hero.slug}`}
-              className="tv-bg-media tv-fade"
+              className="tv-bg-media tv-bg-video"
               src={loopFor(hero.slug)}
               poster={stillFor(hero.slug)}
               muted
               autoPlay
               loop
               playsInline
-              onLoadStart={() => (videoStart.current = Date.now())}
-              onLoadedData={onVideoLoaded}
+              {...videoProps}
             />
           )}
+          {/* The video's darkening: a layer over it, not a CSS filter on it (a Fire TV Stick played a filtered video without ever redrawing it). */}
+          {!ui.stillsOnly && (welcome || videoSlug === hero.slug) && <div className="tv-bg-dim" />}
           <div className="tv-scrim-left" />
           <div className="tv-scrim-bottom" />
         </div>

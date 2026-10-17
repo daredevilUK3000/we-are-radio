@@ -69,16 +69,14 @@ function TvShell() {
   const playerRef = useRef(player);
   playerRef.current = player;
 
-  // Slow hardware: no deviceMemory over 1 GB, or a hero video that took over 1.5 s to show.
+  // Slow hardware (no deviceMemory over 1 GB), or a background video that failed
+  // (LG's webOS 4 errors on its loops). A video that's only slow to start is kept:
+  // the still shows until it does (a Fire TV Stick took 4 s).
   const [stillsOnly, setStillsOnly] = useState(() => {
     const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
     return typeof mem === "number" && mem <= 1;
   });
-  const firstVideo = useRef(true);
-  const videoLoaded = useCallback((tookMs: number) => {
-    if (firstVideo.current && tookMs > 1500) setStillsOnly(true);
-    firstVideo.current = false;
-  }, []);
+  const videoFailed = useCallback(() => setStillsOnly(true), []);
 
   const enterLeanBack = useCallback(() => {
     // From the tile or the control: start the station if it was paused (Lean back is for listening).
@@ -219,7 +217,7 @@ function TvShell() {
     [back, media, leaveLeanBack]
   );
 
-  const ui = useMemo(() => ({ leanBack, enterLeanBack, stillsOnly, videoLoaded }), [leanBack, enterLeanBack, stillsOnly, videoLoaded]);
+  const ui = useMemo(() => ({ leanBack, enterLeanBack, stillsOnly, videoFailed }), [leanBack, enterLeanBack, stillsOnly, videoFailed]);
 
   return (
     <UiCtx.Provider value={ui}>
