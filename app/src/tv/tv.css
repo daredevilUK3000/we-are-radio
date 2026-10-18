@@ -522,6 +522,17 @@ html.tv-pointer .tv-slot {
   color: #dedcd6;
 }
 
+.tv-coming > svg {
+  flex: none;
+}
+
+.tv-coming-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tv-hero-buttons {
   display: flex;
   gap: 22px;

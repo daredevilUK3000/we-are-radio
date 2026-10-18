@@ -19,10 +19,6 @@
   margin-right: 10px; /* .tv-chip: the clock beside "Starts at" */
 }
 
-.tv-coming > svg:first-child {
-  margin-right: 12px; /* .tv-coming: the clock beside "Coming up at" */
-}
-
 .tv-shout-eyebrow > svg:first-child {
   margin-right: 12px; /* .tv-shout-eyebrow: the microphone */
 }

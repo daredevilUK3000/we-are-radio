@@ -493,7 +493,11 @@ export function Home() {
             </div>
             {n?.next_block && (
               <div className="tv-coming">
-                {Icon.clock} Coming up at {clockText(n.next_block.starts_at * 1000)} · {n.next_block.name}
+                {Icon.clock}
+                {/* One line always: a long name ends in "…" rather than pushing the buttons onto the channel row. */}
+                <span className="tv-coming-text">
+                  Coming up at {clockText(n.next_block.starts_at * 1000)} · {n.next_block.name}
+                </span>
               </div>
             )}
             <div className="tv-hero-buttons">
