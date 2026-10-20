@@ -18,7 +18,7 @@ import { MINUTE, PARIS_TZ, wallClock } from "./scheduler/time";
 export const PROMO_MIN_GAP_MS = 20 * MINUTE;
 /** No promo in the last stretch of a window: the fit at its end may drop a song next to it. */
 export const PROMO_WINDOW_END_MARGIN_MS = 15 * MINUTE;
-export const PROMO_RULES = "promos-v1-gap20-margin15-open30";
+export const PROMO_RULES = "promos-v2-gap20-margin15-open30-resume";
 export const PROMOS_PER_HOUR_MAX = 3;
 export const SHORT_LINK_BASE = "https://weareradio.app/go/";
 

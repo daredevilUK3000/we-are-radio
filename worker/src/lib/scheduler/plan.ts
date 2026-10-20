@@ -378,7 +378,11 @@ export class Planner {
     // House promos (lib/promos.ts): only in an autopilot channel's own rotation, never in a programme or hand-planned block.
     const promos = content.source === "autopilot" && daypartsApply(this.channel) ? await this.promoConfig() : null;
     const promoIds = new Set(promos?.promos.map((p) => p.audio_asset_id) ?? []);
-    const promoStarts = promos?.perHour ? before.filter((i) => !i.trackId && i.assetId && promoIds.has(i.assetId)).map((i) => i.startsAt) : [];
+    // Likewise only promos before the origin: this layout's own earlier ones are placed again below, and
+    // counting them too pushed a play that already aired past the resume point, so it aired twice.
+    const promoStarts = promos?.perHour
+      ? before.filter((i) => !i.trackId && i.assetId && promoIds.has(i.assetId) && i.startsAt < origin).map((i) => i.startsAt)
+      : [];
     const promoQueue = promos?.perHour ? { plays: this.promoPlays(promos, origin, occ.endMs), next: 0 } : null;
     for (let k = 0; cursor < emitEnd && k < 20_000; k++) {
       const p = seq[k % seq.length];
