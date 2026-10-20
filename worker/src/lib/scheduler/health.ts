@@ -49,7 +49,11 @@ export async function gridStatus(db: D1Database, channelId: string, nowMs: numbe
     .bind(channelId)
     .first<{ t: number | null }>();
   const finishing = !!on && on.item.startsAt < (lastEdit?.t ?? 0);
-  const matches = (now?.block.id ?? null) === playingBlock || !!overriding || !on || finishing;
+  // An item that began before the grid's current stretch is playing out (a song finishing into a
+  // flexible-start block, or a block's last item running past its end), not off the grid.
+  const stretchStart = now?.startMs ?? Math.max(0, ...occs.filter((o) => o.endMs <= nowMs).map((o) => o.endMs));
+  const playingOut = !!on && on.item.startsAt < stretchStart && nowMs - stretchStart < 15 * MINUTE;
+  const matches = (now?.block.id ?? null) === playingBlock || !!overriding || !on || finishing || playingOut;
   return { now, next, on, playingBlock, matches, hasGrid: all.some((b) => b.active) };
 }
 
