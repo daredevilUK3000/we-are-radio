@@ -116,7 +116,12 @@ export function titleFromFilename(filename: string, tidyCaps: boolean): string {
   t = t.replace(/([^.])\.$/, "$1"); // a stray full stop left inside removed quotes
   t = t.replace(/_+$/, "?").replace(/_/g, " ");
   t = t.replace(/[\u2019\u2018]/g, "'").replace(/\s+/g, " ").trim();
-  if (tidyCaps && t === t.toUpperCase() && /[A-Z]/.test(t)) {
+  return tidyCaps ? tidyAllCaps(t) : t;
+}
+
+/** "CAN YOU SEE ME?" -> "Can You See Me?"; anything not in ALL CAPS is left as it is. */
+export function tidyAllCaps(t: string): string {
+  if (t === t.toUpperCase() && /[A-Z]/.test(t)) {
     let first = true;
     t = t
       .toLowerCase()

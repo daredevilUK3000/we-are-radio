@@ -10,16 +10,19 @@ import {
   readDuration,
   runPool,
   sha256Hex,
+  tidyAllCaps,
   titleFromFilename,
   uploadWithProgress,
 } from "../lib/bulkImport";
+import { readFileTags } from "../lib/id3";
 
 /**
  * Bulk Import: turn a folder of unlabelled audio into draft tracks.
  *
- * Nothing is guessed from the files - every title is typed by hand - so the
- * page is built to make that fast: listen in the row, type, press Enter (which
- * jumps to the next row and plays it). What is typed is saved to the server as
+ * Titles come from each MP3's own tag where it has one (title and track
+ * number - both still editable); the rest are typed by hand, so the page is
+ * built to make that fast: listen in the row, type, press Enter (which jumps
+ * to the next row and plays it). What is typed is saved to the server as
  * it goes and comes back when the same folder is picked again, so a 400-track
  * job can be done across several sittings. Uploads go 5 at a time, in chunks,
  * and every uploaded file becomes a DRAFT track that stays fully editable.
@@ -510,11 +513,28 @@ export function BulkImport() {
         }
       }
 
+      // Anything not restored from earlier takes what the MP3 says about itself.
+      let fromTags = 0;
+      await runPool(
+        fresh.filter((r) => !r.title && r.upload === "idle"),
+        6,
+        async (row) => {
+          const tags = await readFileTags(row.file);
+          if (!tags.title) return;
+          // The artist isn't taken: tags often hold an uploader's account name instead.
+          row.title = settingsRef.current.tidyCaps ? tidyAllCaps(tags.title) : tags.title;
+          if (tags.trackNumber && !row.trackNumber) row.trackNumber = String(tags.trackNumber);
+          row.dirty = true;
+          fromTags++;
+        }
+      );
+
       setRows((prev) =>
         [...prev, ...fresh].sort((a, b) => naturalCompare(a.path, b.path))
       );
       const parts = [`Added ${fresh.length} file${fresh.length === 1 ? "" : "s"}`];
       if (restored > 0) parts.push(`${restored} with titles restored from earlier`);
+      if (fromTags > 0) parts.push(`${fromTags} titled from the MP3's own tags${settingsRef.current.tidyCaps ? " (ALL CAPS tidied)" : ""} (check them, and edit any that are wrong)`);
       if (already > 0) parts.push(`${already} already in the grid`);
       if (skipped > 0) parts.push(`${skipped} non-audio file${skipped === 1 ? "" : "s"} skipped`);
       setNotice(parts.join(" · "));
@@ -916,8 +936,9 @@ export function BulkImport() {
         </Link>
       </div>
       <p style={{ color: "var(--text-dim)" }}>
-        For a whole folder of music. Titles are never guessed for you - you listen and type each one (or, if your file
-        names are the titles, copy them in with one click) - so the page is built to make that quick: press <strong>▶</strong> to hear a row, type its title and press <strong>Enter</strong>{" "}
+        For a whole folder of music. Files that carry their own song title (most MP3s do) arrive with it already in the
+        Title box - just check it and edit any that are wrong. For the rest, listen and type (or, if your file names are
+        the titles, copy them in with one click) - the page is built to make that quick: press <strong>▶</strong> to hear a row, type its title and press <strong>Enter</strong>{" "}
         to jump to the next row and play it. Everything you type is saved as you go and comes back when you choose the
         same folder again. Uploaded tracks become <strong>drafts</strong> you can keep editing until you publish them.
       </p>

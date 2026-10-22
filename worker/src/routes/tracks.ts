@@ -114,8 +114,54 @@ trackRoutes.patch("/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+// A track that a programme or the Scheduler still names can't go (the database
+// won't allow it, and a show would lose a song), so say where it is used and
+// let it be taken out there first. Tags, jingle pins and Bulk Import rows go
+// with the track; the uploaded file stays in storage, as anything already
+// scheduled to air plays from it.
 trackRoutes.delete("/:id", async (c) => {
-  await c.env.DB.prepare("DELETE FROM tracks WHERE id = ?").bind(c.req.param("id")).run();
+  const id = c.req.param("id");
+  const db = c.env.DB;
+  const [programmes, lists, orders] = await Promise.all([
+    db
+      .prepare(
+        `SELECT DISTINCT p.title AS name FROM programme_items pi JOIN programmes p ON p.id = pi.programme_id
+         WHERE pi.track_id = ? LIMIT 5`
+      )
+      .bind(id)
+      .all<{ name: string }>(),
+    db
+      .prepare(
+        `SELECT DISTINCT l.name FROM sched_list_slots s JOIN sched_lists l ON l.id = s.list_id
+         WHERE s.track_id = ? LIMIT 5`
+      )
+      .bind(id)
+      .all<{ name: string }>(),
+    db
+      .prepare(
+        `SELECT DISTINCT ro.date AS name FROM sched_running_order_items i
+         JOIN sched_running_orders ro ON ro.id = i.running_order_id WHERE i.track_id = ? LIMIT 5`
+      )
+      .bind(id)
+      .all<{ name: string }>(),
+  ]);
+  const uses = [
+    ...programmes.results.map((r) => `the programme "${r.name}"`),
+    ...lists.results.map((r) => `the Scheduler playlist/template "${r.name}"`),
+    ...orders.results.map((r) => `a Scheduler running order on ${r.name}`),
+  ];
+  if (uses.length > 0) {
+    return c.json(
+      { error: `This track is still used in ${uses.join(", ")}. Take it out there first, then delete it.`, uses },
+      409
+    );
+  }
+
+  await db.batch([
+    db.prepare("DELETE FROM sched_fallback_items WHERE track_id = ?").bind(id),
+    db.prepare("UPDATE onair_messages SET requested_track_id = NULL WHERE requested_track_id = ?").bind(id),
+    db.prepare("DELETE FROM tracks WHERE id = ?").bind(id),
+  ]);
   return c.json({ ok: true });
 });
 
