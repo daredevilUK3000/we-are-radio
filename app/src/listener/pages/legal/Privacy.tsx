@@ -36,6 +36,12 @@ export function Privacy() {
       <h2>Listening statistics</h2>
       <p>We count plays and visits in aggregate to see what people enjoy. These counts don't identify you.</p>
 
+      <h2>Advertising</h2>
+      <p>
+        The station plays audio adverts as part of the programme, labelled "Advertisement" on screen. We don't use advertising trackers or ad
+        networks, and we don't share anything about you with advertisers.
+      </p>
+
       <h2>Offline listening</h2>
       <p>Music you save for offline listening is stored on your own device, not with us.</p>
 
