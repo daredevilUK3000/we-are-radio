@@ -1,0 +1,31 @@
+/* The city a song is about (PlaceLine.tsx), under the title. Wraps rather
+   than widening the player, so it never pushes the controls off a phone. */
+.place-line {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  color: var(--text-dim, rgba(255, 255, 255, 0.65));
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.place-line-icon {
+  flex: none;
+  /* A margin, not flex gap: the TVs' older browsers don't have gap. */
+  margin-right: 5px;
+  margin-top: 0.15em;
+  opacity: 0.8;
+}
+.place-line.is-compact {
+  /* The mini player's third line: its size, one line, cut short with "...". */
+  display: flex;
+  margin-top: 0;
+  font-size: 0.78rem;
+}
+.place-line.is-compact span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}

@@ -25,8 +25,9 @@ import { fadeIn, useRewind } from "../lib/useRewind";
 import { BackToLivePill, StartOverButton } from "../components/PlayerRewind";
 import { ComingUpAt } from "../components/ComingUpAt";
 import { JustPlayed, ThatWasChip, useJustPlayed } from "../components/JustPlayed";
+import { PlaceLine } from "../components/PlaceLine";
+import { channelStill, channelVideo, useChannelInfo } from "../../shared/channelInfo";
 
-const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark", "we-are-instrumental"]);
 
 function QueueCard({ item, accent, next }: { item: any; accent: string; next: boolean }) {
   return (
@@ -56,6 +57,8 @@ export function Listen() {
   const { slug: pathSlug } = useParams();
   const [searchParams] = useSearchParams();
   const channelSlug = pathSlug ?? searchParams.get("channel") ?? "kizzi-radio";
+  // The channel's colour, clip and still come from its row (shared/channelInfo.ts).
+  useChannelInfo();
   const [data, setData] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
@@ -326,6 +329,8 @@ export function Listen() {
   if (!shown.on_air) return <p>{shown.channel?.name ?? "This channel"} isn't broadcasting anything published yet.</p>;
 
   const accent = channelAccent(channelSlug);
+  const cardVideo = channelVideo(channelSlug);
+  const cardStill = channelStill(channelSlug);
   // While this channel is on the Chromecast, the buttons show and drive the device.
   const shownPlaying = castingHere ? !cast.paused : playing;
   const now = shown.now_playing;
@@ -369,16 +374,10 @@ export function Listen() {
           <div className="lp-art">
             {artUrl ? (
               <img key={artUrl} src={artUrl} alt="" />
-            ) : HAS_CHANNEL_VIDEO.has(channelSlug) ? (
-              <video
-                src={`/channels/channel-${channelSlug}.mp4`}
-                poster={`/channels/channel-${channelSlug}.jpg`}
-                autoPlay
-                muted
-                loop
-                playsInline
-                aria-hidden="true"
-              />
+            ) : cardVideo ? (
+              <video src={cardVideo} poster={cardStill ?? undefined} autoPlay muted loop playsInline aria-hidden="true" />
+            ) : cardStill ? (
+              <img src={cardStill} alt="" />
             ) : (
               <div className="lp-art-placeholder" />
             )}
@@ -415,6 +414,7 @@ export function Listen() {
             </span>
           </div>
           <div className="lp-track-title">{voice ? voice.title : isGood(now) ? <GoodOnAirTitle item={now} /> : promoOf(now) ? promoOf(now)!.title : (now?.label ?? "We Are Radio")}</div>
+          {!voice && <PlaceLine item={now} className="lp-place" />}
           {voice?.sub && <div className="lv-sub lp-voice-sub">{voice.sub}</div>}
           {!voice && isGood(now) && <div className="afg-onair-sub lp-voice-sub">{GOOD_ON_AIR_SUB}</div>}
           {!voice && !isGood(now) && promoOf(now) && (

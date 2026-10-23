@@ -114,6 +114,40 @@ trackRoutes.patch("/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+// The city a song is about (migrations/0029), for one song or a whole album at
+// once from the Tracks page. updated_at is left alone: a place doesn't change
+// what plays, so it shouldn't make the Scheduler rebuild every channel.
+trackRoutes.put("/places", async (c) => {
+  const body = await c.req.json<{ places?: { id: string; place_city?: string | null; place_country?: string | null; place_timezone?: string | null }[] }>().catch(() => ({}) as { places?: [] });
+  const places = Array.isArray(body.places) ? body.places.slice(0, 500) : [];
+  if (places.length === 0) return c.json({ error: "no songs to update" }, 400);
+  const clean = (v: unknown, max: number) => {
+    const s = typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
+    return s ? s.slice(0, max) : null;
+  };
+  const stmts: D1PreparedStatement[] = [];
+  for (const p of places) {
+    const zone = clean(p.place_timezone, 64);
+    if (zone) {
+      try {
+        new Intl.DateTimeFormat("en-GB", { timeZone: zone });
+      } catch {
+        return c.json({ error: `"${zone}" isn't a time zone (try one like Asia/Shanghai).` }, 400);
+      }
+    }
+    stmts.push(
+      c.env.DB.prepare("UPDATE tracks SET place_city = ?, place_country = ?, place_timezone = ? WHERE id = ?").bind(
+        clean(p.place_city, 80),
+        clean(p.place_country, 80),
+        zone,
+        String(p.id)
+      )
+    );
+  }
+  for (let i = 0; i < stmts.length; i += 50) await c.env.DB.batch(stmts.slice(i, i + 50));
+  return c.json({ ok: true, updated: stmts.length });
+});
+
 // A track that a programme or the Scheduler still names can't go (the database
 // won't allow it, and a show would lose a song), so say where it is used and
 // let it be taken out there first. Tags, jingle pins and Bulk Import rows go

@@ -5,7 +5,7 @@ import { DAY, HOUR, hhmm, parisDate, parisHHMM, weekdayIndex } from "./time";
 import { EMPTY_CONTENT, type PlanContent } from "./content";
 import { anchorProblems, blockLengthMs, estimateSlots, hms, occurrenceSource, resolverForBlock, sumMs, type SlotEstimate } from "./handCheck";
 import { isHandPlanned } from "./plan";
-import { channelTags } from "../station";
+import { channelAlbums, channelTags } from "../station";
 
 /**
  * Plan validation (handoff §2.5). Red issues stop a channel's Publish; amber
@@ -180,7 +180,7 @@ async function handIssues(db: D1Database, channel: Channel, active: GridBlock[],
     if (b.fill_kind !== "manual" && (!src.list || src.list.kind !== (b.fill_kind === "template" ? "template" : "playlist"))) continue; // reported above
     const day = shortDate(o.date);
     let resolver = resolvers.get(b.id);
-    if (!resolver) resolvers.set(b.id, (resolver = resolverForBlock(db, b, tags)));
+    if (!resolver) resolvers.set(b.id, (resolver = resolverForBlock(db, b, tags, channelAlbums(channel))));
     const perDate = !!src.ro || b.fill_kind === "manual";
     const ownerKey = src.ro ? `ro:${src.ro.id}` : src.list ? `list:${src.list.id}:${b.id}` : `none:${b.id}:${o.date}`;
     if (!perDate) {

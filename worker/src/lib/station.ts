@@ -138,8 +138,23 @@ async function loadManualLoop(db: D1Database, channel: Channel, capsules: Capsul
   };
 }
 
-/** Published tracks for an autopilot pool: matching any of the tags, or the whole catalogue. */
-export async function autopilotTracks(db: D1Database, tagsAny: string[]): Promise<Track[]> {
+/**
+ * Published tracks for an autopilot pool: matching any of the tags or on any
+ * of the albums (a channel's catalogue_rules can name albums since
+ * migrations/0029), or the whole catalogue when it names neither.
+ */
+export async function autopilotTracks(db: D1Database, tagsAny: string[], albumsAny: string[] = []): Promise<Track[]> {
+  if (albumsAny.length > 0) {
+    const inAlbum = `t.album_id IN (${albumsAny.map(() => "?").join(",")})`;
+    const tagged = `EXISTS (SELECT 1 FROM track_tags tt JOIN tags tg ON tg.id = tt.tag_id
+                            WHERE tt.track_id = t.id AND tg.name IN (${tagsAny.map(() => "?").join(",")}))`;
+    return (
+      await db
+        .prepare(`SELECT t.* FROM tracks t WHERE t.status = 'published' AND (${tagsAny.length > 0 ? `${inAlbum} OR ${tagged}` : inAlbum}) ORDER BY t.id ASC`)
+        .bind(...albumsAny, ...tagsAny)
+        .all<Track>()
+    ).results;
+  }
   return tagsAny.length > 0
     ? (
         await db
@@ -168,6 +183,15 @@ export const channelTags = (channel: Channel): string[] => {
   return rules?.tags_any ?? [];
 };
 
+export const channelAlbums = (channel: Channel): string[] => {
+  const rules = channel.catalogue_rules ? JSON.parse(channel.catalogue_rules) : null;
+  return rules?.albums_any ?? [];
+};
+
+/** A block's songs: its own tags if it has any, else the channel's pool (tags and albums). */
+export const poolTracks = (db: D1Database, ownTags: string[], channel: Channel | null): Promise<Track[]> =>
+  ownTags.length || !channel ? autopilotTracks(db, ownTags) : autopilotTracks(db, channelTags(channel), channelAlbums(channel));
+
 const pinsConfig = (pins: PinnedJingle[]) =>
   pins
     .map((p) => `${p.track_id}>${p.asset_id}@${p.start_offset_seconds}:${p.duck_level}:${p.duck_fade_ms}`)
@@ -175,7 +199,7 @@ const pinsConfig = (pins: PinnedJingle[]) =>
     .join(",");
 
 async function loadAutopilotLoop(db: D1Database, kv: KVNamespace, channel: Channel, capsules: CapsuleClip[]): Promise<LoopResult> {
-  const tracks = await autopilotTracks(db, channelTags(channel));
+  const tracks = await autopilotTracks(db, channelTags(channel), channelAlbums(channel));
   const stationIds = await stationIdAssets(db);
 
   // The cache/seed key is fingerprinted on exactly which tracks and station
@@ -282,12 +306,20 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
   const trackIds = Array.from(new Set(items.map((i) => i?.track_id).filter((id): id is string => !!id)));
   const albumByTrack = new Map<
     string,
-    { artist: string | null; album_id: string | null; album_title: string | null; album_artwork_url: string | null; is_contest_entry: number }
+    {
+      artist: string | null;
+      album_id: string | null;
+      album_title: string | null;
+      album_artwork_url: string | null;
+      is_contest_entry: number;
+      place_city: string | null;
+      place_country: string | null;
+    }
   >();
   if (trackIds.length > 0) {
     const { results } = await db
       .prepare(
-        `SELECT t.id, t.artist, t.album_id, a.title AS album_title, a.artwork_url AS album_artwork_url,
+        `SELECT t.id, t.artist, t.album_id, a.title AS album_title, a.artwork_url AS album_artwork_url, t.place_city, t.place_country,
                 EXISTS (SELECT 1 FROM track_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.track_id = t.id AND g.name = 'creator-contest') AS is_contest_entry
          FROM tracks t LEFT JOIN albums a ON a.id = t.album_id
          WHERE t.id IN (${trackIds.map(() => "?").join(",")})`
@@ -300,6 +332,8 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
         album_title: string | null;
         album_artwork_url: string | null;
         is_contest_entry: number;
+        place_city: string | null;
+        place_country: string | null;
       }>();
     for (const row of results) albumByTrack.set(row.id, row);
   }
@@ -338,6 +372,8 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
         (!item.track_id && item.audio_asset_id ? (promoByAsset.get(item.audio_asset_id)?.cover_url ?? bookByAsset.get(item.audio_asset_id)?.cover_url) : null) ??
         null,
       ...(item.item_type === "song" ? { is_contest_entry: !!album?.is_contest_entry } : {}),
+      // The city the song is about (migrations/0029): the players show "Shanghai, China" under the title.
+      ...(album?.place_city ? { place: { city: album.place_city, country: album.place_country } } : {}),
       ...(!item.track_id && item.audio_asset_id && goodByAsset.has(item.audio_asset_id) ? { good: goodByAsset.get(item.audio_asset_id) } : {}),
       ...(!item.track_id && item.audio_asset_id && promoByAsset.has(item.audio_asset_id) ? { promo: promoByAsset.get(item.audio_asset_id) } : {}),
       ...(!item.track_id && item.audio_asset_id && bookByAsset.has(item.audio_asset_id) ? { book: bookByAsset.get(item.audio_asset_id) } : {}),

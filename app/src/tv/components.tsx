@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useFocusable } from "@noriginmedia/norigin-spatial-navigation";
 import { channelAccent } from "../listener/lib/channelAccent";
 import { clockText, dateText, stillFor, useNow } from "./tvData";
+import { channelStill } from "../shared/channelInfo";
 import { hoverFocus } from "./pointer";
 
 /** Clock over the date, top right of every screen (the TV's own time). */
@@ -111,7 +112,7 @@ export function RoundControl({
 /** A channel's still, or its accent colour with the logo when there's none. */
 export function ChannelStill({ slug, className = "", blur = false }: { slug: string; className?: string; blur?: boolean }) {
   const [failed, setFailed] = useState(false);
-  if (failed) {
+  if (failed || !channelStill(slug)) {
     return (
       <div className={`tv-still-fallback ${className}`} style={{ background: `linear-gradient(135deg, ${channelAccent(slug)}, #08080a 80%)` }}>
         <img src="/weareradio-logo-hero.webp" alt="" />

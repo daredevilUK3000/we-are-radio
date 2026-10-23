@@ -65,9 +65,9 @@ export function occurrenceSource(b: GridBlock, date: string, content: PlanConten
   return { ro: null, list, slots: list.slots };
 }
 
-export const resolverForBlock = (db: D1Database, b: GridBlock, channelTags: string[]) => {
+export const resolverForBlock = (db: D1Database, b: GridBlock, channelTags: string[], channelAlbums: string[] = []) => {
   const tags = blockTags(b);
-  return new SlotResolver(db, tags.length ? tags : channelTags, b.channel_id);
+  return tags.length ? new SlotResolver(db, tags, b.channel_id) : new SlotResolver(db, channelTags, b.channel_id, channelAlbums);
 };
 
 export interface AnchorProblem {

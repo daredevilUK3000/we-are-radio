@@ -7,7 +7,9 @@ import { ChannelRow } from "./Offline";
 import { offlineSupported, useOfflineBlocks, useOnline } from "../../shared/offline";
 import { EyebrowPill } from "../components/BrandMark";
 import { useActiveChannel } from "../context/ActiveChannelContext";
-import { CHANNEL_LABELS } from "../lib/channelLabels";
+import { channelLabel as labelFor } from "../lib/channelLabels";
+import { channelAccent } from "../lib/channelAccent";
+import { channelMediaUrl, rememberChannels, useChannelInfo } from "../../shared/channelInfo";
 import { trackListenNow } from "../../shared/analytics";
 import { Top3HeroButton, Top3HeroPill } from "../components/contest/Top3HeroPill";
 import { Top3FeatureBand } from "../components/contest/Top3FeatureBand";
@@ -22,41 +24,46 @@ import {
   WaysToListen,
 } from "../components/HomeSections";
 
-// The network was designed from day one with six channels total (see
-// migrations/0001_init.sql) - only `live` ones are ever named to listeners,
-// but the "+N more coming soon" tile needs a total to count down from
-// without the public API exposing anything about the unlaunched ones.
-const TOTAL_CHANNELS = 6;
+// Only `live` channels are ever named to listeners; the "+N more coming soon"
+// tile is a count of the ones being built, from the API (migrations/0029),
+// which never says anything else about them.
 
-const CHANNEL_THEME: Record<string, string> = {
-  "kizzi-radio": "theme-kizzi-radio",
-  "we-are-50s": "theme-we-are-50s",
-};
-
-// Looping clips that stand in for the old emoji on the channel cards
-// (public/channels/channel-<slug>.mp4, with a still frame alongside). A
-// channel without one falls back to its emoji, so a newly launched channel
-// still gets a card.
-const CHANNEL_VIDEOS = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark", "we-are-instrumental"]);
+// Looping clips that stand in for the old emoji on the channel cards (the
+// channel's card_video, with its card_image as the still). A channel with
+// neither falls back to its emoji on its own colour, so a newly launched
+// channel still gets a card.
 
 // Visitors who've asked their system for reduced motion get the still frame.
 const prefersReducedMotion =
   typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-function themeFor(slug: string) {
-  return CHANNEL_THEME[slug] ?? "theme-default";
-}
+// A card without a clip or still: its emoji on a glow of its own colour (grey when it has none).
+const cardTint = (slug: string) => {
+  const accent = channelAccent(slug);
+  return { background: `radial-gradient(circle at 30% 20%, ${accent}66, #131316 75%)` };
+};
 
 export function Home() {
   const { channelSlug } = useActiveChannel();
   const [nowPlaying, setNowPlaying] = useState<any>(null);
   const [channels, setChannels] = useState<any[]>([]);
+  const [comingSoon, setComingSoon] = useState(0);
+  // "Now in: <city>" on the cards of channels whose songs are mostly about places.
+  const [placeBySlug, setPlaceBySlug] = useState<Record<string, string>>({});
+  useChannelInfo();
   const [featured, setFeatured] = useState<{ album: any; tracks: any[] } | null>(null);
   const [podcasts, setPodcasts] = useState<{ shows: any[]; recent: any[] } | null>(null);
 
   useEffect(() => {
     publicApi.nowPlaying(channelSlug).then(setNowPlaying).catch(() => {});
-    publicApi.channels().then((r) => setChannels(r.channels)).catch(() => {});
+    publicApi
+      .channels()
+      .then((r) => {
+        rememberChannels(r.channels);
+        setChannels(r.channels);
+        setComingSoon(r.coming_soon ?? 0);
+      })
+      .catch(() => {});
   }, [channelSlug]);
 
   // Independent of the active channel, so fetched once rather than on every
@@ -66,12 +73,28 @@ export function Home() {
     publicApi.podcastShowcase().then(setPodcasts).catch(() => {});
   }, []);
 
-  const channelLabel = CHANNEL_LABELS[channelSlug] ?? "We Are Radio";
+  // Only while one of those cards is showing: the item on air on each channel, once a minute.
+  const wantsPlaces = channels.some((c) => c.shows_places);
+  useEffect(() => {
+    if (!wantsPlaces) return;
+    const load = () =>
+      publicApi
+        .nowPlayingAll()
+        .then((r) =>
+          setPlaceBySlug(Object.fromEntries(r.channels.filter((c) => c.item_type === "song" && c.place?.city).map((c) => [c.slug, c.place!.city])))
+        )
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 60_000);
+    return () => clearInterval(id);
+  }, [wantsPlaces]);
+
+  const channelLabel = labelFor(channelSlug) ?? "We Are Radio";
   const subhead = nowPlaying?.on_air
     ? `${nowPlaying.channel?.name} · ${nowPlaying.programme?.title}`
     : "Kizzi's personal radio network";
 
-  const remaining = Math.max(0, TOTAL_CHANNELS - channels.length);
+  const remaining = comingSoon;
   const liveChannel = channels.find((c) => c.slug === channelSlug);
 
   return (
@@ -146,34 +169,38 @@ export function Home() {
           </Link>
         </div>
         <div className="channel-grid">
-          {channels.map((c) => (
-            <Link key={c.id} to={`/listen?channel=${c.slug}`} className="channel-card">
-              <div className={`channel-card-art ${themeFor(c.slug)}${CHANNEL_VIDEOS.has(c.slug) ? " has-video" : ""}`}>
-                {CHANNEL_VIDEOS.has(c.slug) &&
-                  (prefersReducedMotion ? (
-                    <img className="channel-card-video" data-slug={c.slug} src={`/channels/channel-${c.slug}.jpg`} alt="" />
-                  ) : (
+          {channels.map((c) => {
+            const video = channelMediaUrl(c.card_video);
+            const still = channelMediaUrl(c.card_image);
+            const place = c.shows_places ? placeBySlug[c.slug] : undefined;
+            return (
+              <Link key={c.id} to={`/listen?channel=${c.slug}`} className="channel-card">
+                <div className={`channel-card-art theme-default${video || still ? " has-video" : ""}`} style={video || still ? undefined : cardTint(c.slug)}>
+                  {video && !prefersReducedMotion ? (
                     <video
                       className="channel-card-video"
                       data-slug={c.slug}
-                      src={`/channels/channel-${c.slug}.mp4`}
-                      poster={`/channels/channel-${c.slug}.jpg`}
+                      src={video}
+                      poster={still ?? undefined}
                       autoPlay
                       muted
                       loop
                       playsInline
                       aria-hidden="true"
                     />
-                  ))}
-                <span className="live-pill">LIVE</span>
-                {!CHANNEL_VIDEOS.has(c.slug) && (c.emoji ?? "📻")}
-              </div>
-              <div className="channel-card-body">
-                <div className="channel-name">{c.name}</div>
-                <div className="channel-desc">{c.description}</div>
-              </div>
-            </Link>
-          ))}
+                  ) : (
+                    still && <img className="channel-card-video" data-slug={c.slug} src={still} alt="" />
+                  )}
+                  <span className="live-pill">LIVE</span>
+                  {!video && !still && (c.emoji ?? "📻")}
+                </div>
+                <div className="channel-card-body">
+                  <div className="channel-name">{c.name}</div>
+                  <div className="channel-desc">{place ? `Now in: ${place}` : c.description}</div>
+                </div>
+              </Link>
+            );
+          })}
           {remaining > 0 && (
             <div className="channels-more-tile">+{remaining} &mdash; More channels coming soon</div>
           )}

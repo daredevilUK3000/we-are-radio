@@ -370,6 +370,7 @@ export function Home() {
 
   const n = now[hero.slug];
   const prog = progressOf(n, nowMs);
+  const heroLoop = loopFor(hero.slug);
   const blockLine = n?.block ? `${n.block.name} · ${clockText(n.block.starts_at * 1000)}–${clockText(n.block.ends_at * 1000)}` : hero.description ?? "";
 
   return (
@@ -394,11 +395,11 @@ export function Home() {
               {...videoProps}
             />
           )}
-          {!welcome && videoSlug === hero.slug && !ui.stillsOnly && (
+          {!welcome && videoSlug === hero.slug && !ui.stillsOnly && heroLoop && (
             <video
               key={`video-${hero.slug}`}
               className="tv-bg-media tv-bg-video"
-              src={loopFor(hero.slug)}
+              src={heroLoop}
               poster={stillFor(hero.slug)}
               muted
               autoPlay
@@ -408,7 +409,7 @@ export function Home() {
             />
           )}
           {/* The video's darkening: a layer over it, not a CSS filter on it (a Fire TV Stick played a filtered video without ever redrawing it). */}
-          {!ui.stillsOnly && (welcome || videoSlug === hero.slug) && <div className="tv-bg-dim" />}
+          {!ui.stillsOnly && (welcome || (videoSlug === hero.slug && heroLoop)) && <div className="tv-bg-dim" />}
           <div className="tv-scrim-left" />
           <div className="tv-scrim-bottom" />
         </div>

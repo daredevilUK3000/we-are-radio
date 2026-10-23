@@ -4,6 +4,7 @@ import { FocusContext, getCurrentFocusKey, setFocus, useFocusable } from "@norig
 import { mediaUrl } from "../../api/client";
 import { useLikes } from "../../listener/components/LikeButton";
 import { voiceLines } from "../../listener/components/onair/voice";
+import { PlaceLine } from "../../listener/components/PlaceLine";
 import { behindLabel } from "../../listener/lib/useRewind";
 import { trackTv } from "../../shared/analytics";
 import { ChannelStill, EqBars, HintBar, Icon, OnAirPill, RoundControl, TvButton, TvClock } from "../components";
@@ -167,6 +168,7 @@ export function NowPlaying() {
             <h1 className="tv-np-title" style={{ fontSize: titleSize(title) }}>
               {title}
             </h1>
+            {!voice && !promo && <PlaceLine item={now} className="tv-np-place" />}
             {promo ? (
               <div className="tv-np-promo">
                 <PromoQr url={`${promo.short_url}?s=tv`} />

@@ -478,6 +478,20 @@ html.tv-pointer .tv-slot {
   text-overflow: ellipsis;
 }
 
+/* The city a song is about (PlaceLine.tsx), under the title. */
+.tv-np-place {
+  font-size: 26px;
+  margin: 0 0 6px;
+  color: var(--tv-dim);
+}
+.tv-np-place .place-line-icon {
+  width: 22px;
+  height: 22px;
+}
+.tv-np-details .tv-np-place {
+  font-size: 32px;
+}
+
 .tv-np-artist {
   font-size: 24px;
   color: var(--tv-dim);

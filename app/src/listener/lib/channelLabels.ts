@@ -1,9 +1,7 @@
-// Display names for the channels the time-of-day flow (and Vibe Shift) can
-// tune to - keyed by slug, so anything showing "the current channel" from
-// ActiveChannelContext can label it without another fetch.
-export const CHANNEL_LABELS: Record<string, string> = {
-  "kizzi-radio": "Kizzi Radio",
-  "we-are-love": "We Are Love",
-  "we-are-50s": "We Are 50s",
-  "we-are-after-dark": "We Are After Dark",
-};
+import { channelInfo } from "../../shared/channelInfo";
+
+// The display name for whichever channel the time-of-day flow (and Vibe
+// Shift) has tuned to, from the channel rows already fetched by
+// ActiveChannelContext - so anything showing "the current channel" can label
+// it without another fetch.
+export const channelLabel = (slug: string | null | undefined): string | undefined => channelInfo(slug)?.name;

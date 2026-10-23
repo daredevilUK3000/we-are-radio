@@ -4,7 +4,9 @@ import { buildRotation } from "../radioBrain";
 import { loadCapsulesFor, withCapsules } from "../capsules";
 import {
   autopilotTracks,
+  channelAlbums,
   channelTags,
+  poolTracks,
   loadPinnedJingles,
   loadStationLoop,
   programmeItems,
@@ -16,6 +18,7 @@ import { fitToWindow } from "./fit";
 import { blockReason, blockTags, occurrenceOn, occurrencesBetween, type GridBlock, type Occurrence } from "./grid";
 import { describeRule, EMPTY_CONTENT, parseRule, SlotResolver, trackPlayable, type ListSlot, type PlanContent } from "./content";
 import { addDaysTo, DAY, HOUR, mmss, parisHHMM, shortDay, stationDate, stationDayStartMs } from "./time";
+import { resolverForBlock } from "./handCheck";
 import { allowedIn, bandDistance, daypartReason, daypartsApply, daypartsBetween, daypartSeconds, MIN_DAYPART_SONGS, songBands, type TimeBand } from "./dayparts";
 import { contentKey, REPEAT_WINDOW_MS, type ItemSource, type PlanItem, type Playable } from "./types";
 import { clockHour, dayPlan, hourSlots, loadPromoConfig, promoAllowed, PROMO_MIN_GAP_MS, PROMO_WINDOW_END_MARGIN_MS, slotOpensAt, type AirablePromo, type PromoConfig } from "../promos";
@@ -213,7 +216,7 @@ export class Planner {
     }
 
     const tags = blockTags(b);
-    const tracks = await autopilotTracks(this.db, tags.length ? tags : channelTags(this.channel));
+    const tracks = await poolTracks(this.db, tags, this.channel);
     if (tracks.length === 0) throw new PlanError(`No published songs match the ${b.name} block's tags`);
     const rotation = withCapsules(buildRotation(`${b.id}:${occ.date}`, tracks, await stationIdAssets(this.db), pins), capsules);
     const ref = `rotation:${b.id}:${occ.date}`;
@@ -237,7 +240,7 @@ export class Planner {
     const band = occ.daypart as TimeBand;
     this.bands ??= songBands(this.db);
     const bands = await this.bands;
-    const all = await autopilotTracks(this.db, channelTags(this.channel));
+    const all = await poolTracks(this.db, [], this.channel);
     if (all.length === 0) throw new PlanError(`No published songs match ${this.channel.name}'s tags`);
     const allowed = all.filter((t) => allowedIn(bands.get(t.id), band));
     let tracks = allowed;
@@ -534,7 +537,7 @@ export class Planner {
     let r = this.resolvers.get(b.id);
     if (!r) {
       const tags = blockTags(b);
-      r = new SlotResolver(this.db, tags.length ? tags : channelTags(this.channel), this.channel.id);
+      r = resolverForBlock(this.db, b, channelTags(this.channel), channelAlbums(this.channel));
       this.resolvers.set(b.id, r);
     }
     return r;
@@ -558,7 +561,7 @@ export class Planner {
         }
         const tags = blockTags(b);
         const ref = `pool:${b.id}:${occ.date}`;
-        const songs = (await autopilotTracks(this.db, tags.length ? tags : channelTags(this.channel)))
+        const songs = (await poolTracks(this.db, tags, this.channel))
           .map(trackPlayable)
           .filter((x): x is Playable => !!x)
           .map((x) => ({ ...x, source: "autopilot" as const, sourceRef: ref, blockId: b.id, blockDate: occ.date, reasons: [blockReason(occ), `From the ${b.name} block's pool`] }));

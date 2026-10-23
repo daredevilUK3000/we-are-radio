@@ -63,6 +63,10 @@ export interface Track {
   updated_at: string;
   artist: string | null;
   content_hash: string | null;
+  // migrations/0029: the city a song is about, all optional
+  place_city: string | null;
+  place_country: string | null;
+  place_timezone: string | null;
 }
 
 export interface Channel {
@@ -76,6 +80,12 @@ export interface Channel {
   catalogue_rules: string | null;
   programming_mode: ProgrammingMode;
   created_at: string;
+  // migrations/0029: what the app used to hard-code per slug
+  accent: string | null;
+  card_image: string | null;
+  card_video: string | null;
+  short_label: string | null;
+  in_coming_soon: number;
 }
 
 export interface Programme {

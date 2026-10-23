@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Channel, Env } from "../lib/types";
 import { newId } from "../lib/id";
 import { hashSeed, seededShuffle } from "../lib/radioBrain";
-import { channelTags } from "../lib/station";
+import { channelAlbums, channelTags } from "../lib/station";
 import {
   describeRule,
   LINK_KINDS,
@@ -213,7 +213,7 @@ async function runningOrderPayload(env: Env, b: GridBlock, date: string) {
   // An occurrence in the past isn't in the snapshot's running orders: read it directly.
   const content = { lists: { ...working.lists, ...(b.list_id ? await loadLists(env.DB, [b.list_id]) : {}) }, running_orders: ro ? [ro] : [] };
   const src = occurrenceSource(b, date, content);
-  const resolver = resolverForBlock(env.DB, b, channelTags(ch));
+  const resolver = resolverForBlock(env.DB, b, channelTags(ch), channelAlbums(ch));
   const slots = await describeSlots(resolver, src.slots);
   const occ = occurrenceOn(b, date);
   const lengthMs = blockLengthMs(b);
@@ -356,7 +356,7 @@ contentRoutes.post("/running-orders/:blockId/:date/auto-fill", async (c) => {
   const ro = await loadRunningOrder(c.env.DB, b.id, date);
   if (!ro) return c.json({ error: "invalid", message: "Create the running order first." }, 400);
   const ch = (await channelById(c.env.DB, b.channel_id))!;
-  const resolver = resolverForBlock(c.env.DB, b, channelTags(ch));
+  const resolver = resolverForBlock(c.env.DB, b, channelTags(ch), channelAlbums(ch));
   const est = await estimateSlots(resolver, ro.items);
   // Rule slots count at their average; the gap is measured from the last pinned time if that's later.
   const ends = startTimes(est).map((s, i) => s + (est[i].empty ? 0 : (est[i].ms ?? 0)));

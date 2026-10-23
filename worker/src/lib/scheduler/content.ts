@@ -245,7 +245,9 @@ export class SlotResolver {
     /** The tags a song rule with no tags uses: the block's, else the channel's. */
     readonly poolTags: string[],
     /** The channel, for "A promo" rules: only promos switched on for it count (lib/promos.ts). */
-    readonly channelId?: string
+    readonly channelId?: string,
+    /** The albums that go with poolTags when they're the channel's (catalogue_rules.albums_any). */
+    readonly poolAlbums: string[] = []
   ) {}
 
   track(id: string): Promise<Track | null> {
@@ -287,7 +289,7 @@ export class SlotResolver {
     if (!p) {
       p = (async () => {
         if (rule.item_type === "song") {
-          let tracks = await autopilotTracks(this.db, rule.tags_any?.length ? rule.tags_any : this.poolTags);
+          let tracks = await (rule.tags_any?.length ? autopilotTracks(this.db, rule.tags_any) : autopilotTracks(this.db, this.poolTags, this.poolAlbums));
           if (rule.album_id) tracks = tracks.filter((t) => t.album_id === rule.album_id);
           return tracks.map(trackPlayable).filter((x): x is Playable => !!x);
         }

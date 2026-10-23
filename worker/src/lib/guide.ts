@@ -33,14 +33,8 @@ export interface GuideChannel {
   slots: GuideSlot[];
 }
 
-// Kept in step with app/src/listener/lib/channelAccent.ts.
-const ACCENTS: Record<string, string> = {
-  "kizzi-radio": "#E11D2E",
-  "we-are-love": "#E11D2E",
-  "we-are-50s": "#F5B942",
-  "we-are-after-dark": "#3E7CB1",
-};
-export const channelAccent = (slug: string) => ACCENTS[slug] ?? "#8B8B93";
+// The channel's own colour (migrations/0029), or the neutral grey the app uses too.
+export const channelAccent = (ch: Pick<Channel, "accent">) => ch.accent ?? "#8B8B93";
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -138,7 +132,7 @@ export async function buildGuide(env: Env, days: number, nowMs = Date.now()): Pr
       // Not on the Scheduler: no blocks to show, one default span a day.
       slots.push(...defaultSpans(ch, fromMs, toMs));
     }
-    out.push({ slug: ch.slug, name: ch.name, accent: channelAccent(ch.slug), slots });
+    out.push({ slug: ch.slug, name: ch.name, accent: channelAccent(ch), slots });
   }
   return { generated_at: sec(nowMs), channels: out };
 }

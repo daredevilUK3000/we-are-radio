@@ -11,7 +11,7 @@ uploadRoutes.post("/presign", async (c) => {
   const { filename, content_type, folder } = await c.req.json<{
     filename: string;
     content_type: string;
-    folder: "audio" | "artwork" | "masters";
+    folder: "audio" | "artwork" | "masters" | "channels";
   }>();
 
   if (!filename || !content_type || !folder) {

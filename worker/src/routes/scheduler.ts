@@ -15,7 +15,7 @@ import { fallbackLoop } from "../lib/scheduler/read";
 import { liveMax, logChange, type VersionRow } from "../lib/scheduler/store";
 import { addDaysTo, DAY, HOUR, MINUTE, parisDate, parisDayTime, parisWallClockToUtcMs, weekdayIndex } from "../lib/scheduler/time";
 import { clearTimelineCache, itemsBetween, type TimelineItem } from "../lib/scheduler/timeline";
-import { autopilotTracks, channelTags, enrichItems } from "../lib/station";
+import { autopilotTracks, channelTags, enrichItems, poolTracks } from "../lib/station";
 import type { RotationItem } from "../lib/radioBrain";
 
 /**
@@ -451,6 +451,25 @@ schedulerRoutes.post("/channels/:slug/enable", async (c) => {
   return c.json({ ok: true, enabled: !!body.enabled });
 });
 
+/**
+ * Go live on the Studio Channels page (routes/channels.ts): a channel made in
+ * the Studio has had shadow checks since it was created, so once they've run
+ * clean for 24 h it goes on the Scheduler in the same step. If they haven't,
+ * it plays the old way until "Put on air" on the Scheduler page, as before.
+ */
+export async function enableOnGoLive(env: Env, ch: Channel): Promise<{ enabled: boolean; reason: string }> {
+  const sc = await schedRow(env.DB, ch.id);
+  if (sc.enabled) return { enabled: true, reason: "It's already on the Scheduler." };
+  const now = Date.now();
+  const e = eligibility(sc, !!(await latestVersion(env.DB, ch.id)), now);
+  if (!e.ok) return { enabled: false, reason: e.reason };
+  await env.DB.prepare("UPDATE sched_channels SET enabled = 1, enabled_at = ?, on_fallback_since_ms = NULL WHERE channel_id = ?").bind(nowIso(), ch.id).run();
+  await logChange(env.DB, { channelId: ch.id, actor: "studio", action: "enable", reason: "Scheduler put on air by you, with Go live" });
+  clearTimelineCache(ch.id);
+  await env.CONFIG.delete(`sched:health:${ch.id}`);
+  return { enabled: true, reason: e.reason };
+}
+
 schedulerRoutes.get("/channels/:slug/airing/:airingId/history", async (c) => {
   const ch = await channelBySlug(c.env.DB, c.req.param("slug"));
   if (!ch) return c.json({ error: "not_found" }, 404);
@@ -619,7 +638,7 @@ schedulerRoutes.get("/pool", async (c) => {
   const tags = (c.req.query("tags") ?? "").split(",").map((t) => t.trim()).filter(Boolean);
   const slug = c.req.query("channel");
   const ch = slug ? await channelBySlug(c.env.DB, slug) : null;
-  const tracks = await autopilotTracks(c.env.DB, tags.length ? tags : ch ? channelTags(ch) : []);
+  const tracks = await poolTracks(c.env.DB, tags, ch);
   const seconds = tracks.reduce((s, t) => s + t.duration_seconds, 0);
   return c.json({ tracks: tracks.length, seconds });
 });

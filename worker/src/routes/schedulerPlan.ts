@@ -12,7 +12,7 @@ import { Planner } from "../lib/scheduler/plan";
 import { addDaysTo, DAY, HOUR, parisDate, parisWallClockToUtcMs } from "../lib/scheduler/time";
 import { itemsBetween } from "../lib/scheduler/timeline";
 import { validatePlan } from "../lib/scheduler/validate";
-import { autopilotTracks, channelTags } from "../lib/station";
+import { autopilotTracks, channelTags, poolTracks } from "../lib/station";
 
 /**
  * Release 2's working copy, draft, publish, discard and rollback
@@ -87,7 +87,7 @@ planRoutes.get("/board", async (c) => {
       status: ch.status,
       enabled: !!sc.get(ch.id),
       programming_mode: ch.programming_mode,
-      accent: channelAccent(ch.slug),
+      accent: channelAccent(ch),
       live_plan: plan?.row.number ?? null,
       live_version: latest?.number ?? null,
       blocks: blocks.map(blockJson),
@@ -362,6 +362,6 @@ planRoutes.get("/plans/:number", async (c) => {
 planRoutes.get("/pool", async (c) => {
   const tags = (c.req.query("tags") ?? "").split(",").map((t) => t.trim()).filter(Boolean);
   const ch = await channelBySlug(c.env.DB, c.req.query("channel"));
-  const tracks = await autopilotTracks(c.env.DB, tags.length ? tags : ch ? channelTags(ch) : []);
+  const tracks = await poolTracks(c.env.DB, tags, ch);
   return c.json({ tracks: tracks.length, seconds: tracks.reduce((s, t) => s + t.duration_seconds, 0) });
 });

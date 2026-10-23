@@ -1,6 +1,6 @@
 import type { Channel, Env, Programme } from "../types";
 import { sendEmail } from "../email";
-import { autopilotTracks, channelTags } from "../station";
+import { autopilotTracks, channelTags, poolTracks } from "../station";
 import { blockLengthMin, blockTags, loadGridBlocks, occurrencesBetween, occurrenceLabel, type GridBlock, loadWorkingBlocks } from "./grid";
 import { furthestHorizon, type SchedChannelRow } from "./generate";
 import { fallbackLoop } from "./read";
@@ -209,7 +209,7 @@ export async function blockFillProblem(db: D1Database, channel: Channel, b: Pick
   // Playlists, templates and running orders are checked item by item in validate.ts.
   if (b.fill_kind === "playlist" || b.fill_kind === "template" || b.fill_kind === "manual") return null;
   const tags = blockTags(b as GridBlock);
-  const tracks = await autopilotTracks(db, tags.length ? tags : channelTags(channel));
+  const tracks = await poolTracks(db, tags, channel);
   if (tracks.length === 0) return { level: "red", text: "no published songs match its tags" };
   const noAudio = tracks.filter((t) => !t.audio_url).length;
   if (noAudio === tracks.length) return { level: "red", text: "none of its songs have audio" };

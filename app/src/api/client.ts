@@ -83,7 +83,10 @@ export interface BookAiring {
 }
 
 export const publicApi = {
-  channels: () => request<{ channels: any[] }>(`${API_BASE}/channels`),
+  /** Live channels, plus how many are being built (a number only: "+N more coming soon"). */
+  channels: () => request<{ channels: any[]; coming_soon?: number }>(`${API_BASE}/channels`),
+  /** Every live channel's item on air (the TV Home's poll; cached 10 s). */
+  nowPlayingAll: () => request<{ channels: { slug: string; item_type: string | null; place: { city: string; country: string | null } | null }[] }>(`${API_BASE}/now-playing/all`),
   channel: (slug: string) => request<{ channel: any }>(`${API_BASE}/channels/${slug}`),
   albums: () => request<{ albums: any[] }>(`${API_BASE}/albums`),
   album: (id: string) => request<{ album: any; tracks: any[] }>(`${API_BASE}/albums/${id}`),
@@ -318,6 +321,9 @@ export const studioApi = {
   tracksByStatus: (status: string) =>
     request<{ tracks: any[] }>(`${STUDIO_BASE}/tracks?status=${encodeURIComponent(status)}`),
   deleteTrack: (id: string) => request<{ ok: true }>(`${STUDIO_BASE}/tracks/${id}`, { method: "DELETE" }),
+  /** The city each song is about (migrations/0029): one song, or a whole album at once. */
+  setTrackPlaces: (places: { id: string; place_city: string | null; place_country: string | null; place_timezone: string | null }[]) =>
+    request<{ ok: true; updated: number }>(`${STUDIO_BASE}/tracks/places`, { method: "PUT", body: JSON.stringify({ places }) }),
 
   /** "Start over" taps in the last 7 days, and the 5 most-restarted songs. */
   analyticsRestarts: () =>
@@ -384,12 +390,22 @@ export const studioApi = {
 
   channels: () => request<{ channels: any[] }>(`${STUDIO_BASE}/channels?all=1`),
   setChannelStatus: (id: string, status: "building" | "live") =>
-    request<{ ok: true }>(`${STUDIO_BASE}/channels/${id}/status`, {
+    request<{ ok: true; scheduler?: { enabled: boolean; reason: string } }>(`${STUDIO_BASE}/channels/${id}/status`, {
       method: "POST",
       body: JSON.stringify({ status }),
     }),
   channelLaunchChecklist: (id: string) =>
     request<{ checklist: Record<string, unknown> }>(`${STUDIO_BASE}/channels/${id}/launch-checklist`),
+  /** New channel / Edit (migrations/0029). A new channel always starts in building. */
+  createChannel: (data: Record<string, unknown>) =>
+    request<{ id: string }>(`${STUDIO_BASE}/channels`, { method: "POST", body: JSON.stringify(data) }),
+  updateChannel: (id: string, data: Record<string, unknown>) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/channels/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  /** How many published songs some albums and tags add up to (neither: the whole catalogue). */
+  channelPool: (albums: string[], tags: string[]) =>
+    request<{ tracks: number; seconds: number }>(
+      `${STUDIO_BASE}/channels/pool?albums=${encodeURIComponent(albums.join(","))}&tags=${encodeURIComponent(tags.join(","))}`
+    ),
   setChannelProgrammingMode: (id: string, programming_mode: "manual" | "autopilot") =>
     request<{ ok: true }>(`${STUDIO_BASE}/channels/${id}`, {
       method: "PATCH",
@@ -487,7 +503,7 @@ export const studioApi = {
 
   tags: () => request<{ tags: any[] }>(`${STUDIO_BASE}/tags`),
 
-  presignUpload: (filename: string, content_type: string, folder: "audio" | "artwork" | "masters") =>
+  presignUpload: (filename: string, content_type: string, folder: "audio" | "artwork" | "masters" | "channels") =>
     request<{ upload_url: string; key: string }>(`${STUDIO_BASE}/upload/presign`, {
       method: "POST",
       body: JSON.stringify({ filename, content_type, folder }),

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { currentTimeOfDayChannel } from "../lib/timeOfDay";
 import { publicApi } from "../../api/client";
+import { rememberChannels } from "../../shared/channelInfo";
 import type { TimeOfDayBand } from "../../shared/moods";
 
 const OVERRIDE_KEY = "we-are-radio:vibe-shift-channel";
@@ -42,7 +43,11 @@ export function ActiveChannelProvider({ children }: { children: ReactNode }) {
     const load = () =>
       publicApi
         .channels()
-        .then((r) => setLiveSlugs(r.channels.map((ch) => ch.slug)))
+        .then((r) => {
+          // Their colours, clips and names, for every page (shared/channelInfo.ts).
+          rememberChannels(r.channels);
+          setLiveSlugs(r.channels.map((ch) => ch.slug));
+        })
         .catch(() => {});
     load();
     const id = setInterval(load, 5 * 60_000);

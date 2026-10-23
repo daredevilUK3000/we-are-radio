@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { mediaUrl } from "../../api/client";
 import { FavouriteButton } from "./FavouriteButton";
 import { useActiveChannel } from "../context/ActiveChannelContext";
-import { CHANNEL_LABELS } from "../lib/channelLabels";
+import { channelLabel } from "../lib/channelLabels";
 
 // The sections below the channel grid on the landing page
 // (handoff_landing_page_lower_half.md). The hero above them is deliberately
@@ -443,7 +443,7 @@ export function WaysToListen({ channels }: { channels: any[] }) {
           <p className="wl-desc">The player tunes itself to the time of day - one tap to change the mood without missing a beat.</p>
           <div className="wl-detail">
             <span className="wl-live-dot" />
-            Now: {CHANNEL_LABELS[channelSlug] ?? channelSlug} &middot; {band}
+            Now: {channelLabel(channelSlug) ?? channelSlug} &middot; {band}
           </div>
         </button>
       </div>

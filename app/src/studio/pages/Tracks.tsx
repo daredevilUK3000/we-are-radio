@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { studioApi, mediaUrl } from "../../api/client";
+import { AlbumPlaces, PlaceDatalists, PlaceInputs, placeDraftOf, placePayload, samePlace, type PlaceDraft } from "../components/PlaceFields";
 
 // Same song twice: identical audio (the upload fingerprint), or the same title
 // by the same artist once case and spacing are ignored.
@@ -14,6 +15,8 @@ export function Tracks() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
   const [artistDraft, setArtistDraft] = useState("");
+  const [placeDraft, setPlaceDraft] = useState<PlaceDraft>(placeDraftOf({}));
+  const [showAlbumPlaces, setShowAlbumPlaces] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -63,6 +66,7 @@ export function Tracks() {
     setEditingId(t.id);
     setTitleDraft(t.title ?? "");
     setArtistDraft(t.artist ?? "");
+    setPlaceDraft(placeDraftOf(t));
     setMessage(null);
   };
 
@@ -70,15 +74,18 @@ export function Tracks() {
     const title = titleDraft.trim();
     if (!title) return setMessage("A track needs a title.");
     const artist = artistDraft.trim() || null;
-    if (title === t.title && artist === (t.artist ?? null)) return setEditingId(null);
+    const nameChanged = title !== t.title || artist !== (t.artist ?? null);
+    const placeChanged = !samePlace(placeDraft, placeDraftOf(t));
+    if (!nameChanged && !placeChanged) return setEditingId(null);
     setBusyId(t.id);
     try {
-      await studioApi.updateTrack(t.id, { title, artist });
+      if (nameChanged) await studioApi.updateTrack(t.id, { title, artist });
+      if (placeChanged) await studioApi.setTrackPlaces([placePayload(t.id, placeDraft)]);
       setEditingId(null);
       setMessage(`Saved "${title}".`);
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't save the new name - please try again.");
+      setMessage(err instanceof Error ? err.message : "Couldn't save the changes - please try again.");
     } finally {
       setBusyId(null);
     }
@@ -105,10 +112,26 @@ export function Tracks() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1>Tracks</h1>
-        <Link to="/studio/tracks/upload" className="btn primary">
-          Upload music
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" onClick={() => setShowAlbumPlaces((v) => !v)}>
+            Places for an album
+          </button>
+          <Link to="/studio/tracks/upload" className="btn primary">
+            Upload music
+          </Link>
+        </div>
       </div>
+      <PlaceDatalists />
+      {showAlbumPlaces && (
+        <AlbumPlaces
+          tracks={tracks}
+          onClose={() => setShowAlbumPlaces(false)}
+          onSaved={(m) => {
+            setMessage(m);
+            void load();
+          }}
+        />
+      )}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
         <input
           type="search"
@@ -187,6 +210,16 @@ export function Tracks() {
                           if (e.key === "Escape") setEditingId(null);
                         }}
                       />
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flexBasis: "100%" }}>
+                        <PlaceInputs
+                          value={placeDraft}
+                          onChange={setPlaceDraft}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void saveRename(t);
+                            if (e.key === "Escape") setEditingId(null);
+                          }}
+                        />
+                      </div>
                       <button className="btn primary" onClick={() => saveRename(t)} disabled={busyId === t.id || !titleDraft.trim()}>
                         {busyId === t.id ? "Saving..." : "Save"}
                       </button>
@@ -198,6 +231,13 @@ export function Tracks() {
                     <>
                       {t.title}
                       {t.artist ? <span style={{ color: "var(--text-dim)" }}> - {t.artist}</span> : null}
+                      {t.place_city ? (
+                        <div style={{ color: "var(--text-dim)", fontSize: "0.8rem" }}>
+                          {t.place_city}
+                          {t.place_country ? `, ${t.place_country}` : ""}
+                          {t.place_timezone ? ` (${t.place_timezone})` : ""}
+                        </div>
+                      ) : null}
                       {dupNotes.has(t.id) && (
                         <span
                           className="badge"
@@ -229,7 +269,7 @@ export function Tracks() {
                   )}
                   {editingId !== t.id && (
                     <button className="btn" onClick={() => startRename(t)} disabled={busyId === t.id}>
-                      Rename
+                      Edit
                     </button>
                   )}
                   <button className="btn" onClick={() => remove(t)} disabled={busyId === t.id}>

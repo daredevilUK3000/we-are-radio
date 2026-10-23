@@ -13,6 +13,8 @@ import { PromoButton, PromoByline, PromoPill, promoOf } from "./promo/PromoOnAir
 import { BackToLivePill, StartOverButton } from "./PlayerRewind";
 import { ComingUpAt } from "./ComingUpAt";
 import { JustPlayed, useJustPlayed } from "./JustPlayed";
+import { PlaceLine } from "./PlaceLine";
+import { channelStill, channelVideo, useChannelInfo } from "../../shared/channelInfo";
 
 /** Start over (handoff_player_upgrades.md §1), from the player that owns the <audio> element. */
 export interface RewindControls {
@@ -35,7 +37,6 @@ export const VIBES: { slug: string; label: string; emoji: string }[] = [
   { slug: "kizzi-radio", label: "Kizzi Radio", emoji: "🎙" },
 ];
 
-const HAS_CHANNEL_VIDEO = new Set(["kizzi-radio", "we-are-50s", "we-are-love", "we-are-after-dark", "we-are-instrumental"]);
 const BAR_COUNT = 56;
 
 // A tiny deterministic hash, so each song gets its own waveform "shape".
@@ -130,6 +131,10 @@ export function NowPlayingExpanded({
   const station = data.channel?.name ?? "We Are Radio";
   const programmeTitle: string | null = data.programme?.id ? data.programme.title : null;
   const meta = [now?.artist, now?.album_title, programmeTitle].filter(Boolean).join("  ·  ");
+  // With no artwork: the channel's own clip and still (shared/channelInfo.ts).
+  useChannelInfo();
+  const cardVideo = channelVideo(channelSlug);
+  const cardStill = channelStill(channelSlug);
   // A replay plays the whole file; live, the airing may end early (a fade before a fixed start).
   const duration: number = (rewind?.rewound ? now?.file_duration_seconds : null) ?? now?.duration_seconds ?? 0;
   const liveNow = rewind?.rewound ? rewind.liveNow : null;
@@ -177,8 +182,8 @@ export function NowPlayingExpanded({
       <div className="np-backdrop" aria-hidden="true">
         {artUrl ? (
           <div key={artUrl} className="np-backdrop-art" style={{ backgroundImage: `url("${artUrl}")` }} />
-        ) : HAS_CHANNEL_VIDEO.has(channelSlug) ? (
-          <div className="np-backdrop-art" style={{ backgroundImage: `url("/channels/channel-${channelSlug}.jpg")` }} />
+        ) : cardStill ? (
+          <div className="np-backdrop-art" style={{ backgroundImage: `url("${cardStill}")` }} />
         ) : null}
         <div className="np-backdrop-shade" />
       </div>
@@ -201,16 +206,10 @@ export function NowPlayingExpanded({
             <div className="np-art">
               {artUrl ? (
                 <img key={artUrl} src={artUrl} alt="" />
-              ) : HAS_CHANNEL_VIDEO.has(channelSlug) ? (
-                <video
-                  src={`/channels/channel-${channelSlug}.mp4`}
-                  poster={`/channels/channel-${channelSlug}.jpg`}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  aria-hidden="true"
-                />
+              ) : cardVideo ? (
+                <video src={cardVideo} poster={cardStill ?? undefined} autoPlay muted loop playsInline aria-hidden="true" />
+              ) : cardStill ? (
+                <img src={cardStill} alt="" />
               ) : (
                 <div className="np-art-fallback" />
               )}
@@ -241,7 +240,10 @@ export function NowPlayingExpanded({
                   <PromoButton promo={promo} source="player" />
                 </div>
               ) : (
-                meta && <div className="np-meta">{meta}</div>
+                <>
+                  <PlaceLine item={now} className="np-place" />
+                  {meta && <div className="np-meta">{meta}</div>}
+                </>
               )}
             </div>
 

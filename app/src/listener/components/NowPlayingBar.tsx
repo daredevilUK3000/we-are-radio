@@ -23,6 +23,7 @@ import { GoodOnAirPill, isGood } from "./good/GoodOnAir";
 import { PromoButton, PromoPill, promoOf } from "./promo/PromoOnAir";
 import { fadeIn, useRewind } from "../lib/useRewind";
 import { BackToLivePill } from "./PlayerRewind";
+import { PlaceLine, placeOf } from "./PlaceLine";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -527,6 +528,10 @@ export function NowPlayingBar() {
                 (shown.now_playing?.label ?? "We Are Radio")
               )}
             </span>
+            {/* A song about a city: the place takes the third line, so the bar keeps its height. */}
+            {placeOf(shown.now_playing) ? (
+              <PlaceLine item={shown.now_playing} className="mp-programme is-compact" />
+            ) : (
             <span className="mp-programme">
               {upNextLabel ? (
                 isGood(shown.up_next) ? (
@@ -540,6 +545,7 @@ export function NowPlayingBar() {
                 shown.programme?.title
               )}
             </span>
+            )}
           </span>
           <svg className="mp-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 15l6-6 6 6" />

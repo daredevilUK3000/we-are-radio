@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Env, Programme, Channel, Track, AudioAsset } from "../lib/types";
 import { findNeed, NEEDS, NEED_KEYS } from "../lib/needs";
 import { addDays, parseCapsuleFields, stationToday } from "../lib/capsules";
-import { enrichItems, loadPinnedJingles, loadStation } from "../lib/station";
+import { autopilotTracks, channelAlbums, channelTags, enrichItems, loadPinnedJingles, loadStation } from "../lib/station";
 import { promoInfoFor } from "../lib/promos";
 import { bookInfoFor } from "../lib/books";
 import { nowPlayingFromLog, scheduleFromLog, schedState } from "../lib/scheduler/read";
@@ -33,9 +33,28 @@ export const publicRoutes = new Hono<{ Bindings: Env }>();
 publicRoutes.get("/channels", async (c) => {
   const { results } = await c.env.DB.prepare(
     "SELECT * FROM channels WHERE status = 'live' ORDER BY created_at ASC"
-  ).all();
-  return c.json({ channels: results });
+  ).all<Channel>();
+  // "+N more coming soon" on the landing page: how many channels are being
+  // built, as a number only - never their names (migrations/0029).
+  const soon = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM channels WHERE status = 'building' AND in_coming_soon = 1").first<{ n: number }>();
+  const channels = await Promise.all(results.map(async (ch) => ({ ...ch, shows_places: await mostlyPlaces(c.env.DB, ch) })));
+  return c.json({ channels, coming_soon: soon?.n ?? 0 });
 });
+
+/**
+ * Do most of a channel's songs have a city (migrations/0029)? Then its
+ * landing-page card says "Now in: <city>" while one plays (We Are WanderLust).
+ */
+async function mostlyPlaces(db: D1Database, ch: Channel): Promise<boolean> {
+  const tags = channelTags(ch);
+  const albums = channelAlbums(ch);
+  if (!tags.length && !albums.length) {
+    const row = await db.prepare("SELECT COUNT(*) AS n, COUNT(place_city) AS placed FROM tracks WHERE status = 'published'").first<{ n: number; placed: number }>();
+    return !!row && row.n > 0 && row.placed * 2 > row.n;
+  }
+  const tracks = await autopilotTracks(db, tags, albums);
+  return tracks.length > 0 && tracks.filter((t) => t.place_city).length * 2 > tracks.length;
+}
 
 publicRoutes.get("/channels/:slug", async (c) => {
   const channel = await c.env.DB.prepare(
@@ -310,6 +329,8 @@ publicRoutes.get("/now-playing/all", async (c) => {
         on_air: !!np?.on_air,
         title: item?.label ?? null,
         artist: item?.artist ?? null,
+        // The city a song is about (migrations/0029), shown under the title.
+        place: item?.place ?? null,
         artwork_url: item?.artwork_url ?? null,
         item_type: item?.item_type ?? null,
         position_seconds: np?.on_air ? (np.position_seconds ?? 0) : null,

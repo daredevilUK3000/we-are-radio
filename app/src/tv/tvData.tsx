@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { channelStill, channelVideo, rememberChannels } from "../shared/channelInfo";
 
 /**
  * TV data shared across screens (handoff_tv_firetv.md §A3): the live
@@ -70,7 +71,11 @@ export function TvDataProvider({ children }: { children: ReactNode }) {
     const loadChannels = () =>
       fetch(`${API}/channels`, { credentials: "include" })
         .then((r) => r.json())
-        .then((r) => live && setChannels(r.channels))
+        .then((r) => {
+          if (!live) return;
+          rememberChannels(r.channels);
+          setChannels(r.channels);
+        })
         .catch(() => {});
     void loadChannels();
     const id = window.setInterval(loadChannels, 10 * 60_000);
@@ -134,8 +139,10 @@ export function useGuide(days = 7): GuideChannel[] | null {
   return guide;
 }
 
-export const stillFor = (slug: string) => `/channels/channel-${slug}.jpg`;
-export const loopFor = (slug: string) => `/channels/channel-${slug}.mp4`;
+// A channel's still and loop, from its row (shared/channelInfo.ts). With no
+// still, the website's welcome picture stands in, so a background is never a broken image.
+export const stillFor = (slug: string) => channelStill(slug) ?? "/hero-video-poster.jpg";
+export const loopFor = (slug: string) => channelVideo(slug);
 
 const two = (n: number) => String(n).padStart(2, "0");
 export const clockText = (ms: number) => {
