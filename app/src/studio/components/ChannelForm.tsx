@@ -229,7 +229,7 @@ export function ChannelForm({ channel, onDone, onCancel }: { channel: any | null
       </div>
 
       <div>
-        <label style={field}>Songs: pick albums and/or tags</label>
+        <label style={field}>Songs: the albums it plays, plus any tags</label>
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 260px", maxHeight: 220, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 6, padding: 8 }}>
             <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", marginBottom: 4 }}>Albums</div>
@@ -241,7 +241,9 @@ export function ChannelForm({ channel, onDone, onCancel }: { channel: any | null
             ))}
           </div>
           <div style={{ flex: "1 1 200px", maxHeight: 220, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 6, padding: 8 }}>
-            <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", marginBottom: 4 }}>Tags</div>
+            <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", marginBottom: 4 }}>
+              Tags (optional). Each tag adds every song that has it, from any album, not only the albums ticked.
+            </div>
             {allTags.map((t) => (
               <label key={t} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: "0.9rem" }}>
                 <input type="checkbox" checked={tags.includes(t)} onChange={() => toggle(tags, setTags, t)} />
@@ -254,7 +256,8 @@ export function ChannelForm({ channel, onDone, onCancel }: { channel: any | null
           {!albums.length && !tags.length && "Nothing picked: the channel plays every published song (as Kizzi Radio does). "}
           {pool ? (
             <>
-              <strong>{pool.tracks}</strong> published song{pool.tracks === 1 ? "" : "s"}, <strong>{hours(pool.seconds)}</strong> of music.
+              <strong>{pool.tracks}</strong> published song{pool.tracks === 1 ? "" : "s"}, <strong>{hours(pool.seconds)}</strong> of music
+              {albums.length > 0 && tags.length > 0 ? ": the ticked albums plus every song with the ticked tags." : "."}
               {pool.seconds < FOUR_HOURS && <span style={{ color: "#f0a12a" }}> Under 4 hours: listeners may hear repeats.</span>}
             </>
           ) : (
