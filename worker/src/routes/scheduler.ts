@@ -452,22 +452,22 @@ schedulerRoutes.post("/channels/:slug/enable", async (c) => {
 });
 
 /**
- * Go live on the Studio Channels page (routes/channels.ts): a channel made in
- * the Studio has had shadow checks since it was created, so once they've run
- * clean for 24 h it goes on the Scheduler in the same step. If they haven't,
- * it plays the old way until "Put on air" on the Scheduler page, as before.
+ * Go live on the Studio Channels page (routes/channels.ts) puts the channel
+ * on the Scheduler in the same step, once it has a log. No shadow checks: they
+ * compare the log with the old playback, which the Scheduler has stopped
+ * copying since Release 2 (dayparts, its own running order), so a new channel
+ * can never pass them - and it has no listeners on the old playback to keep.
  */
 export async function enableOnGoLive(env: Env, ch: Channel): Promise<{ enabled: boolean; reason: string }> {
   const sc = await schedRow(env.DB, ch.id);
   if (sc.enabled) return { enabled: true, reason: "It's already on the Scheduler." };
-  const now = Date.now();
-  const e = eligibility(sc, !!(await latestVersion(env.DB, ch.id)), now);
-  if (!e.ok) return { enabled: false, reason: e.reason };
+  if (!(await latestVersion(env.DB, ch.id))) return { enabled: false, reason: "There's no log for this channel yet." };
+  if (sc.consecutive_failures > 0) return { enabled: false, reason: "Its last log build failed." };
   await env.DB.prepare("UPDATE sched_channels SET enabled = 1, enabled_at = ?, on_fallback_since_ms = NULL WHERE channel_id = ?").bind(nowIso(), ch.id).run();
   await logChange(env.DB, { channelId: ch.id, actor: "studio", action: "enable", reason: "Scheduler put on air by you, with Go live" });
   clearTimelineCache(ch.id);
   await env.CONFIG.delete(`sched:health:${ch.id}`);
-  return { enabled: true, reason: e.reason };
+  return { enabled: true, reason: "Its log is ready." };
 }
 
 schedulerRoutes.get("/channels/:slug/airing/:airingId/history", async (c) => {

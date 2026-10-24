@@ -17,13 +17,13 @@ export function Channels() {
   const toggle = async (c: any) => {
     const next = c.status === "live" ? "building" : "live";
     const r = await studioApi.setChannelStatus(c.id, next);
-    // Going live also puts it on the Scheduler when its shadow checks allow it (routes/channels.ts).
+    // Going live also puts it on the Scheduler once it has a log (routes/scheduler.ts enableOnGoLive).
     setMessage(
       next === "building"
         ? `${c.name} is back in building: hidden from listeners.`
         : r.scheduler?.enabled
           ? `${c.name} is live, on the Scheduler.`
-          : `${c.name} is live. It isn't on the Scheduler yet (${r.scheduler?.reason ?? "not ready"}), so it plays the old way until you press "Put on air" on the Scheduler page.`
+          : `${c.name} is live. It isn't on the Scheduler yet (${r.scheduler?.reason ?? "not ready"}), so it plays the old way for now. Put it back in building and press Go live again in a few minutes.`
     );
     load();
   };
