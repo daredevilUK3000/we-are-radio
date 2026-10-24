@@ -15,12 +15,14 @@ import {
   buildSession,
   hashSeed,
   locateInLoop,
+  splitIntros,
   withPinnedJingles,
   buildProgramme,
   type LinkClip,
   type ProgrammeTitle,
   type PinnedJingle,
   type RotationItem,
+  type RotationIntro,
   type RotationOverlay,
 } from "../lib/radioBrain";
 
@@ -87,11 +89,13 @@ publicRoutes.get("/albums/:id", async (c) => {
 
   return c.json({
     album,
+    // Album pages also play a song's "before" intro first (`intro` on the track).
     tracks: await withPinnedOverlays(
       c.env.DB,
       tracks as any[],
       (t) => t.id,
-      (t) => t.duration_seconds
+      (t) => t.duration_seconds,
+      { intros: true }
     ),
   });
 });
@@ -286,14 +290,16 @@ async function nowPlayingFor(env: Env, channel: Channel, waitUntil: (p: Promise<
   if (!station.items) {
     return { channel, ...(station.programme ? { programme: station.programme } : {}), on_air: false };
   }
-  const { currentIndex, position_seconds } = locateInLoop(station.items, station.elapsed);
+  // A song's "before" intro becomes its own item here, ahead of the song (same total length, so the loop's timing holds).
+  const items = splitIntros(station.items);
+  const { currentIndex, position_seconds } = locateInLoop(items, station.elapsed);
 
   return {
     channel,
     programme: station.programme,
     on_air: true,
     position_seconds,
-    ...(await describePlayback(env.DB, station.items, currentIndex)),
+    ...(await describePlayback(env.DB, items, currentIndex)),
   };
 }
 
@@ -323,15 +329,18 @@ publicRoutes.get("/now-playing/all", async (c) => {
     channels.map(async ({ sched_enabled, ...ch }) => {
       const np = await nowPlayingFor(c.env, ch, (p) => c.executionCtx.waitUntil(p)).catch(() => null);
       const item = np?.on_air ? np.now_playing : null;
+      // A song's intro on air (migrations/0030) is shown as the song coming up, with `intro` set for an "Intro" label.
+      const introFor = item?.intro_for ?? null;
       const blocks = sched_enabled ? await blocksAround(c.env, ch.id, now).catch(() => null) : null;
       return {
         slug: ch.slug,
         on_air: !!np?.on_air,
-        title: item?.label ?? null,
-        artist: item?.artist ?? null,
+        title: introFor?.title ?? item?.label ?? null,
+        artist: introFor ? (introFor.artist ?? null) : (item?.artist ?? null),
         // The city a song is about (migrations/0029), shown under the title.
-        place: item?.place ?? null,
-        artwork_url: item?.artwork_url ?? null,
+        place: introFor ? (introFor.place ?? null) : (item?.place ?? null),
+        artwork_url: introFor?.artwork_url ?? item?.artwork_url ?? null,
+        ...(introFor ? { intro: true } : {}),
         item_type: item?.item_type ?? null,
         position_seconds: np?.on_air ? (np.position_seconds ?? 0) : null,
         duration_seconds: item?.duration_seconds ?? null,
@@ -402,7 +411,7 @@ publicRoutes.get("/schedule", async (c) => {
   const station = await loadStation(c.env.DB, c.env.CONFIG, channel);
   if (!station.items) return c.json({ channel, on_air: false, items: [] });
 
-  const { items } = station;
+  const items = splitIntros(station.items);
   const { currentIndex, position_seconds } = locateInLoop(items, station.elapsed);
   const nowSec = Math.floor(Date.now() / 1000);
   let startsAt = nowSec - position_seconds;
@@ -528,7 +537,8 @@ async function describePlayback(db: D1Database, items: RotationItem[], currentIn
   const comingUp: RotationItem[] = [];
   for (let step = 1; step < items.length && comingUp.length < 4; step++) {
     const item = items[(currentIndex + step) % items.length];
-    if (item.item_type !== "station_id" && item.id !== now.id) comingUp.push(item);
+    // A song's intro isn't listed separately: it's shown as the song it introduces.
+    if (item.item_type !== "station_id" && !("intro_for" in item) && item.id !== now.id) comingUp.push(item);
   }
 
   const [nowE, upNextE, ...comingUpE] = await enrichItems(db, [now, upNext, ...comingUp]);
@@ -539,13 +549,16 @@ async function describePlayback(db: D1Database, items: RotationItem[], currentIn
  * Pinned jingles for songs played directly (an album, a programme page), not
  * only on a station: each row that is a song with pinned jingles comes back
  * with `overlays`, exactly as station items do, so the player can mix them in.
+ * With `intros`, a song whose intro plays before it (migrations/0030) also
+ * comes back with `intro`, for the player to play ahead of the song.
  */
 async function withPinnedOverlays<T extends Record<string, any>>(
   db: D1Database,
   rows: T[],
   trackIdOf: (row: T) => string | null,
-  durationOf: (row: T) => number
-): Promise<(T & { overlays?: RotationOverlay[] })[]> {
+  durationOf: (row: T) => number,
+  { intros = false }: { intros?: boolean } = {}
+): Promise<(T & { overlays?: RotationOverlay[]; intro?: RotationIntro })[]> {
   const pins = await loadPinnedJingles(db);
   if (pins.length === 0) return rows;
   const pseudo: RotationItem[] = rows.map((row, i) => ({
@@ -559,7 +572,11 @@ async function withPinnedOverlays<T extends Record<string, any>>(
     artwork_url: null,
   }));
   const done = withPinnedJingles(pseudo, pins);
-  return rows.map((row, i) => (done[i].overlays ? { ...row, overlays: done[i].overlays } : row));
+  return rows.map((row, i) => {
+    const { overlays, intro } = done[i];
+    if (!overlays && !(intros && intro)) return row;
+    return { ...row, ...(overlays ? { overlays } : {}), ...(intros && intro ? { intro } : {}) };
+  });
 }
 
 const SESSION_DURATIONS_MINUTES = [15, 30, 45, 60];
@@ -601,7 +618,8 @@ publicRoutes.post("/sessions", async (c) => {
   ).all<AudioAsset>();
 
   const seedKey = `session:${mood}:${durationMinutes}:${Date.now()}`;
-  const items = buildSession(seedKey, tracks, stationIds, durationMinutes * 60, await loadPinnedJingles(c.env.DB));
+  // splitIntros: a song's "before" intro as its own item ahead of the song.
+  const items = splitIntros(buildSession(seedKey, tracks, stationIds, durationMinutes * 60, await loadPinnedJingles(c.env.DB)));
   const totalDurationSeconds = items.reduce((sum, i) => sum + i.duration_seconds, 0);
 
   // Songs never repeat, so a mood with little music tagged gives a session
@@ -709,7 +727,8 @@ publicRoutes.post("/radio-for-you", async (c) => {
       wildcard_count: built.wildcard_count,
       link_count: built.link_count,
     },
-    items: built.items,
+    // A song's "before" intro as its own item ahead of the song (link_count above is Kizzi's links only).
+    items: splitIntros(built.items),
   });
 });
 

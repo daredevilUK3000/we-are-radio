@@ -81,7 +81,7 @@ export function Home() {
       publicApi
         .nowPlayingAll()
         .then((r) =>
-          setPlaceBySlug(Object.fromEntries(r.channels.filter((c) => c.item_type === "song" && c.place?.city).map((c) => [c.slug, c.place!.city])))
+          setPlaceBySlug(Object.fromEntries(r.channels.filter((c) => (c.item_type === "song" || c.intro) && c.place?.city).map((c) => [c.slug, c.place!.city])))
         )
         .catch(() => {});
     load();

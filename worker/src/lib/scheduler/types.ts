@@ -1,4 +1,4 @@
-import type { RotationOverlay } from "../radioBrain";
+import type { RotationIntro, RotationOverlay } from "../radioBrain";
 
 export type ItemSource = "programme" | "autopilot" | "capsule" | "override" | "fallback";
 
@@ -16,6 +16,12 @@ export interface PlanItem {
   artworkUrl: string | null;
   fileMs: number;
   overlays?: RotationOverlay[];
+  /**
+   * A song's "before the song" intro (migrations/0030). It's part of this
+   * airing: fileMs (and so the airing's length) includes it, and the file
+   * timeline is the intro then the song. Only the read path splits the two.
+   */
+  intro?: RotationIntro;
   blockId: string | null;
   blockDate: string | null;
   source: ItemSource;

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { publicApi, mediaUrl } from "../api/client";
+import { INTRO_LABEL, introOf } from "./intro";
 
 /**
  * Chromecast (Google Cast Web Sender SDK + Google's Default Media Receiver -
@@ -195,9 +196,17 @@ function toQueueItem(item: any, channel: any, startTime = 0) {
   const isSong = item.item_type === "song";
   // A listener's voice note: "Sarah in Leeds", "Listener voice · Dedication for Mum" (now_playing.voice, from the Worker).
   const v = item.voice;
-  meta.title = v ? `${v.first_name}${v.place ? ` in ${v.place}` : ""}` : (item.label ?? station);
-  meta.artist = v ? `Listener voice${v.kind === "dedication" && v.for_name ? ` · Dedication for ${v.for_name}` : ""}` : isSong ? item.artist || "Kizzi" : station;
-  meta.albumName = (isSong && item.album_title) || station;
+  // A song's intro (shared/intro.ts): the song coming up, "Intro · <artist>".
+  const intro = introOf(item);
+  meta.title = v ? `${v.first_name}${v.place ? ` in ${v.place}` : ""}` : intro ? (intro.title ?? station) : (item.label ?? station);
+  meta.artist = v
+    ? `Listener voice${v.kind === "dedication" && v.for_name ? ` · Dedication for ${v.for_name}` : ""}`
+    : intro
+      ? `${INTRO_LABEL} · ${intro.artist || "Kizzi"}`
+      : isSong
+        ? item.artist || "Kizzi"
+        : station;
+  meta.albumName = (isSong && item.album_title) || (intro && intro.album_title) || station;
   meta.images = [new chrome.cast.Image(absolute(item.artwork_url ? mediaUrl(item.artwork_url) : "/icons/icon-512.png"))];
   info.metadata = meta;
   info.customData = { channel: channel?.slug, id: item.id, starts_at: item.starts_at, ends_at: item.starts_at + item.duration_seconds };

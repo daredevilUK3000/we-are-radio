@@ -1,6 +1,6 @@
 import type { AudioAsset, Track } from "../types";
-import { hashSeed } from "../radioBrain";
-import { autopilotTracks } from "../station";
+import { hashSeed, withPinnedJingles, type PinnedJingle } from "../radioBrain";
+import { autopilotTracks, loadSongIntros } from "../station";
 import type { GridBlock } from "./grid";
 import { addDaysTo, parisDate } from "./time";
 import { contentKey, type Playable } from "./types";
@@ -239,6 +239,10 @@ export class SlotResolver {
   private tracks = new Map<string, Promise<Track | null>>();
   private assets = new Map<string, Promise<AudioAsset | null>>();
   private ruleCands = new Map<string, Promise<Playable[]>>();
+  private introsP: Promise<Map<string, PinnedJingle>> | null = null;
+  private intros(): Promise<Map<string, PinnedJingle>> {
+    return (this.introsP ??= songIntroMap(this.db));
+  }
 
   constructor(
     readonly db: D1Database,
@@ -273,7 +277,8 @@ export class SlotResolver {
   async fixed(slot: Pick<ListSlot, "track_id" | "audio_asset_id" | "label">): Promise<Playable | null> {
     if (slot.track_id) {
       const t = await this.track(slot.track_id);
-      return t ? trackPlayable(t) : null;
+      const p = t ? trackPlayable(t) : null;
+      return p ? withSongIntro(p, await this.intros()) : null;
     }
     if (slot.audio_asset_id) {
       const a = await this.asset(slot.audio_asset_id);
@@ -291,7 +296,11 @@ export class SlotResolver {
         if (rule.item_type === "song") {
           let tracks = await (rule.tags_any?.length ? autopilotTracks(this.db, rule.tags_any) : autopilotTracks(this.db, this.poolTags, this.poolAlbums));
           if (rule.album_id) tracks = tracks.filter((t) => t.album_id === rule.album_id);
-          return tracks.map(trackPlayable).filter((x): x is Playable => !!x);
+          const intros = await this.intros();
+          return tracks
+            .map(trackPlayable)
+            .filter((x): x is Playable => !!x)
+            .map((x) => withSongIntro(x, intros));
         }
         if (rule.item_type === "promo") {
           // House promos: those set up and on for this channel. Their dates and daily caps are applied when the slot is laid out (plan.ts).
@@ -305,10 +314,12 @@ export class SlotResolver {
             }));
         }
         const types = rule.item_type === "station_id" ? ["station_id", "jingle"] : ["link"];
+        // A song's intro (migrations/0030) is a link too, but only ever plays with its own song: never picked by a rule.
         const { results } = await this.db
           .prepare(
             `SELECT * FROM audio_assets WHERE status IN ('published','ready') AND type IN (${types.map(() => "?").join(",")})
-             ${rule.item_type === "link" && rule.link_kind ? "AND link_kind = ?" : ""} ORDER BY id`
+             ${rule.item_type === "link" && rule.link_kind ? "AND link_kind = ?" : ""}
+             AND id NOT IN (SELECT audio_asset_id FROM track_intros) ORDER BY id`
           )
           .bind(...types, ...(rule.item_type === "link" && rule.link_kind ? [rule.link_kind] : []))
           .all<AudioAsset>();
@@ -344,6 +355,33 @@ export function trackPlayable(t: Track): Playable | null {
   return {
     itemType: "song", trackId: t.id, assetId: null, label: t.title, audioUrl: t.audio_url, artworkUrl: t.artwork_url,
     fileMs: t.duration_seconds * 1000, blockId: null, blockDate: null, source: "programme", sourceRef: null, reasons: [],
+  };
+}
+
+/** Each song's intro that's on (migrations/0030), by track ID. */
+export async function songIntroMap(db: D1Database): Promise<Map<string, PinnedJingle>> {
+  return new Map((await loadSongIntros(db)).map((p) => [p.track_id, p]));
+}
+
+/**
+ * A song made straight from a track (a hand-built list, a block's pool, a
+ * Studio override, the emergency playlist) with its intro, since an intro
+ * plays every time its song does. Pinned jingles aren't added here - they
+ * never were on these - only the intro: before the song (part of the airing,
+ * as from a rotation) or over its opening.
+ */
+export function withSongIntro(p: Playable, intros: Map<string, PinnedJingle>): Playable {
+  const pin = p.itemType === "song" && p.trackId && !p.intro ? intros.get(p.trackId) : undefined;
+  if (!pin) return p;
+  const [done] = withPinnedJingles(
+    [{ id: "", item_type: "song", label: p.label, track_id: p.trackId, audio_asset_id: null, duration_seconds: p.fileMs / 1000, audio_url: p.audioUrl, artwork_url: p.artworkUrl }],
+    [pin]
+  );
+  return {
+    ...p,
+    fileMs: done.duration_seconds * 1000,
+    ...(done.intro ? { intro: done.intro } : {}),
+    ...(done.overlays ? { overlays: [...(p.overlays ?? []), ...done.overlays] } : {}),
   };
 }
 

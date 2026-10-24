@@ -47,6 +47,29 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 // ---- Public / listener API ----
 
+/** A song's spoken intro (migrations/0030), as the Studio's GET /intros returns it. */
+export interface SongIntro {
+  track_id: string;
+  audio_asset_id: string;
+  play_mode: "before" | "over";
+  start_offset_seconds: number;
+  enabled: number;
+  title: string;
+  audio_url: string;
+  duration_seconds: number;
+  /** The script it reads, from the Intro Maker's manifest. */
+  description: string | null;
+}
+
+/** The songs a channel plays (its pool, or its current programme): the Tracks page's channel filter. */
+export interface ChannelSongs {
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
+  track_ids: string[];
+}
+
 /** An Advertising For Good ad, as GET /api/good returns it. */
 export interface GoodAd {
   id: string;
@@ -86,7 +109,8 @@ export const publicApi = {
   /** Live channels, plus how many are being built (a number only: "+N more coming soon"). */
   channels: () => request<{ channels: any[]; coming_soon?: number }>(`${API_BASE}/channels`),
   /** Every live channel's item on air (the TV Home's poll; cached 10 s). */
-  nowPlayingAll: () => request<{ channels: { slug: string; item_type: string | null; place: { city: string; country: string | null } | null }[] }>(`${API_BASE}/now-playing/all`),
+  nowPlayingAll: () =>
+    request<{ channels: { slug: string; item_type: string | null; intro?: boolean; place: { city: string; country: string | null } | null }[] }>(`${API_BASE}/now-playing/all`),
   channel: (slug: string) => request<{ channel: any }>(`${API_BASE}/channels/${slug}`),
   albums: () => request<{ albums: any[] }>(`${API_BASE}/albums`),
   album: (id: string) => request<{ album: any; tracks: any[] }>(`${API_BASE}/albums/${id}`),
@@ -503,7 +527,18 @@ export const studioApi = {
 
   tags: () => request<{ tags: any[] }>(`${STUDIO_BASE}/tags`),
 
-  presignUpload: (filename: string, content_type: string, folder: "audio" | "artwork" | "masters" | "channels") =>
+  // Song intros (migrations/0030, routes/intros.ts): each song's intro, and the songs each channel plays.
+  intros: () => request<{ intros: SongIntro[]; channels: ChannelSongs[] }>(`${STUDIO_BASE}/intros`),
+  importIntros: (items: Array<{ track_id: string; audio_url: string; duration_seconds: number; script?: string | null; replace?: boolean }>) =>
+    request<{ imported: number; replaced: number; kept: number; missing: string[] }>(`${STUDIO_BASE}/intros/import`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    }),
+  updateIntro: (trackId: string, data: { play_mode?: "before" | "over"; start_offset_seconds?: number; enabled?: boolean }) =>
+    request<{ ok: true }>(`${STUDIO_BASE}/intros/${trackId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteIntro: (trackId: string) => request<{ ok: true }>(`${STUDIO_BASE}/intros/${trackId}`, { method: "DELETE" }),
+
+  presignUpload:(filename: string, content_type: string, folder: "audio" | "artwork" | "masters" | "channels") =>
     request<{ upload_url: string; key: string }>(`${STUDIO_BASE}/upload/presign`, {
       method: "POST",
       body: JSON.stringify({ filename, content_type, folder }),

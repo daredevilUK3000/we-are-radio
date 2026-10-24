@@ -24,6 +24,8 @@ import { PromoButton, PromoPill, promoOf } from "./promo/PromoOnAir";
 import { fadeIn, useRewind } from "../lib/useRewind";
 import { BackToLivePill } from "./PlayerRewind";
 import { PlaceLine, placeOf } from "./PlaceLine";
+import { IntroPill } from "./IntroPill";
+import { introOf, shownTitle } from "../../shared/intro";
 
 function PlayIcon() {
   return <span className="play-triangle" />;
@@ -236,7 +238,7 @@ export function NowPlayingBar() {
           detail: {
             onAir: !!(data && data.on_air),
             playing: castingHere ? !cast.paused : playing,
-            title: shown?.now_playing?.label ?? null,
+            title: shownTitle(shown?.now_playing),
             channelName: shown?.channel?.name ?? null,
             artworkUrl: shown?.now_playing?.artwork_url ? mediaUrl(shown.now_playing.artwork_url) : null,
           },
@@ -495,7 +497,8 @@ export function NowPlayingBar() {
   };
 
   const station = shown.channel?.name ?? "We Are Radio";
-  const upNextLabel = shown.up_next?.label;
+  // A song's intro next: "Next: <the song>" (shared/intro.ts).
+  const upNextLabel = shownTitle(shown.up_next);
 
   return (
     <>
@@ -523,6 +526,10 @@ export function NowPlayingBar() {
               ) : promoOf(shown.now_playing) ? (
                 <>
                   <PromoPill promo={promoOf(shown.now_playing)} small /> {promoOf(shown.now_playing)!.title}
+                </>
+              ) : introOf(shown.now_playing) ? (
+                <>
+                  <IntroPill /> {shownTitle(shown.now_playing)}
                 </>
               ) : (
                 (shown.now_playing?.label ?? "We Are Radio")
@@ -591,7 +598,7 @@ export function NowPlayingBar() {
         <ShareButton
           path={`/channel/${channelSlug}`}
           title={`${station} - We Are Radio`}
-          text={shown.now_playing?.label ? `Listening to ${shown.now_playing.label} on ${station}` : `Live on ${station}`}
+          text={shownTitle(shown.now_playing) ? `Listening to ${shownTitle(shown.now_playing)} on ${station}` : `Live on ${station}`}
           className="btn mp-share"
           iconOnly
         />

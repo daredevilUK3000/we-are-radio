@@ -26,6 +26,8 @@ import { BackToLivePill, StartOverButton } from "../components/PlayerRewind";
 import { ComingUpAt } from "../components/ComingUpAt";
 import { JustPlayed, ThatWasChip, useJustPlayed } from "../components/JustPlayed";
 import { PlaceLine } from "../components/PlaceLine";
+import { IntroPill } from "../components/IntroPill";
+import { introOf, shownTitle } from "../../shared/intro";
 import { channelStill, channelVideo, useChannelInfo } from "../../shared/channelInfo";
 
 
@@ -335,6 +337,8 @@ export function Listen() {
   const shownPlaying = castingHere ? !cast.paused : playing;
   const now = shown.now_playing;
   const isSong = now?.item_type === "song";
+  // A song's intro on air: shown as the song coming up, labelled "Intro" (shared/intro.ts).
+  const intro = introOf(now);
   const voice = now?.voice ? voiceLines(now.voice) : null;
   const artUrl: string | null = now?.artwork_url ? mediaUrl(now.artwork_url) : null;
   const category = shown.channel?.description || shown.programme?.title || null;
@@ -357,7 +361,7 @@ export function Listen() {
           <ShareButton
             path={`/channel/${channelSlug}`}
             title={`${shown.channel.name} - We Are Radio`}
-            text={now?.label ? `Listening to ${now.label} on ${shown.channel.name}` : `Live on ${shown.channel.name}`}
+            text={shownTitle(now) ? `Listening to ${shownTitle(now)} on ${shown.channel.name}` : `Live on ${shown.channel.name}`}
             className="lp-icon-btn"
             iconOnly
           />
@@ -405,7 +409,7 @@ export function Listen() {
 
           <div className="lp-nowplaying-row">
             <span className="lp-nowplaying-label" style={{ color: accent }}>
-              {voice ? <ListenerVoicePill /> : isGood(now) ? <GoodOnAirPill /> : promoOf(now) ? <PromoPill promo={promoOf(now)} /> : isSong ? "Now Playing" : "On Air Now"}
+              {voice ? <ListenerVoicePill /> : isGood(now) ? <GoodOnAirPill /> : promoOf(now) ? <PromoPill promo={promoOf(now)} /> : intro ? <IntroPill /> : isSong ? "Now Playing" : "On Air Now"}
             </span>
             <span className="lp-eq" aria-hidden="true">
               <span style={{ background: accent }} />
@@ -413,7 +417,7 @@ export function Listen() {
               <span style={{ background: accent }} />
             </span>
           </div>
-          <div className="lp-track-title">{voice ? voice.title : isGood(now) ? <GoodOnAirTitle item={now} /> : promoOf(now) ? promoOf(now)!.title : (now?.label ?? "We Are Radio")}</div>
+          <div className="lp-track-title">{voice ? voice.title : isGood(now) ? <GoodOnAirTitle item={now} /> : promoOf(now) ? promoOf(now)!.title : (shownTitle(now) ?? "We Are Radio")}</div>
           {!voice && <PlaceLine item={now} className="lp-place" />}
           {voice?.sub && <div className="lv-sub lp-voice-sub">{voice.sub}</div>}
           {!voice && isGood(now) && <div className="afg-onair-sub lp-voice-sub">{GOOD_ON_AIR_SUB}</div>}

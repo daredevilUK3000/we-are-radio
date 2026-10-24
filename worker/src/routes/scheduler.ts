@@ -549,10 +549,12 @@ schedulerRoutes.get("/library", async (c) => {
   const capsuleOnly = type === "capsules" ? "AND EXISTS (SELECT 1 FROM time_capsules tc WHERE tc.audio_asset_id = x.id)" : "";
   // Features and interviews may be 'ready' (imported podcast episodes play in programmes that way too).
   const statuses = type === "features" ? "('published','ready')" : "('published')";
+  // A song's intro (migrations/0030) only plays with its song, so it can't be placed on its own.
   const { results } = await c.env.DB.prepare(
     `SELECT x.id, x.title, x.type, x.duration_seconds, ${lastAired("audio_asset_id")} AS last_aired_ms
      FROM audio_assets x
      WHERE x.status IN ${statuses} AND x.type IN (${wanted.map(() => "?").join(",")}) AND x.title LIKE ? ${capsuleOnly}
+       AND x.id NOT IN (SELECT audio_asset_id FROM track_intros)
      ORDER BY x.created_at DESC LIMIT 40`
   )
     .bind(...wanted, q)

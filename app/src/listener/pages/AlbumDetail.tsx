@@ -13,6 +13,8 @@ export function AlbumDetail() {
   const [album, setAlbum] = useState<any>(null);
   const [tracks, setTracks] = useState<any[]>([]);
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  // True while the playing song's spoken intro (migrations/0030) plays ahead of it.
+  const [introPlaying, setIntroPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [searchParams] = useSearchParams();
   const autoplayed = useRef(false);
@@ -21,7 +23,8 @@ export function AlbumDetail() {
 
   useExclusiveAudio("album", audioRef, !!album);
   // Jingles pinned to a song play over it here too, not only on the stations.
-  useOverlayJingles(audioRef, playingIndex !== null ? tracks[playingIndex] : null, !!album);
+  // Not during its intro: the jingles' timings count from the song's own start.
+  useOverlayJingles(audioRef, playingIndex !== null && !introPlaying ? tracks[playingIndex] : null, !!album);
 
   useEffect(() => {
     if (!id) return;
@@ -41,11 +44,25 @@ export function AlbumDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tracks, searchParams]);
 
+  // A song with an intro "before the song" plays that first, then the song (onEnded).
   const playIndex = (index: number) => {
     const track = tracks[index];
     if (!track?.audio_url || !audioRef.current) return;
     setPlayingIndex(index);
     void unlockAudio(audioRef.current);
+    if (track.intro?.audio_url) {
+      setIntroPlaying(true);
+      audioRef.current.src = mediaUrl(track.intro.audio_url);
+      audioRef.current.play().catch(() => {});
+      return;
+    }
+    playSong(index);
+  };
+
+  const playSong = (index: number) => {
+    const track = tracks[index];
+    if (!track?.audio_url || !audioRef.current) return;
+    setIntroPlaying(false);
     audioRef.current.src = mediaUrl(track.audio_url);
     audioRef.current.play().catch(() => {});
     listenerApi.recordPlay("track", track.id).catch(() => {});
@@ -55,6 +72,10 @@ export function AlbumDetail() {
   const playAlbum = () => playIndex(0);
 
   const onEnded = () => {
+    if (introPlaying && playingIndex !== null) {
+      playSong(playingIndex);
+      return;
+    }
     plays.complete();
     if (playingIndex === null) return;
     if (playingIndex + 1 < tracks.length) {
@@ -121,7 +142,7 @@ export function AlbumDetail() {
               <td>{Math.round(t.duration_seconds / 60)} min</td>
               <td style={{ display: "flex", gap: 8 }}>
                 <button className="btn" onClick={() => playIndex(index)}>
-                  {playingIndex === index ? "Playing" : "Play"}
+                  {playingIndex === index ? (introPlaying ? "Intro" : "Playing") : "Play"}
                 </button>
                 <LikeButton liked={likes.isLiked(t.id)} onToggle={() => likes.toggle(t.id)} iconOnly />
                 <FavouriteButton itemType="track" itemId={t.id} />
@@ -141,6 +162,10 @@ export function AlbumDetail() {
       <audio
         ref={audioRef}
         onEnded={onEnded}
+        // An intro that won't load mustn't hold up its song.
+        onError={() => {
+          if (introPlaying && playingIndex !== null) playSong(playingIndex);
+        }}
         // The browser's own play button doesn't go through playIndex, so prepare the jingle player here too.
         onPlay={() => void unlockAudio(audioRef.current)}
         style={{ width: "100%", marginTop: 20 }}

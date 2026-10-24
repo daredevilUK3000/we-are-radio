@@ -1,5 +1,5 @@
 import type { Channel, Env, Programme } from "../types";
-import type { RotationItem } from "../radioBrain";
+import type { IntroFor, RotationItem } from "../radioBrain";
 import { locateInLoop } from "../radioBrain";
 import { enrichItems } from "../station";
 import { cachedWindow, itemsBetween, locate, type TimelineItem } from "./timeline";
@@ -67,7 +67,50 @@ async function programmeFor(db: D1Database, channel: Channel, item: TimelineItem
   return { id: null, title: channel.name, description: channel.description };
 }
 
-const toRotation = (i: TimelineItem): RotationItem & Record<string, unknown> => ({
+/** A log item as players get it: a song's "before" intro split off as its own item, which says which song it introduces. */
+type ListenerItem = TimelineItem & { introFor?: IntroFor };
+
+/**
+ * In the log a song's "before" intro (migrations/0030) is part of the song's
+ * airing - the file timeline is the intro, then the song - so nothing that
+ * fits or edits the log can separate them. Players get the two as separate
+ * items: the intro (an ordinary link, plus `intro_for`) and then the song,
+ * each cut from the airing's own times. Items without an intro are untouched.
+ */
+export function splitIntros(items: TimelineItem[]): ListenerItem[] {
+  if (!items.some((i) => i.intro)) return items;
+  return items.flatMap((i): ListenerItem[] => {
+    if (!i.intro) return [i];
+    const { intro, ...song } = i;
+    const introMs = intro.duration_seconds * 1000;
+    const songStartsAt = i.startsAt - i.offset + introMs;
+    const out: ListenerItem[] = [];
+    if (i.offset < introMs) {
+      const introEnds = Math.min(i.endsAt, songStartsAt);
+      const { cutAt, ...rest } = song;
+      out.push({
+        ...rest,
+        ...(cutAt !== undefined && cutAt < introEnds ? { cutAt } : {}),
+        airingId: `${i.airingId}-intro`,
+        itemType: "link",
+        trackId: null,
+        assetId: intro.asset_id,
+        label: intro.label,
+        audioUrl: intro.audio_url,
+        overlays: undefined,
+        fileMs: introMs,
+        endsAt: introEnds,
+        introFor: { track_id: i.trackId!, title: i.label },
+      });
+    }
+    if (i.endsAt > songStartsAt && (i.cutAt === undefined || i.cutAt > songStartsAt)) {
+      out.push({ ...song, startsAt: Math.max(i.startsAt, songStartsAt), offset: Math.max(0, i.offset - introMs), fileMs: i.fileMs - introMs });
+    }
+    return out;
+  });
+}
+
+const toRotation = (i: ListenerItem): RotationItem & Record<string, unknown> => ({
   id: i.airingId!,
   item_type: i.itemType,
   label: i.label,
@@ -77,6 +120,7 @@ const toRotation = (i: TimelineItem): RotationItem & Record<string, unknown> => 
   audio_url: i.audioUrl,
   artwork_url: i.artworkUrl,
   ...(i.overlays?.length ? { overlays: i.overlays } : {}),
+  ...(i.introFor ? { intro_for: i.introFor } : {}),
   file_duration_seconds: i.fileMs / 1000,
   starts_at: Math.round((i.startsAt - i.offset) / 1000),
   ends_at: Math.round(i.endsAt / 1000),
@@ -84,13 +128,14 @@ const toRotation = (i: TimelineItem): RotationItem & Record<string, unknown> => 
 
 export async function nowPlayingFromLog(env: Env, channel: Channel, st: SchedState, nowMs: number, waitUntil: (p: Promise<unknown>) => void) {
   try {
-    const items = await cachedWindow(env.DB, channel.id, st.live, nowMs);
+    const items = splitIntros(await cachedWindow(env.DB, channel.id, st.live, nowMs));
     const idx = locate(items, nowMs);
     if (idx >= 0) {
       if (st.on_fallback_since_ms) waitUntil(setFallback(env.DB, channel.id, null));
       const cur = items[idx];
       const next = items[idx + 1] ?? null;
-      const comingUp = items.slice(idx + 1).filter((i) => i.itemType !== "station_id" && i.airingId !== cur.airingId).slice(0, 4);
+      // Coming up lists the songs, not their intros (an intro is shown as its song).
+      const comingUp = items.slice(idx + 1).filter((i) => i.itemType !== "station_id" && !i.introFor && i.airingId !== cur.airingId).slice(0, 4);
       const [nowE, nextE, ...upE] = await enrichItems(env.DB, [toRotation(cur), next ? toRotation(next) : null, ...comingUp.map(toRotation)]);
       // "Coming up at 18:00: Friday Game Changers" - a public block starting within the hour, from the log (so a moved start shows as moved).
       let next_block: { name: string; description: string; starts_at: number } | null = null;
@@ -125,8 +170,9 @@ export async function nowPlayingFromLog(env: Env, channel: Channel, st: SchedSta
 
 export async function scheduleFromLog(env: Env, channel: Channel, st: SchedState, nowMs: number, minutes: number) {
   try {
-    const items =
-      minutes <= 120 ? await cachedWindow(env.DB, channel.id, st.live, nowMs) : await itemsBetween(env.DB, channel.id, nowMs - 30 * 60_000, nowMs + minutes * 60_000);
+    const items = splitIntros(
+      minutes <= 120 ? await cachedWindow(env.DB, channel.id, st.live, nowMs) : await itemsBetween(env.DB, channel.id, nowMs - 30 * 60_000, nowMs + minutes * 60_000)
+    );
     const idx = locate(items, nowMs);
     if (idx >= 0) {
       const horizon = nowMs + minutes * 60_000;

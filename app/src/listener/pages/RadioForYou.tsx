@@ -8,6 +8,7 @@ import { useActiveChannel } from "../context/ActiveChannelContext";
 import { SessionBuilder } from "./SessionBuilder";
 import { usePlaySlot } from "../../shared/analytics";
 import { ShareButton } from "../components/ShareButton";
+import { INTRO_LABEL, introOf, shownTitle } from "../../shared/intro";
 
 /**
  * Radio That Knows You: the listener says what they need, and gets a produced
@@ -215,7 +216,8 @@ export function RadioForYou() {
   };
 
   const songCount = items.filter((i) => i.item_type === "song").length;
-  const linkCount = items.filter((i) => i.item_type === "link").length;
+  // A song's intro (shared/intro.ts) is part of its song, not one of Kizzi's spoken links.
+  const linkCount = items.filter((i) => i.item_type === "link" && !introOf(i)).length;
   const current = playingIndex !== null ? items[playingIndex] : null;
 
   return (
@@ -288,10 +290,10 @@ export function RadioForYou() {
             <div className="player-sticky">
               <PlayerCard
                 audioRef={audioRef}
-                title={current.label}
+                title={shownTitle(current) ?? ""}
                 artUrl={current.artwork_url}
                 fallbackDuration={current.duration_seconds}
-                subtitle={`${current.item_type === "link" ? "Spoken link" : current.item_type === "song" ? "Song" : "Station ID"} · part ${
+                subtitle={`${introOf(current) ? INTRO_LABEL : current.item_type === "link" ? "Spoken link" : current.item_type === "song" ? "Song" : "Station ID"} · part ${
                   (playingIndex ?? 0) + 1
                 } of ${items.length}`}
                 onPrev={playingIndex! > 0 ? () => playIndex(playingIndex! - 1) : undefined}
@@ -312,9 +314,9 @@ export function RadioForYou() {
                 <span className="rfy-item-icon" aria-hidden="true">
                   {item.item_type === "link" ? "🎙" : item.item_type === "song" ? "♪" : "◦"}
                 </span>
-                <span className="rfy-item-title">{item.label}</span>
+                <span className="rfy-item-title">{shownTitle(item)}</span>
                 <span className="rfy-item-kind">
-                  {item.item_type === "link" ? "spoken link" : item.item_type === "song" ? "" : "station ID"}
+                  {introOf(item) ? "intro" : item.item_type === "link" ? "spoken link" : item.item_type === "song" ? "" : "station ID"}
                 </span>
                 <span className="rfy-item-time">
                   {item.duration_seconds < 60 ? `${Math.max(1, Math.round(item.duration_seconds))}s` : `${Math.round(item.duration_seconds / 60)} min`}

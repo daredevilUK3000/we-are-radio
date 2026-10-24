@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { publicApi, mediaUrl } from "../api/client";
+import { introOf, type IntroFor } from "./intro";
 
 /**
  * Offline listening: a listener downloads the next stretch of a live channel
@@ -31,6 +32,8 @@ export interface OfflineItem {
   /** Absolute /media/... URL - the cache key. */
   audio: string;
   artwork: string | null;
+  /** A song's intro (shared/intro.ts): the song it introduces, shown in its place. */
+  intro_for?: IntroFor | null;
 }
 
 export interface OfflineBlock {
@@ -239,6 +242,7 @@ export async function downloadBlock(channelSlug: string, minutes: number): Promi
       duration_seconds: i.duration_seconds,
       audio: absolute(mediaUrl(i.audio_url)),
       artwork: i.artwork_url && !/^https?:\/\//i.test(i.artwork_url) ? absolute(mediaUrl(i.artwork_url)) : null,
+      ...(introOf(i) ? { intro_for: introOf(i) } : {}),
     }));
     const audioFiles = Array.from(new Set(items.map((i) => i.audio)));
     const artFiles = Array.from(new Set(items.map((i) => i.artwork).filter((a): a is string => !!a)));

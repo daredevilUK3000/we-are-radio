@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { objectUrlFor, type OfflineBlock } from "../../shared/offline";
 import { useMediaSession } from "../../shared/mediaSession";
 import { useExclusiveAudio } from "../lib/audioUtils";
+import { INTRO_LABEL, introOf, shownTitle } from "../../shared/intro";
+import { IntroPill } from "./IntroPill";
 
 const POSITION_KEY = "we-are-radio:offline-position";
 
@@ -214,13 +216,15 @@ export function OfflineBar({
 
   const isSong = item?.item_type === "song";
   const station = block.channelName;
+  // A song's intro (shared/intro.ts): shown as the song coming up.
+  const intro = introOf(item);
   useMediaSession(
     audioRef,
     item && !cleared
       ? {
-          title: item.label ?? station,
-          artist: isSong ? item.artist || "Kizzi" : station,
-          album: (isSong && item.album_title) || station,
+          title: shownTitle(item) ?? station,
+          artist: intro ? `${INTRO_LABEL} · ${intro.artist || "Kizzi"}` : isSong ? item.artist || "Kizzi" : station,
+          album: (isSong && item.album_title) || (intro && intro.album_title) || station,
           artworkUrl: art ?? new URL("/icons/icon-512.png", window.location.href).href,
         }
       : null,
@@ -237,7 +241,17 @@ export function OfflineBar({
             <span className="offline-dot" /> Offline · saved {savedLabel(block.downloadedAt)}
             <span className="mp-station">{station}</span>
           </span>
-          <span className="mp-title">{cleared ? "Downloads were cleared" : (item?.label ?? station)}</span>
+          <span className="mp-title">
+            {cleared ? (
+              "Downloads were cleared"
+            ) : intro ? (
+              <>
+                <IntroPill /> {shownTitle(item)}
+              </>
+            ) : (
+              (item?.label ?? station)
+            )}
+          </span>
           <span className="mp-programme">
             {cleared
               ? "Your phone removed them. Download again when you're online."

@@ -16,7 +16,7 @@ import {
 } from "../station";
 import { fitToWindow } from "./fit";
 import { blockReason, blockTags, occurrenceOn, occurrencesBetween, type GridBlock, type Occurrence } from "./grid";
-import { describeRule, EMPTY_CONTENT, parseRule, SlotResolver, trackPlayable, type ListSlot, type PlanContent } from "./content";
+import { describeRule, EMPTY_CONTENT, parseRule, SlotResolver, songIntroMap, trackPlayable, withSongIntro, type ListSlot, type PlanContent } from "./content";
 import { addDaysTo, DAY, HOUR, mmss, parisHHMM, shortDay, stationDate, stationDayStartMs } from "./time";
 import { resolverForBlock } from "./handCheck";
 import { allowedIn, bandDistance, daypartReason, daypartsApply, daypartsBetween, daypartSeconds, MIN_DAYPART_SONGS, songBands, type TimeBand } from "./dayparts";
@@ -127,8 +127,10 @@ export class Planner {
       label: ri.label,
       audioUrl: ri.audio_url,
       artworkUrl: ri.artwork_url,
+      // A song with a "before" intro: duration_seconds already includes it, and it stays part of this airing.
       fileMs: ri.duration_seconds * 1000,
       overlays: ri.overlays,
+      ...(ri.intro ? { intro: ri.intro } : {}),
       // A time-of-day day-part isn't a block: its songs are plain channel music to everything else.
       blockId: occ && !occ.daypart ? occ.block.id : null,
       blockDate: occ && !occ.daypart ? occ.date : null,
@@ -561,9 +563,11 @@ export class Planner {
         }
         const tags = blockTags(b);
         const ref = `pool:${b.id}:${occ.date}`;
+        const intros = await songIntroMap(this.db);
         const songs = (await poolTracks(this.db, tags, this.channel))
           .map(trackPlayable)
           .filter((x): x is Playable => !!x)
+          .map((x) => withSongIntro(x, intros))
           .map((x) => ({ ...x, source: "autopilot" as const, sourceRef: ref, blockId: b.id, blockDate: occ.date, reasons: [blockReason(occ), `From the ${b.name} block's pool`] }));
         return [...songs, ...(await this.stationFillers("autopilot", ref, occ))];
       })();

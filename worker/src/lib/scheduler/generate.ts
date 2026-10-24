@@ -77,7 +77,22 @@ export async function catalogueDigest(db: D1Database): Promise<string> {
     .first<Record<string, string>>();
   // House promos (lib/promos.ts): only when one can air, so with none switched on the digest is what it always was.
   const promos = await promoDigest(db);
-  return String(hashSeed(JSON.stringify(promos ? { ...r, promos } : r)));
+  let digest: Record<string, unknown> | null = promos ? { ...r, promos } : r;
+  // Song intros (migrations/0030): the same - only once there's one, so before any import the digest is unchanged.
+  const intros = await introDigest(db);
+  if (intros) digest = { ...digest, intros };
+  return String(hashSeed(JSON.stringify(digest)));
+}
+
+async function introDigest(db: D1Database): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n,
+              COALESCE(group_concat(ti.track_id || ti.audio_asset_id || ti.play_mode || ti.start_offset_seconds || ti.enabled || aa.status || aa.duration_seconds), '') AS d
+       FROM track_intros ti JOIN audio_assets aa ON aa.id = ti.audio_asset_id`
+    )
+    .first<{ n: number; d: string }>();
+  return row && row.n > 0 ? row.d : null;
 }
 
 export function channelFingerprint(channel: Channel, catalogue: string, gridDigest: string): string {

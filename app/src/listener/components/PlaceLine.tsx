@@ -5,8 +5,9 @@ export interface SongPlace {
   country: string | null;
 }
 
-/** The city a song on air is about (migrations/0029), when it has one. */
-export const placeOf = (item: any): SongPlace | null => (item?.item_type === "song" && item?.place?.city ? item.place : null);
+/** The city a song on air is about (migrations/0029), when it has one - also while its intro plays (shared/intro.ts). */
+export const placeOf = (item: any): SongPlace | null =>
+  item?.item_type === "song" && item?.place?.city ? item.place : item?.intro_for?.place?.city ? item.intro_for.place : null;
 
 export const placeText = (p: SongPlace) => (p.country ? `${p.city}, ${p.country}` : p.city);
 

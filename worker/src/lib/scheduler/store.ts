@@ -61,6 +61,7 @@ export interface LogItemRow {
   artwork_url: string | null;
   file_duration_ms: number;
   overlays_json: string | null;
+  intro_json?: string | null;
   block_id: string | null;
   block_date: string | null;
   source: PlanItem["source"];
@@ -81,6 +82,7 @@ export const rowToItem = (r: LogItemRow): PlanItem => ({
   artworkUrl: r.artwork_url,
   fileMs: r.file_duration_ms,
   overlays: r.overlays_json ? JSON.parse(r.overlays_json) : undefined,
+  ...(r.intro_json ? { intro: JSON.parse(r.intro_json) } : {}),
   blockId: r.block_id,
   blockDate: r.block_date,
   source: r.source,
@@ -179,8 +181,9 @@ export function assignAiringIds(items: PlanItem[], base: PlanItem[], nowMs: numb
 const ITEM_COLUMNS = [
   "version_id", "airing_id", "starts_at_ms", "ends_at_ms", "offset_ms", "item_type", "track_id", "audio_asset_id", "label",
   "audio_url", "artwork_url", "file_duration_ms", "overlays_json", "block_id", "block_date", "source", "source_ref", "reason_json", "fixed",
+  "intro_json",
 ];
-// D1 allows 100 bound parameters per statement: 5 rows x 19 columns.
+// D1 allows 100 bound parameters per statement: 5 rows x 20 columns.
 const ROWS_PER_INSERT = 5;
 const STATEMENTS_PER_BATCH = 50;
 
@@ -188,6 +191,7 @@ const itemValues = (versionId: string, i: PlanItem) => [
   versionId, i.airingId!, i.startsAt, i.endsAt, i.offset, i.itemType, i.trackId, i.assetId, i.label,
   i.audioUrl, i.artworkUrl, i.fileMs, i.overlays?.length ? JSON.stringify(i.overlays) : null, i.blockId, i.blockDate,
   i.source, i.sourceRef, i.reasons.length ? JSON.stringify(i.reasons) : null, i.fixed ? 1 : 0,
+  i.intro ? JSON.stringify(i.intro) : null,
 ];
 
 export async function liveMax(db: D1Database, channelId: string): Promise<number> {

@@ -13,6 +13,17 @@ export interface RotationOverlay {
   duck_fade_ms: number; // length of each volume ramp, down and back up
 }
 
+// A song's spoken intro that plays before it (migrations/0030, play_mode
+// 'before'). Until the item reaches a listener it travels on the song, whose
+// duration_seconds includes it, so nothing that times or fits items can ever
+// separate the two; splitIntros() turns it into its own item at the last step.
+export interface RotationIntro {
+  asset_id: string;
+  label: string;
+  audio_url: string;
+  duration_seconds: number;
+}
+
 export interface RotationItem {
   id: string;
   item_type: string;
@@ -23,6 +34,7 @@ export interface RotationItem {
   audio_url: string | null;
   artwork_url: string | null;
   overlays?: RotationOverlay[];
+  intro?: RotationIntro;
   // Radio That Knows You only: true for the occasional surprise pick, so listening
   // analytics can tell whether the wildcard is what makes people leave.
   wildcard?: boolean;
@@ -43,6 +55,12 @@ export interface PinnedJingle {
   start_offset_seconds: number;
   duck_level: number;
   duck_fade_ms: number;
+  /**
+   * Set when this is the song's spoken intro (migrations/0030) rather than a
+   * jingle: 'over' is placed exactly like a pinned jingle; 'before' plays
+   * ahead of the song instead (RotationItem.intro).
+   */
+  intro?: "before" | "over" | null;
 }
 
 /**
@@ -51,35 +69,93 @@ export interface PinnedJingle {
  * none is allowed to start so late that it would run past the end of the song.
  * Pure data: the running-order timeline does not change (a ducked jingle takes
  * no time of its own), and songs with no pins come back untouched.
+ *
+ * A song's intro comes in with the pins: one played over the opening is just
+ * another overlay; one played before the song rides on it (see RotationIntro),
+ * which does add its length to the song's.
  */
 export function withPinnedJingles(items: RotationItem[], pins: PinnedJingle[]): RotationItem[] {
   if (pins.length === 0) return items;
 
   const byTrack = new Map<string, PinnedJingle[]>();
-  for (const pin of pins) byTrack.set(pin.track_id, [...(byTrack.get(pin.track_id) ?? []), pin]);
+  const introBefore = new Map<string, PinnedJingle>();
+  for (const pin of pins) {
+    if (pin.intro === "before") introBefore.set(pin.track_id, pin);
+    else byTrack.set(pin.track_id, [...(byTrack.get(pin.track_id) ?? []), pin]);
+  }
 
   return items.map((item) => {
-    const mine = item.item_type === "song" && item.track_id ? byTrack.get(item.track_id) : undefined;
-    if (!mine) return item;
+    if (item.item_type !== "song" || !item.track_id) return item;
+    const mine = byTrack.get(item.track_id);
+    // Already carrying its intro (pins applied twice): the song's own length is without it.
+    const songSeconds = item.intro ? item.duration_seconds - item.intro.duration_seconds : item.duration_seconds;
+    const before = introBefore.get(item.track_id);
+    if (!mine && !before) return item;
 
-    let earliest = 0;
-    const overlays: RotationOverlay[] = [...mine]
-      .sort((a, b) => a.start_offset_seconds - b.start_offset_seconds)
-      .map((pin) => {
-        const latest = Math.max(0, item.duration_seconds - pin.duration_seconds - 2);
-        const start = Math.min(Math.max(pin.start_offset_seconds, earliest), latest);
-        earliest = start + pin.duration_seconds + 3;
-        return {
-          asset_id: pin.asset_id,
-          label: pin.label,
-          audio_url: pin.audio_url,
-          duration_seconds: pin.duration_seconds,
-          start_offset_seconds: start,
-          duck_level: pin.duck_level,
-          duck_fade_ms: pin.duck_fade_ms,
-        };
-      });
-    return { ...item, overlays };
+    let out: RotationItem = item;
+    if (mine) {
+      let earliest = 0;
+      const overlays: RotationOverlay[] = [...mine]
+        .sort((a, b) => a.start_offset_seconds - b.start_offset_seconds)
+        .map((pin) => {
+          const latest = Math.max(0, songSeconds - pin.duration_seconds - 2);
+          const start = Math.min(Math.max(pin.start_offset_seconds, earliest), latest);
+          earliest = start + pin.duration_seconds + 3;
+          return {
+            asset_id: pin.asset_id,
+            label: pin.label,
+            audio_url: pin.audio_url,
+            duration_seconds: pin.duration_seconds,
+            start_offset_seconds: start,
+            duck_level: pin.duck_level,
+            duck_fade_ms: pin.duck_fade_ms,
+          };
+        });
+      out = { ...out, overlays };
+    }
+    if (before && !item.intro) {
+      out = {
+        ...out,
+        duration_seconds: songSeconds + before.duration_seconds,
+        intro: { asset_id: before.asset_id, label: before.label, audio_url: before.audio_url, duration_seconds: before.duration_seconds },
+      };
+    }
+    return out;
+  });
+}
+
+/**
+ * What a "before the song" intro looks like to a listener: its own item, just
+ * ahead of the song. It's an ordinary link to every player (so older app
+ * versions simply play it), plus `intro_for`, the song it introduces, which the
+ * players show instead (title and artwork, with an "Intro" label). Songs
+ * without an intro come back untouched.
+ */
+export interface IntroFor {
+  track_id: string;
+  title: string | null;
+}
+
+export function introItem(song: RotationItem, intro: RotationIntro, id: string): RotationItem & { intro_for: IntroFor } {
+  return {
+    id,
+    item_type: "link",
+    label: intro.label,
+    track_id: null,
+    audio_asset_id: intro.asset_id,
+    duration_seconds: intro.duration_seconds,
+    audio_url: intro.audio_url,
+    artwork_url: song.artwork_url,
+    intro_for: { track_id: song.track_id!, title: song.label },
+  };
+}
+
+export function splitIntros<T extends RotationItem>(items: T[]): (T | (RotationItem & { intro_for: IntroFor }))[] {
+  if (!items.some((i) => i.intro)) return items;
+  return items.flatMap((item) => {
+    if (!item.intro) return [item];
+    const { intro, ...song } = item;
+    return [introItem(item, intro, `${item.id}-intro`), { ...song, duration_seconds: item.duration_seconds - intro.duration_seconds } as T];
   });
 }
 

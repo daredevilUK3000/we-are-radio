@@ -14,6 +14,8 @@ import { BackToLivePill, StartOverButton } from "./PlayerRewind";
 import { ComingUpAt } from "./ComingUpAt";
 import { JustPlayed, useJustPlayed } from "./JustPlayed";
 import { PlaceLine } from "./PlaceLine";
+import { IntroPill } from "./IntroPill";
+import { introOf, shownTitle } from "../../shared/intro";
 import { channelStill, channelVideo, useChannelInfo } from "../../shared/channelInfo";
 
 /** Start over (handoff_player_upgrades.md §1), from the player that owns the <audio> element. */
@@ -87,9 +89,9 @@ function QueueRow({ label, item }: { label: string; item: any }) {
     <li className="np-queue-row">
       <span className="np-queue-label">{label}</span>
       <span className="np-queue-title">
-        {isGood(item) && <GoodOnAirPill small />} {item.label ?? "We Are Radio"}
+        {isGood(item) && <GoodOnAirPill small />} {introOf(item) && <IntroPill />} {shownTitle(item) ?? "We Are Radio"}
       </span>
-      {item.album_title && <span className="np-queue-sub">{item.album_title}</span>}
+      {(introOf(item)?.album_title ?? item.album_title) && <span className="np-queue-sub">{introOf(item)?.album_title ?? item.album_title}</span>}
     </li>
   );
 }
@@ -126,11 +128,13 @@ export function NowPlayingExpanded({
   const now = data.now_playing;
   const comingUp: any[] = data.coming_up ?? (data.up_next ? [data.up_next] : []);
   const isSong = now?.item_type === "song";
+  // A song's intro on air: shown as the song coming up, labelled "Intro" (shared/intro.ts).
+  const intro = introOf(now);
   const likes = useLikes("track", isSong && now?.track_id ? [now.track_id] : []);
   const artUrl: string | null = now?.artwork_url ? mediaUrl(now.artwork_url) : null;
   const station = data.channel?.name ?? "We Are Radio";
   const programmeTitle: string | null = data.programme?.id ? data.programme.title : null;
-  const meta = [now?.artist, now?.album_title, programmeTitle].filter(Boolean).join("  ·  ");
+  const meta = [intro ? intro.artist : now?.artist, intro ? intro.album_title : now?.album_title, programmeTitle].filter(Boolean).join("  ·  ");
   // With no artwork: the channel's own clip and still (shared/channelInfo.ts).
   useChannelInfo();
   const cardVideo = channelVideo(channelSlug);
@@ -226,9 +230,9 @@ export function NowPlayingExpanded({
             </div>
 
             <div className="np-block np-block-current">
-              <div className="np-eyebrow">{voice ? <ListenerVoicePill /> : good ? <GoodOnAirPill /> : promo ? <PromoPill promo={promo} /> : isSong ? "Now playing" : "On air now"}</div>
+              <div className="np-eyebrow">{voice ? <ListenerVoicePill /> : good ? <GoodOnAirPill /> : promo ? <PromoPill promo={promo} /> : intro ? <IntroPill /> : isSong ? "Now playing" : "On air now"}</div>
               <h1 className="np-title" key={now?.id}>
-                {voice ? voice.title : good ? <GoodOnAirTitle item={now} onNavigate={onClose} /> : promo ? promo.title : (now?.label ?? "We Are Radio")}
+                {voice ? voice.title : good ? <GoodOnAirTitle item={now} onNavigate={onClose} /> : promo ? promo.title : (shownTitle(now) ?? "We Are Radio")}
               </h1>
               {voice?.sub ? (
                 <div className="np-meta lv-sub">{voice.sub}</div>

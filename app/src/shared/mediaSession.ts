@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { mediaUrl } from "../api/client";
+import { INTRO_LABEL, introOf } from "./intro";
 
 /**
  * Lock-screen and notification controls (the browser's Media Session API):
@@ -203,6 +204,16 @@ export function radioSessionInfo(data: any): MediaSessionInfo | null {
   const station: string = data.channel?.name ?? "We Are Radio";
   const isSong = now?.item_type === "song";
   const art = now?.artwork_url ? mediaUrl(now.artwork_url) : STATION_ARTWORK;
+  // A song's intro (shared/intro.ts): the song coming up, its artist as "Intro · <artist>".
+  const intro = introOf(now);
+  if (intro) {
+    return {
+      title: intro.title ?? station,
+      artist: `${INTRO_LABEL} · ${intro.artist || "Kizzi"}`,
+      album: intro.album_title || station,
+      artworkUrl: new URL(art, window.location.href).href,
+    };
+  }
   // A house promo (now_playing.promo) shows its on-air title, labelled as on the players; its cover is the artwork.
   const promoTitle: string | undefined = !isSong && !now?.good ? now?.promo?.title : undefined;
   // A Book of the Month (now_playing.book): the book's title, "Book of the Month · We Are Radio", its cover.

@@ -34,6 +34,7 @@ import { runMinute } from "./lib/scheduler/cron";
 import { promoGoRoutes, promoStudioRoutes } from "./routes/promos";
 import { schedulerRoutes } from "./routes/scheduler";
 import { bookPublicRoutes, bookStudioRoutes } from "./routes/books";
+import { introRoutes } from "./routes/intros";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -110,6 +111,7 @@ studio.route("/scheduler", schedulerRoutes);
 studio.route("/on-air", onAirStudioRoutes);
 studio.route("/promos", promoStudioRoutes);
 studio.route("/books", bookStudioRoutes);
+studio.route("/intros", introRoutes);
 app.route("/studio/api", studio);
 
 // Streams audio straight out of R2 - not gated on Studio auth, since

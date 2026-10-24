@@ -30,6 +30,9 @@ audioAssetRoutes.get("/", async (c) => {
   // hidden by default, and the only thing shown with ?voices=1.
   const voices = "aa.id IN (SELECT audio_asset_id FROM onair_messages WHERE audio_asset_id IS NOT NULL)";
   sql += c.req.query("voices") === "1" ? ` AND ${voices}` : ` AND NOT ${voices}`;
+  // Song intros (migrations/0030) belong to their song and are managed on the Tracks page;
+  // leaving them out here also keeps them out of the programme builder, which reads this list.
+  sql += " AND aa.id NOT IN (SELECT audio_asset_id FROM track_intros)";
   sql += " ORDER BY created_at DESC LIMIT 200";
 
   const { results } = await c.env.DB.prepare(sql).bind(...params).all<AudioAsset & { tag_names: string | null; pin_count: number; pin_titles: string | null; capsule_count: number }>();

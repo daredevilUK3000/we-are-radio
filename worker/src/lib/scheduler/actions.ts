@@ -1,5 +1,6 @@
 import type { AudioAsset, Channel, Env, Track } from "../types";
 import { recordAired, endAiring } from "./aired";
+import { songIntroMap, withSongIntro } from "./content";
 import { fitToWindow } from "./fit";
 import { buildFromPlan, latestVersion, HORIZON_MS } from "./generate";
 import { occurrencesBetween } from "./grid";
@@ -72,10 +73,14 @@ export async function playableFor(db: D1Database, ref: ItemRef | undefined, reas
   if (ref?.track_id) {
     const t = await db.prepare("SELECT * FROM tracks WHERE id = ? AND status = 'published'").bind(ref.track_id).first<Track>();
     if (!t?.audio_url || !(t.duration_seconds > 0)) return null;
-    return {
-      itemType: "song", trackId: t.id, assetId: null, label: t.title, audioUrl: t.audio_url, artworkUrl: t.artwork_url,
-      fileMs: t.duration_seconds * 1000, blockId: null, blockDate: null, source: "override", sourceRef: null, reasons: [reason],
-    };
+    // A song played by hand still brings its intro (migrations/0030).
+    return withSongIntro(
+      {
+        itemType: "song", trackId: t.id, assetId: null, label: t.title, audioUrl: t.audio_url, artworkUrl: t.artwork_url,
+        fileMs: t.duration_seconds * 1000, blockId: null, blockDate: null, source: "override", sourceRef: null, reasons: [reason],
+      },
+      await songIntroMap(db)
+    );
   }
   if (ref?.audio_asset_id) {
     const a = await db.prepare("SELECT * FROM audio_assets WHERE id = ? AND status IN ('published','ready')").bind(ref.audio_asset_id).first<AudioAsset>();
@@ -333,13 +338,15 @@ export async function recoveryPool(env: Env, channel: Channel, planner: Planner,
   }
   if (pool.length === 0) pool = await planner.defaultPool(stationDate(nowMs));
   const fb = await fallbackLoop(env.DB, channel.id);
+  const intros = await songIntroMap(env.DB);
   const extra: Playable[] = (fb?.items ?? [])
     .filter((i) => i.item_type === "song" && i.audio_url)
-    .map((i) => ({
+    .map((i): Playable => ({
       itemType: "song", trackId: i.track_id, assetId: null, label: i.label, audioUrl: i.audio_url!, artworkUrl: i.artwork_url,
       fileMs: i.duration_seconds * 1000, blockId: inBlock?.blockId ?? null, blockDate: inBlock?.blockDate ?? null,
       source: "fallback", sourceRef: null, reasons: ["From the emergency playlist"],
-    }));
+    }))
+    .map((p) => withSongIntro(p, intros));
   return [...pool.map((p) => ({ ...p, blockId: inBlock?.blockId ?? p.blockId, blockDate: inBlock?.blockDate ?? p.blockDate })), ...extra];
 }
 

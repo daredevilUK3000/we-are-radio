@@ -848,6 +848,17 @@ html.tv-pointer .tv-slot {
   letter-spacing: 0.14em;
 }
 
+/* A song's spoken intro on air (shared/intro.ts). */
+.tv-intro-pill {
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #fff;
+  font-family: var(--tv-display);
+  letter-spacing: 0.14em;
+}
+
 .tv-live-pill {
   align-self: flex-start;
   display: inline-flex;

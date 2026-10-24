@@ -194,7 +194,8 @@ export const poolTracks = (db: D1Database, ownTags: string[], channel: Channel |
 
 const pinsConfig = (pins: PinnedJingle[]) =>
   pins
-    .map((p) => `${p.track_id}>${p.asset_id}@${p.start_offset_seconds}:${p.duck_level}:${p.duck_fade_ms}`)
+    // Intros add how they play and their length (a "before" intro lengthens its song); jingle pins read as they always have.
+    .map((p) => `${p.track_id}>${p.asset_id}@${p.start_offset_seconds}:${p.duck_level}:${p.duck_fade_ms}${p.intro ? `:${p.intro}:${p.duration_seconds}` : ""}`)
     .sort()
     .join(",");
 
@@ -283,7 +284,9 @@ export async function loadStation(db: D1Database, kv: KVNamespace, channel: Chan
   return { items: loop.items, elapsed, programme: loop.programme };
 }
 
-// Jingles pinned to specific songs (published jingles only).
+// Jingles pinned to specific songs (published jingles only), then each song's
+// spoken intro when it has one switched on (migrations/0030) - which is how an
+// intro reaches every place a song plays, exactly as pinned jingles do.
 export async function loadPinnedJingles(db: D1Database): Promise<PinnedJingle[]> {
   const { results } = await db
     .prepare(
@@ -292,6 +295,20 @@ export async function loadPinnedJingles(db: D1Database): Promise<PinnedJingle[]>
        FROM track_jingles tj
        JOIN audio_assets aa ON aa.id = tj.audio_asset_id
        WHERE aa.status = 'published'`
+    )
+    .all<PinnedJingle>();
+  return [...results, ...(await loadSongIntros(db))];
+}
+
+/** Each song's intro that's switched on and playable, as a pin (its `intro` says how it plays). */
+export async function loadSongIntros(db: D1Database): Promise<PinnedJingle[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ti.track_id, ti.audio_asset_id AS asset_id, ti.start_offset_seconds, ti.play_mode AS intro,
+              aa.title AS label, aa.audio_url, aa.duration_seconds, aa.duck_level, aa.duck_fade_ms
+       FROM track_intros ti
+       JOIN audio_assets aa ON aa.id = ti.audio_asset_id
+       WHERE ti.enabled = 1 AND aa.status = 'published' AND aa.duration_seconds > 0`
     )
     .all<PinnedJingle>();
   return results;
@@ -303,7 +320,9 @@ export async function loadPinnedJingles(db: D1Database): Promise<PinnedJingle[]>
  * over" on those while Top 3 voting runs, so extra listens can't be made on air).
  */
 export async function enrichItems<T extends RotationItem | null>(db: D1Database, items: T[]): Promise<T[]> {
-  const trackIds = Array.from(new Set(items.map((i) => i?.track_id).filter((id): id is string => !!id)));
+  // A song's intro on air (radioBrain splitIntros) is shown as the song it introduces, so its song is looked up too.
+  const introTrackOf = (i: RotationItem | null): string | null => ((i as { intro_for?: { track_id?: string } } | null)?.intro_for?.track_id ?? null);
+  const trackIds = Array.from(new Set(items.flatMap((i) => [i?.track_id, introTrackOf(i)]).filter((id): id is string => !!id)));
   const albumByTrack = new Map<
     string,
     {
@@ -360,6 +379,26 @@ export async function enrichItems<T extends RotationItem | null>(db: D1Database,
 
   return items.map((item) => {
     if (!item) return item;
+    const introTrack = introTrackOf(item);
+    if (introTrack) {
+      const song = albumByTrack.get(introTrack);
+      const intro = item as RotationItem & { intro_for: Record<string, unknown> };
+      const artwork = item.artwork_url ?? song?.album_artwork_url ?? null;
+      return {
+        ...item,
+        artist: null,
+        album_id: null,
+        album_title: null,
+        artwork_url: artwork,
+        intro_for: {
+          ...intro.intro_for,
+          artist: song?.artist ?? null,
+          album_title: song?.album_title ?? null,
+          artwork_url: artwork,
+          ...(song?.place_city ? { place: { city: song.place_city, country: song.place_country } } : {}),
+        },
+      };
+    }
     const album = item.track_id ? albumByTrack.get(item.track_id) : undefined;
     return {
       ...item,

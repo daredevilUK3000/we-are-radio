@@ -15,6 +15,7 @@ import { copyFor } from "../../listener/components/contest/phaseCopy";
 import { currentTimeBand } from "../../listener/lib/timeOfDay";
 import { countryFlag } from "../../shared/countries";
 import { hoverFocus } from "../pointer";
+import { INTRO_LABEL } from "../../shared/intro";
 
 /** Screen 1: Home (handoff_tv_firetv.md §A4). */
 
@@ -218,8 +219,9 @@ export function Home() {
         .filter((i: any) => i.audio_url && i.duration_seconds > 0)
         .map((i: any, idx: number) => ({
           id: `${i.id}-${idx}`,
-          title: i.label ?? (i.item_type === "link" ? "A word from Kizzi" : "We Are Radio"),
-          subtitle: i.item_type === "link" ? "A word from Kizzi" : i.item_type === "song" ? null : "We Are Radio",
+          // A song's intro (shared/intro.ts): the song it introduces, as "Intro".
+          title: i.intro_for?.title ?? i.label ?? (i.item_type === "link" ? "A word from Kizzi" : "We Are Radio"),
+          subtitle: i.intro_for ? INTRO_LABEL : i.item_type === "link" ? "A word from Kizzi" : i.item_type === "song" ? null : "We Are Radio",
           audio_url: i.audio_url,
           duration_seconds: i.duration_seconds,
           artwork_url: i.artwork_url ?? null,
@@ -469,6 +471,9 @@ export function Home() {
                     <span className="tv-promo-pill">{n.promo.pill || "We Are Radio recommends"}</span>
                   ) : n?.book ? (
                     <span className="tv-promo-pill is-book">Book of the Month</span>
+                  ) : n?.intro ? (
+                    // A song's intro: /api/now-playing/all already gives the coming song's title and artwork.
+                    <span className="tv-intro-pill">{INTRO_LABEL}</span>
                   ) : (
                     "Now playing"
                   )}{" "}

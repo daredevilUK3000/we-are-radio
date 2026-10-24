@@ -7,6 +7,7 @@ import { voiceLines } from "../../listener/components/onair/voice";
 import { PlaceLine } from "../../listener/components/PlaceLine";
 import { behindLabel } from "../../listener/lib/useRewind";
 import { trackTv } from "../../shared/analytics";
+import { INTRO_LABEL, introOf, shownTitle } from "../../shared/intro";
 import { ChannelStill, EqBars, HintBar, Icon, OnAirPill, RoundControl, TvButton, TvClock } from "../components";
 import { useTvPlayer } from "../TvPlayer";
 import { clockText, mmss, stillFor, useTvData } from "../tvData";
@@ -124,7 +125,9 @@ export function NowPlaying() {
       : !voice && !now?.good && now?.book?.buy_url
         ? { title: now.book.title, pill: "Book of the Month", short_url: now.book.buy_url, isBook: true }
         : null;
-  const title = voice ? voice.title : promo ? promo.title : (now?.label ?? channelName);
+  // A song's intro on air (shared/intro.ts): the song coming up, labelled "Intro".
+  const intro = !voice && !promo ? introOf(now) : null;
+  const title = voice ? voice.title : promo ? promo.title : (shownTitle(now) ?? channelName);
 
   return (
     <FocusContext.Provider value={focusKey}>
@@ -160,6 +163,8 @@ export function NowPlaying() {
                 <span className="tv-good-pill">Advertising For Good</span>
               ) : promo ? (
                 <span className={`tv-promo-pill${promo.isBook ? " is-book" : ""}`}>{promo.pill || "We Are Radio recommends"}</span>
+              ) : intro ? (
+                <span className="tv-intro-pill">{INTRO_LABEL}</span>
               ) : (
                 "Now playing"
               )}{" "}
@@ -179,7 +184,7 @@ export function NowPlaying() {
               </div>
             ) : (
               <div className={`tv-np-artist${now?.good && !voice ? " is-good" : ""}`}>
-                {voice ? voice.sub : now?.good ? "A short message that asks you to be kind, not to buy" : (now?.artist ?? "")}
+                {voice ? voice.sub : now?.good ? "A short message that asks you to be kind, not to buy" : intro ? (intro.artist ?? "") : (now?.artist ?? "")}
               </div>
             )}
             {meta?.block && (

@@ -142,6 +142,17 @@ export function registerDevTools(r: Hono<{ Bindings: Env }>) {
     return c.json({ ok: true, count: blocks.length, plan: plan.number });
   });
 
+  // A channel's whole plan built in memory at a frozen time, plus the catalogue digest (before/after comparisons).
+  r.get("/plan-dump", async (c) => {
+    const ch = await chan(c.env, c.req.query("channel"));
+    if (!ch) return c.json({ error: "no channel" }, 404);
+    const now = Number(c.req.query("now")) || Date.now();
+    const hours = Math.min(72, Number(c.req.query("hours")) || 24);
+    const { catalogueDigest } = await import("../lib/scheduler/generate");
+    const plan = await new Planner(c.env.DB, c.env.CONFIG, ch, await loadGridBlocks(c.env.DB, ch.id), now).build(now, now + hours * 3600_000);
+    return c.json({ digest: await catalogueDigest(c.env.DB), toMs: plan.toMs, items: plan.items });
+  });
+
   // The governing timeline between two instants.
   r.get("/timeline", async (c) => {
     const ch = await chan(c.env, c.req.query("channel"));

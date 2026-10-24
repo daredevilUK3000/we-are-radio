@@ -32,6 +32,8 @@ export interface ChannelNow {
   promo?: { title: string; pill?: string; link_label: string; short_url: string; cover_url: string | null } | null;
   /** A Book of the Month on air (migrations/0028): buy_url is its short link (for the QR code). */
   book?: { title: string; author: string; cover_url: string | null; buy_url: string | null; buy_label: string; slug: string } | null;
+  /** A song's intro on air (migrations/0030): title, artist and artwork are already the coming song's. */
+  intro?: boolean;
   block: { name: string; description: string; starts_at: number; ends_at: number } | null;
   next_block: { name: string; starts_at: number; ends_at?: number } | null;
   /** When this answer arrived (ms), so progress can advance locally between polls. */
