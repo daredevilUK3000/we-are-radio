@@ -222,7 +222,11 @@ publicRoutes.get("/featured-album", async (c) => {
     .bind(album.id as string)
     .all();
 
-  return c.json({ album, tracks });
+  // The TV plays this album: a song's "before" intro comes with it (`intro`), to play first.
+  return c.json({
+    album,
+    tracks: await withPinnedOverlays(c.env.DB, tracks as any[], (t) => t.id, (t) => t.duration_seconds, { intros: true }),
+  });
 });
 
 publicRoutes.get("/programmes/:id", async (c) => {

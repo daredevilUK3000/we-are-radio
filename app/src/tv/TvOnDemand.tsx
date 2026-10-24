@@ -28,6 +28,8 @@ export interface OnDemandItem {
   analytics?: PlayInfo | null;
   /** An Advertising For Good ad: counted as a preview, never as a play. */
   goodId?: string | null;
+  /** The song's spoken intro (migrations/0030, "before the song"): played first, then the song. */
+  intro?: { audio_url: string; duration_seconds: number } | null;
 }
 
 export interface OnDemandQueue {
@@ -42,6 +44,8 @@ interface OnDemandState {
   index: number;
   item: OnDemandItem | null;
   playing: boolean;
+  /** True while the item's intro plays ahead of it. */
+  inIntro: boolean;
   audioRef: React.RefObject<HTMLAudioElement>;
   start: (queue: OnDemandQueue, startIndex?: number) => void;
   toggle: () => void;
@@ -67,6 +71,13 @@ export function OnDemandProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<OnDemandQueue | null>(null);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [inIntro, setInIntroState] = useState(false);
+  // Read by the <audio> events, which can fire before the next render.
+  const inIntroRef = useRef(false);
+  const setInIntro = (v: boolean) => {
+    inIntroRef.current = v;
+    setInIntroState(v);
+  };
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const indexRef = useRef(index);
@@ -83,23 +94,44 @@ export function OnDemandProvider({ children }: { children: ReactNode }) {
     setPlaying(false);
   });
 
+  const playSrc = (audio: HTMLAudioElement, url: string) => {
+    audio.src = mediaUrl(url);
+    audio.currentTime = 0;
+    audio.play().then(
+      () => setPlaying(true),
+      () => setPlaying(false)
+    );
+  };
+
+  // The song itself (after its intro, if it has one).
+  const playSong = useCallback(
+    (it: OnDemandItem) => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      setInIntro(false);
+      playSrc(audio, it.audio_url);
+      if (it.analytics) slot.start(it.analytics, audio);
+      else slot.abandon();
+      if (it.goodId) trackGoodPreview(it.goodId);
+    },
+    [slot]
+  );
+
   const playIndex = useCallback(
     (q: OnDemandQueue, i: number) => {
       const audio = audioRef.current;
       const it = q.items[i];
       if (!audio || !it) return;
       setIndex(i);
-      audio.src = mediaUrl(it.audio_url);
-      audio.currentTime = 0;
-      audio.play().then(
-        () => setPlaying(true),
-        () => setPlaying(false)
-      );
-      if (it.analytics) slot.start(it.analytics, audio);
-      else slot.abandon();
-      if (it.goodId) trackGoodPreview(it.goodId);
+      if (it.intro?.audio_url) {
+        slot.abandon();
+        setInIntro(true);
+        playSrc(audio, it.intro.audio_url);
+        return;
+      }
+      playSong(it);
     },
-    [slot]
+    [slot, playSong]
   );
 
   const finish = useCallback(() => {
@@ -109,6 +141,7 @@ export function OnDemandProvider({ children }: { children: ReactNode }) {
     audio?.removeAttribute("src");
     setQueue(null);
     setPlaying(false);
+    setInIntro(false);
     setIndex(0);
     const resume = resumeRadio.current;
     resumeRadio.current = false;
@@ -163,8 +196,19 @@ export function OnDemandProvider({ children }: { children: ReactNode }) {
   }, [queue, playing]);
 
   const onEnded = () => {
+    const it = queueRef.current?.items[indexRef.current];
+    if (inIntroRef.current && it) {
+      playSong(it);
+      return;
+    }
     slot.complete();
     next();
+  };
+
+  // An intro that won't load mustn't hold up its song.
+  const onError = () => {
+    const it = queueRef.current?.items[indexRef.current];
+    if (inIntroRef.current && it) playSong(it);
   };
 
   const value: OnDemandState = {
@@ -172,6 +216,7 @@ export function OnDemandProvider({ children }: { children: ReactNode }) {
     index,
     item: queue?.items[index] ?? null,
     playing,
+    inIntro,
     audioRef,
     start,
     toggle,
@@ -183,7 +228,7 @@ export function OnDemandProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      <audio ref={audioRef} onEnded={onEnded} onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
+      <audio ref={audioRef} onEnded={onEnded} onError={onError} onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
     </Ctx.Provider>
   );
 }

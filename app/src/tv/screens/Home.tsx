@@ -265,6 +265,7 @@ export function Home() {
         audio_url: t.audio_url,
         duration_seconds: t.duration_seconds,
         artwork_url: t.artwork_url ?? album.artwork_url ?? null,
+        intro: t.intro?.audio_url ? { audio_url: t.intro.audio_url, duration_seconds: t.intro.duration_seconds } : null,
         analytics: { contentType: "track" as const, contentId: t.id, source: "album" as const },
       }));
     const queue = { eyebrow: `From the album · ${album.title}`, kind: "album" as const, items };

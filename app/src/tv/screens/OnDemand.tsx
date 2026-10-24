@@ -4,6 +4,7 @@ import { FocusContext, setFocus, useFocusable } from "@noriginmedia/norigin-spat
 import { mediaUrl } from "../../api/client";
 import { EqBars, HintBar, Icon, RoundControl, TvButton, TvClock } from "../components";
 import { useOnDemand } from "../TvOnDemand";
+import { INTRO_LABEL } from "../../shared/intro";
 import { mmss } from "../tvData";
 import { goBack } from "../tvUi";
 
@@ -96,7 +97,7 @@ export function OnDemand() {
           </div>
           <div className="tv-np-details">
             <div className="tv-np-eyebrow">
-              {good ? <span className="tv-good-pill">Advertising For Good</span> : q.items.length > 1 ? `${od.index + 1} of ${q.items.length}` : "Playing now"}{" "}
+              {od.inIntro ? <span className="tv-intro-pill">{INTRO_LABEL}</span> : good ? <span className="tv-good-pill">Advertising For Good</span> : q.items.length > 1 ? `${od.index + 1} of ${q.items.length}` : "Playing now"}{" "}
               <EqBars still={!od.playing} />
             </div>
             <h1 className="tv-np-title" style={{ fontSize: titleSize(it.title) }}>
