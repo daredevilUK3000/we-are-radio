@@ -535,14 +535,16 @@ export function Home() {
 
           <section className="tv-row tv-channels" aria-label="Channels">
             <h2 className="tv-row-title">Channels</h2>
-            <Row focusKey="tv-channels" preferred={`ch-${lastTvChannel() ?? hero.slug}`}>
-              {live.map((ch) => (
+            <Row focusKey="tv-channels" preferred={`ch-${lastTvChannel() ?? hero.slug}`} shift={cols.channels ?? 0}>
+              {live.map((ch, c) => (
                 <ChannelCard
                   key={ch.slug}
                   ch={ch}
                   now={now[ch.slug]}
                   onFocus={() => {
                     setHeroSlug(ch.slug);
+                    // Six channels since WanderLust (24 Oct 2026): the row slides along like the ones below it.
+                    focusAt(0, "channels", c);
                     setMoreFocused(false);
                     setWelcome(false);
                   }}

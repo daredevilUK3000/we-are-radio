@@ -1183,6 +1183,27 @@ html.tv-pointer .tv-slot {
   white-space: nowrap;
 }
 
+/* Six channels since WanderLust (24 Oct 2026): shorter lanes (72 + 8) so all six fit above the hint bar. */
+.tv-grid.is-compact .tv-lane {
+  height: 72px;
+  margin-bottom: 8px;
+}
+
+.tv-grid.is-compact .tv-lane-track,
+.tv-grid.is-compact .tv-slot {
+  height: 72px;
+}
+
+.tv-grid.is-compact .tv-slot {
+  padding: 6px 18px;
+  gap: 2px;
+}
+
+.tv-grid.is-compact .tv-lane-label img {
+  width: 76px;
+  height: 52px;
+}
+
 .tv-nowline {
   position: absolute;
   top: 30px;

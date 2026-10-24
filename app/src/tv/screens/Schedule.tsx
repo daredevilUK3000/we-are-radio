@@ -202,7 +202,7 @@ export function Schedule() {
           )}
         </section>
 
-        <div ref={grid.ref} className={`tv-grid${gridFocused ? " is-focused" : ""}`}>
+        <div ref={grid.ref} className={`tv-grid${gridFocused ? " is-focused" : ""}${lanes.length > 5 ? " is-compact" : ""}`}>
           <div className="tv-ruler" style={{ marginLeft: 296 }}>
             {/* A time under the red "now" tag is hidden rather than drawn half-covered. */}
             {ruler.filter((t) => Math.abs(xOf(t) - xOf(nowMs)) > 60 || nowMs < winStart || nowMs > winEnd).map((t) => (
