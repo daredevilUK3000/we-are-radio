@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { mediaUrl } from "../api/client";
 import { useExclusiveAudio } from "../listener/lib/audioUtils";
+import { unlockAudio, useOverlayJingles, type Overlay } from "../shared/duckEngine";
 import { trackGoodPreview, usePlaySlot, type PlayInfo } from "../shared/analytics";
 import { nativeBridge } from "./nativeBridge";
 import { useTvPlayer } from "./TvPlayer";
@@ -30,6 +31,8 @@ export interface OnDemandItem {
   goodId?: string | null;
   /** The song's spoken intro (migrations/0030, "before the song"): played first, then the song. */
   intro?: { audio_url: string; duration_seconds: number } | null;
+  /** Jingles, station IDs and ads pinned to the song in the Studio, played over it as on the site. */
+  overlays?: Overlay[];
 }
 
 export interface OnDemandQueue {
@@ -94,6 +97,10 @@ export function OnDemandProvider({ children }: { children: ReactNode }) {
     setPlaying(false);
   });
 
+  // Not during an intro: the jingles' timings count from the song's own start.
+  const current = queue?.items[index] ?? null;
+  useOverlayJingles(audioRef, current && !inIntro ? current : null, !!queue);
+
   const playSrc = (audio: HTMLAudioElement, url: string) => {
     audio.src = mediaUrl(url);
     audio.currentTime = 0;
@@ -155,6 +162,8 @@ export function OnDemandProvider({ children }: { children: ReactNode }) {
       // Only the first start of a session remembers the radio; picking another track keeps that memory.
       if (!queueRef.current) resumeRadio.current = playerRef.current.playing;
       if (playerRef.current.playing) playerRef.current.pause();
+      // Inside the remote's press, so the jingles may play over the songs later.
+      void unlockAudio(audioRef.current);
       setQueue(q);
       playIndex(q, Math.min(Math.max(0, startIndex), q.items.length - 1));
     },
@@ -214,7 +223,7 @@ export function OnDemandProvider({ children }: { children: ReactNode }) {
   const value: OnDemandState = {
     queue,
     index,
-    item: queue?.items[index] ?? null,
+    item: current,
     playing,
     inIntro,
     audioRef,

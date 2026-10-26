@@ -225,6 +225,7 @@ export function Home() {
           audio_url: i.audio_url,
           duration_seconds: i.duration_seconds,
           artwork_url: i.artwork_url ?? null,
+          overlays: i.overlays,
           analytics:
             i.item_type === "song" && i.track_id
               ? { contentType: "track" as const, contentId: i.track_id, mood: need.key, source: "radio-for-you" as const, wildcard: !!i.wildcard }
@@ -266,6 +267,7 @@ export function Home() {
         duration_seconds: t.duration_seconds,
         artwork_url: t.artwork_url ?? album.artwork_url ?? null,
         intro: t.intro?.audio_url ? { audio_url: t.intro.audio_url, duration_seconds: t.intro.duration_seconds } : null,
+        overlays: t.overlays,
         analytics: { contentType: "track" as const, contentId: t.id, source: "album" as const },
       }));
     const queue = { eyebrow: `From the album · ${album.title}`, kind: "album" as const, items };
@@ -333,6 +335,7 @@ export function Home() {
           audio_url: i.track_audio_url ?? i.audio_asset_audio_url,
           duration_seconds: i.track_duration_seconds ?? i.audio_asset_duration_seconds ?? p.duration_seconds,
           artwork_url: p.artwork_url ?? null,
+          overlays: i.overlays,
           analytics: idx === 0 ? { contentType: "programme" as const, contentId: p.id, source: "programme" as const } : null,
         }))
         .filter((i: OnDemandItem) => !!i.audio_url);
