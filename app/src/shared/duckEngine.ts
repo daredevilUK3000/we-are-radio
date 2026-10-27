@@ -55,6 +55,37 @@ export function overlayRecent(music: HTMLAudioElement, withinMs = 4000): boolean
   return at !== undefined && Date.now() - at <= withinMs;
 }
 
+// LG TVs (webOS) pause the music the moment a second <audio> starts, and the
+// jingle is lost when Play is pressed again (27 Oct 2026). There the jingle
+// is played through Web Audio instead - a decoded clip rather than a second
+// media element - while the music stays an ordinary element and is ducked
+// as usual. Switched on by the TV app for the LG shell only.
+let webAudioJingles = false;
+let jingleContext: AudioContext | null = null;
+const decoded = new Map<string, Promise<AudioBuffer>>();
+
+/** Play jingles through Web Audio rather than a second <audio> element (the LG TV app). */
+export function playJinglesThroughWebAudio() {
+  webAudioJingles = true;
+}
+
+function decodeJingle(ctx: AudioContext, url: string): Promise<AudioBuffer> {
+  const known = decoded.get(url);
+  if (known) return known;
+  // A station has a handful of jingles; keep the latest few decoded.
+  if (decoded.size >= 12) decoded.clear();
+  const p = fetch(url)
+    .then((r) => {
+      if (!r.ok) throw new Error(`jingle ${r.status}`);
+      return r.arrayBuffer();
+    })
+    // The callback form: older TV browsers (Chromium 53) may not return a promise.
+    .then((data) => new Promise<AudioBuffer>((ok, fail) => ctx.decodeAudioData(data, ok, fail)));
+  p.catch(() => decoded.delete(url));
+  decoded.set(url, p);
+  return p;
+}
+
 let volumeSupport: boolean | null = null;
 /** iPhones and iPads ignore an <audio> element's volume; everything else obeys it. */
 function canDuck(): boolean {
@@ -77,6 +108,16 @@ function canDuck(): boolean {
  * afterwards, including every jingle. Safe to call repeatedly; never throws.
  */
 export async function unlockAudio(music: HTMLAudioElement | null): Promise<void> {
+  if (webAudioJingles) {
+    // No second element is primed here: on the LG that alone pauses the music.
+    try {
+      jingleContext ??= new AudioContext();
+      if (jingleContext.state === "suspended") await jingleContext.resume();
+    } catch {
+      // No Web Audio: the jingles are skipped.
+    }
+    return;
+  }
   if (!music || jingleElements.has(music) || !canDuck()) return;
   const jingle = new Audio();
   jingleElements.set(music, jingle);
@@ -112,6 +153,7 @@ export function cancelOverlay(music: HTMLAudioElement | null) {
  */
 export function playOverlay(music: HTMLAudioElement, overlay: Overlay): Promise<void> {
   if (!canDuck() || cancelers.has(music)) return Promise.resolve();
+  if (webAudioJingles) return playOverlayWebAudio(music, overlay);
 
   return new Promise((resolve) => {
     const jingle = jingleElements.get(music) ?? new Audio();
@@ -155,6 +197,64 @@ export function playOverlay(music: HTMLAudioElement, overlay: Overlay): Promise<
     jingle.currentTime = 0;
     rampVolume(music, restoreVolume * overlay.duck_level, overlay.duck_fade_ms);
     jingle.play().catch(finish);
+  });
+}
+
+/** playOverlay for the LG: the same ducking, with the jingle played through Web Audio. */
+function playOverlayWebAudio(music: HTMLAudioElement, overlay: Overlay): Promise<void> {
+  // Normally made in unlockAudio; old TVs let it start outside a key press too.
+  try {
+    jingleContext ??= new AudioContext();
+  } catch {
+    return Promise.resolve();
+  }
+  const ctx = jingleContext;
+
+  return new Promise((resolve) => {
+    const restoreVolume = music.volume;
+    let source: AudioBufferSourceNode | null = null;
+    let done = false;
+    // Pausing the music pauses the voice with it.
+    const onMusicPause = () => void ctx.suspend().catch(() => {});
+    const onMusicPlay = () => void ctx.resume().catch(() => {});
+    const finish = () => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(safety);
+      music.removeEventListener("pause", onMusicPause);
+      music.removeEventListener("play", onMusicPlay);
+      cancelers.delete(music);
+      overlayEndedAt.set(music, Date.now());
+      if (source) {
+        source.onended = null;
+        try {
+          source.stop();
+        } catch {
+          // Already stopped.
+        }
+      }
+      void ctx.resume().catch(() => {});
+      rampVolume(music, restoreVolume, overlay.duck_fade_ms);
+      resolve();
+    };
+    // The clip is fetched first, so allow for that before giving up on it.
+    const safety = window.setTimeout(finish, (overlay.duration_seconds + 8) * 1000);
+
+    cancelers.set(music, finish);
+    music.addEventListener("pause", onMusicPause);
+    music.addEventListener("play", onMusicPlay);
+
+    decodeJingle(ctx, mediaUrl(overlay.audio_url))
+      .then((buffer) => {
+        if (done) return;
+        source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.onended = finish;
+        rampVolume(music, restoreVolume * overlay.duck_level, overlay.duck_fade_ms);
+        source.start();
+      })
+      .catch(finish);
   });
 }
 

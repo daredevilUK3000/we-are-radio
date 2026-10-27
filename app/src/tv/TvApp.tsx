@@ -2,6 +2,7 @@ import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, us
 import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { init, pause as pauseNav, resume as resumeNav } from "@noriginmedia/norigin-spatial-navigation";
 import { setAnalyticsPlatform, trackTv } from "../shared/analytics";
+import { playJinglesThroughWebAudio } from "../shared/duckEngine";
 import { isWebOsShell, nativeBridge, registerPageBridge, tvPlatform, type MediaKey } from "./nativeBridge";
 import { lastTvChannel, TvPlayerProvider, useTvPlayer } from "./TvPlayer";
 import { TvDataProvider } from "./tvData";
@@ -283,6 +284,7 @@ export default function TvApp() {
     document.documentElement.classList.add("tv-mode");
     installPointer(); // LG app only
     setAnalyticsPlatform(tvPlatform());
+    if (isWebOsShell()) playJinglesThroughWebAudio(); // LG: a second <audio> pauses the music
     trackTv("tv_open", null);
     // The Fire TV splash stays up until the page is ready.
     const t = window.setTimeout(() => nativeBridge.shellReady(), 0);
